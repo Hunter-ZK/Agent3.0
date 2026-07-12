@@ -1,0 +1,87 @@
+# sql_review_agent/engine/sql_review_engine.py
+
+from collections.abc import Callable
+from typing import Any
+
+from sql_review_agent.metadata.provider import MockMetadataProvider
+from sql_review_agent.schemas.requests import SQLExplainRequest, SQLFixRequest, SQLOptimizeRequest, SQLReviewRequest
+from sql_review_agent.schemas.responses import SQLFixResponse, SQLReviewResponse, SQLExplainResponse
+from sql_review_agent.services.review_service import ReviewService
+from sql_review_agent.core.execution_context import ReviewExecutionContext
+from sql_review_agent.agents.sql_explain_agent import SQLExplainAgent
+
+
+class SQLReviewEngine:
+    """SQLPilot 的稳定 Engine 门面。
+
+    Engine 是外部入口，ReviewService 是内部编排服务。后续 CLI、FastAPI、
+    Streamlit、Agent Workflow 都应该优先调用 Engine，而不是直接调用 ReviewService。
+    """
+
+    def __init__(
+        self,
+        review_service: ReviewService | None = None,
+        metadata_provider_factory: Callable[[], Any] | None = None,
+        engine_agent: SQLExplainAgent | None = None,
+    ) -> None:
+        self.review_service = review_service or ReviewService()
+        self.metadata_provider_factory = metadata_provider_factory or MockMetadataProvider
+        self.engine_agent = engine_agent
+
+    def review(self, request: SQLReviewRequest) -> SQLReviewResponse:
+        """执行 SQL 审查。"""
+        context = ReviewExecutionContext.from_review_request(request)
+        context.metadata_provider = self._resolve_metadata_provider(context)
+        try:
+            result = self.review_service.review(context)
+            return SQLReviewResponse.from_review_result(result, trace_id=context.trace_id)
+        except Exception as error:
+            return SQLReviewResponse.failed(
+                task_type="review",
+                file_path=request.file_path,
+                error_message=str(error),
+                trace_id=context.trace_id,
+            )
+
+    def fix(self, request: SQLFixRequest) -> SQLFixResponse:
+        """先审查 SQL，再生成完整修复 SQL。"""
+        context = ReviewExecutionContext.from_fix_request(request)
+        context.metadata_provider = self._resolve_metadata_provider(context)
+        try:
+            result = self.review_service.review(context)
+            return SQLFixResponse.from_review_result(result, trace_id=context.trace_id)
+        except Exception as error:
+            return SQLFixResponse.failed(
+                task_type="fix",
+                file_path=request.file_path,
+                error_message=str(error),
+                trace_id=context.trace_id,
+            )
+
+    def explain(self, request: SQLExplainRequest) -> SQLExplainResponse:
+        """Explain 占位：C 阶段接入 LLM-first 单 Agent 后实现。"""
+
+        context = ReviewExecutionContext.from_review_request(request)
+
+        if self.engine_agent is None:
+            return SQLExplainResponse.failed(
+                file_path=request.file_path,
+                error_message="Explain agent is not configured",
+                trace_id=context.trace_id,
+            )
+        return self.engine_agent.explain(request, trace_id = context.trace_id)
+
+    def optimize(self, request: SQLOptimizeRequest) -> SQLReviewResponse:
+        """Optimize 占位：C/D 阶段接入 LLM 与 RAG 后实现。"""
+        return SQLReviewResponse.failed(
+            task_type="optimize",
+            file_path=request.file_path,
+            error_message="SQLOptimizeRequest is not implemented in Phase B.",
+        )
+
+    def _resolve_metadata_provider(self, context: ReviewExecutionContext):
+        if context.metadata_provider is not None:
+            return context.metadata_provider
+        if not context.enable_metadata:
+            return None
+        return self.metadata_provider_factory()

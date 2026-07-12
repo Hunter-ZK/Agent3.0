@@ -1,0 +1,41 @@
+{
+  "tables": [
+    {
+      "table_name": "dwd_user_order_detail",
+      "layer": "dwd",
+      "is_partitioned": true,
+      "partition_fields": ["dt"],
+      "comment": "用户订单明细表",
+      "columns": [
+        {"name": "user_id", "data_type": "string", "comment": "用户ID"},
+        {"name": "order_id", "data_type": "string", "comment": "订单ID"},
+        {"name": "pay_amount", "data_type": "decimal(18,2)", "comment": "支付金额"},
+        {"name": "city_id", "data_type": "string", "comment": "城市ID"},
+        {"name": "dt", "data_type": "string", "comment": "分区日期"}
+      ]
+    },
+    {
+      "table_name": "dws_user_trade_summary",
+      "layer": "dws",
+      "is_partitioned": true,
+      "partition_fields": ["dt"],
+      "comment": "用户交易汇总表",
+      "columns": [
+        {"name": "user_id", "data_type": "string", "comment": "用户ID"},
+        {"name": "total_pay_amount", "data_type": "decimal(18,2)", "comment": "累计支付金额"},
+        {"name": "dt", "data_type": "string", "comment": "分区日期"}
+      ]
+    },
+    {
+      "table_name": "dim_city",
+      "layer": "dim",
+      "is_partitioned": false,
+      "partition_fields": [],
+      "comment": "城市维表",
+      "columns": [
+        {"name": "city_id", "data_type": "string", "comment": "城市ID"},
+        {"name": "city_name", "data_type": "string", "comment": "城市名称"}
+      ]
+    }
+  ]
+}
