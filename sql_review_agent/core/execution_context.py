@@ -37,6 +37,8 @@ class ReviewExecutionContext:
     retry_count: int = 0
     retrieved_docs: list[dict[str, Any]] = field(default_factory=list)
 
+    critic_feedback: list[str] = field(default_factory=list)
+
 
     @classmethod
     def from_review_request(cls, request: SQLReviewRequest) -> "ReviewExecutionContext":
@@ -83,4 +85,6 @@ class ReviewExecutionContext:
             fix_sql=True,
             fix_provider=request.fix_provider,
             trace_id = request.trace_id or str(uuid4()),
+            critic_feedback=request.critic_feedback,
+            retry_count=request.retry_count,
         )

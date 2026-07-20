@@ -33,6 +33,9 @@ class SQLFixRequest(SQLReviewRequest):
 
     fix_provider: str = "auto"
 
+    critic_feedback: list[str] = field(default_factory=list)
+    retry_count: int = 0
+
 
 @dataclass
 class SQLExplainRequest(SQLReviewRequest):

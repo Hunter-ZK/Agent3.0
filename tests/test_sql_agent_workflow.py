@@ -95,7 +95,7 @@ def test_workflow_should_fix_and_verify_when_issue_exists():
     assert result.review_response.trace_id == result.trace_id
     assert result.fix_response.trace_id == result.trace_id
 
-    assert result.critic_response["passed"] is True
+    assert result.critic_response.passed is True
     assert result.critic_response is not None
     assert result.critic_response.trace_id == result.trace_id
 
@@ -150,5 +150,5 @@ def test_workflow_should_require_human_confirm_when_fix_not_verified():
     assert result.success is False
     assert result.final_status == "need_human_confirm"
     assert result.route_history == ["explain", "review", "fix", "critic"]
-    assert result.critic_response["passed"] is False
-    assert result.critic_response["need_human_confirm"] is True
+    assert result.critic_response.passed is False
+    assert result.critic_response.need_human_confirm is True

@@ -38,6 +38,8 @@ class SQLExplainAgent:
             explain_prompt = self._build_prompt(request)
             # print(explain_prompt)
             llm_output = self.llm_client.complete(explain_prompt)
+            raw_output = llm_output
+
             try:
                 payload  = parse_json_object(llm_output)
             except ValueError:
@@ -50,9 +52,9 @@ class SQLExplainAgent:
                 )
                 payload = parse_json_object(repaired_output)
 
-            return SQLExplainResponse.from_llm_payload(payload=payload ,file_path=request.file_path, trace_id=trace_id)
+            return SQLExplainResponse.from_llm_payload(payload=payload ,file_path=request.file_path, trace_id=trace_id,)
         except Exception as e:
-            return SQLExplainResponse.failed(file_path=request.file_path, error_message=str(e), trace_id=trace_id, raw_output=None)
+            return SQLExplainResponse.failed(file_path=request.file_path, error_message=str(e), trace_id=trace_id, raw_output=raw_output,)
 
 
     def _schema_hint(self) -> str:

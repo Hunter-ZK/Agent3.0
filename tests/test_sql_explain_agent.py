@@ -91,7 +91,7 @@ def test_explain_agent_should_repair_invalid_json_output():
     assert response.route_signals["next_node"] == "review_agent"
 
 
-def text_explain_agent_should_fail_when_repair_still_invalid():
+def test_explain_agent_should_fail_when_repair_still_invalid():
 
     agent = SQLExplainAgent(llm_client=BrokenThenRepairableLLM(), json_repairer=JSONRepairer(llm_client=BrokenRepairLLM()))
 
@@ -99,7 +99,7 @@ def text_explain_agent_should_fail_when_repair_still_invalid():
  
     assert response.success is False
     assert response.trace_id == "trace-repair-failed"
-    assert response.file_path == "repair_failed.sql"
+    assert response.file_path == "repair.sql"
     assert response.error_message is not None
     assert response.route_signals["next_node"] == "fallback_review"
     assert response.raw_output is not None

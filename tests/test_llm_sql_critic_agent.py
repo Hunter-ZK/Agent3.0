@@ -1,0 +1,3 @@
+class PassingCriticLLM:
+    def complete(self, prompt: str) -> str:
+        ...
