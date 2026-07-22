@@ -33,7 +33,7 @@ class SQLExplainAgent:
         # 3. parse_json_object
         # 4. SQLExplainResponse.from_llm_payload(...)
         # 5. except 时返回 SQLExplainResponse.failed(...)
-        
+        raw_output = None
         try:
             explain_prompt = self._build_prompt(request)
             # print(explain_prompt)
@@ -50,6 +50,7 @@ class SQLExplainAgent:
                     broken_text=llm_output,
                     schema_hint=self._schema_hint(),
                 )
+                raw_output = repaired_output
                 payload = parse_json_object(repaired_output)
 
             return SQLExplainResponse.from_llm_payload(payload=payload ,file_path=request.file_path, trace_id=trace_id,)

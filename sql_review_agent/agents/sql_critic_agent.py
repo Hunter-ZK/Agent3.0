@@ -44,7 +44,7 @@ class SQLCriticResponse:
         payload: dict[str, Any],
         trace_id: str | None = None,
         raw_output: Any | None = None,
-    ) -> "SQLCrticResponse":
+    ) -> "SQLCriticResponse":
         
         passed = bool(payload.get("passed", False))
         need_retry = bool(payload.get("need_retry", False))
@@ -73,7 +73,7 @@ class SQLCriticResponse:
 
 class SQLCriticAgent:
 
-    def critique(self, review_response: SQLReviewResponse, fix_response: SQLFixResponse, trace_id: str| None = None,) -> SQLCriticResponse:
+    def critique(self, review_response: SQLReviewResponse, fix_response: SQLFixResponse, re_review_response: SQLReviewResponse | None = None, trace_id: str| None = None,) -> SQLCriticResponse:
         try: 
             checked_items: list[dict[str, Any]] = []
             warnings: list[str] = []
@@ -155,6 +155,91 @@ class SQLCriticAgent:
                 }
             )
 
+            if re_review_response is None:
+                return SQLCriticResponse(
+                    success=True,
+                    passed=False,
+                    trace_id=trace_id,
+                    status="re_review_missing",
+                    reason="Fixed SQL was not reviewed again.",
+                    need_human_confirm=True,
+                    need_retry=True,
+                    checked_items=checked_items
+                    + [
+                        {
+                            "name": "re_review_exists",
+                            "passed": False,
+                            "detail": "No re-review response was provided.",
+                        }
+                    ],
+                )
+
+            if not re_review_response.success:
+                return SQLCriticResponse(
+                    success=True,
+                    passed=False,
+                    trace_id=trace_id,
+                    status="re_review_failed",
+                    reason="Reviewing the fixed SQL failed.",
+                    need_human_confirm=True,
+                    need_retry=True,
+                    checked_items=checked_items
+                    + [
+                        {
+                            "name": "re_review_success",
+                            "passed": False,
+                            "detail": re_review_response.error_message,
+                        }
+                    ],
+                )
+
+            checked_items.append(
+                {
+                    "name": "re_review_success",
+                    "passed": True,
+                    "detail": "Fixed SQL was reviewed successfully.",
+                }
+            )
+
+            if re_review_response.issue_count > 0:
+                return SQLCriticResponse(
+                    success=True,
+                    passed=False,
+                    trace_id=trace_id,
+                    status="issues_remaining",
+                    reason=(
+                        f"Fixed SQL still has "
+                        f"{re_review_response.issue_count} issue(s)."
+                    ),
+                    need_human_confirm=True,
+                    checked_items=checked_items
+                    + [
+                        {
+                            "name": "remaining_issue_count",
+                            "passed": False,
+                            "detail": (
+                                f"Original issues: {review_response.issue_count}; "
+                                f"remaining issues: "
+                                f"{re_review_response.issue_count}."
+                            ),
+                        }
+                    ],
+                    warnings=[
+                        "The fixed SQL did not pass deterministic re-review."
+                    ],
+                )
+
+            checked_items.append(
+                {
+                    "name": "remaining_issue_count",
+                    "passed": True,
+                    "detail": (
+                        f"Original issues: {review_response.issue_count}; "
+                        "remaining issues: 0."
+                    ),
+                }
+            )
+
             if fix_response.manual_notes:
                 warnings.append("Fix response contains manual_notes; human review may still be needed.")
 
@@ -174,7 +259,7 @@ class SQLCriticAgent:
                 passed=True,
                 trace_id=trace_id,
                 status="passed",
-                reason="Minimal deterministic critic passed.",
+                reason="Fixed SQL passed deterministic re-review.",
                 need_human_confirm=False,
                 checked_items=checked_items,
                 warnings=warnings,

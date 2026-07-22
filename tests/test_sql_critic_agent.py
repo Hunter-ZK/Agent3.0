@@ -13,6 +13,24 @@ def make_review_response(issue_count: int = 1) -> SQLReviewResponse:
         issues=[{"id": "ISSUE_001"}] if issue_count > 0 else [],
     )
 
+def make_re_review_response(
+    issue_count: int = 0,
+    success: bool = True,
+) -> SQLReviewResponse:
+    return SQLReviewResponse(
+        success=success,
+        task_type="review",
+        file_path="test.sql",
+        trace_id="trace-critic",
+        risk_level="low" if issue_count == 0 else "medium",
+        issue_count=issue_count,
+        issues=(
+            [{"id": "REMAINING_ISSUE"}]
+            if issue_count > 0
+            else []
+        ),
+        error_message=None if success else "re-review failed",
+    )
 
 def make_fix_response(
     success: bool = True,
@@ -73,6 +91,7 @@ def test_critic_should_fail_when_fixed_sql_missing():
     response = critic.critique(
         review_response=make_review_response(issue_count=1),
         fix_response=make_fix_response(fixed_sql=None),
+        re_review_response=make_re_review_response(issue_count=0),
         trace_id="trace-critic",
     )
 
@@ -87,6 +106,7 @@ def test_critic_should_fail_when_applied_fixes_missing():
     response = critic.critique(
         review_response=make_review_response(issue_count=1),
         fix_response=make_fix_response(applied_fixes=[]),
+        re_review_response=make_re_review_response(issue_count=0),
         trace_id="trace-critic",
     )
 
@@ -103,6 +123,7 @@ def test_critic_should_require_human_confirm_when_manual_notes_exist():
         fix_response=make_fix_response(
             manual_notes=["业务口径不确定，需要人工确认"]
         ),
+        re_review_response=make_re_review_response(issue_count=0),
         trace_id="trace-critic",
     )
 
