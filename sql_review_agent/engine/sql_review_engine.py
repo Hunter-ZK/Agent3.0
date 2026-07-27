@@ -9,6 +9,7 @@ from sql_review_agent.schemas.responses import SQLFixResponse, SQLReviewResponse
 from sql_review_agent.services.review_service import ReviewService
 from sql_review_agent.core.execution_context import ReviewExecutionContext
 from sql_review_agent.agents.sql_explain_agent import SQLExplainAgent
+from sql_review_agent.agents.sql_critic_service import SQLCriticService, SQLCriticResponse
 
 
 class SQLReviewEngine:
@@ -23,10 +24,12 @@ class SQLReviewEngine:
         review_service: ReviewService | None = None,
         metadata_provider_factory: Callable[[], Any] | None = None,
         engine_agent: SQLExplainAgent | None = None,
+        critic_service: SQLCriticService | None = None,
     ) -> None:
         self.review_service = review_service or ReviewService()
         self.metadata_provider_factory = metadata_provider_factory or MockMetadataProvider
         self.engine_agent = engine_agent
+        self.critic_service = critic_service or SQLCriticService()
 
     def review(self, request: SQLReviewRequest) -> SQLReviewResponse:
         """执行 SQL 审查。"""
@@ -70,6 +73,20 @@ class SQLReviewEngine:
                 trace_id=context.trace_id,
             )
         return self.engine_agent.explain(request, trace_id = context.trace_id)
+    
+
+    def critique(self,
+                 *,
+                 review_response: SQLReviewResponse,
+                 fix_reponse: SQLFixResponse,
+                 re_review_response: SQLReviewResponse,
+                 trace_id: str | None = None,):
+        return self.critic_service.critique(
+            review_response=review_response,
+            fix_response=fix_reponse,
+            re_review_response=re_review_response,
+            trace_id=trace_id,
+        )
 
     def optimize(self, request: SQLOptimizeRequest) -> SQLReviewResponse:
         """Optimize 占位：C/D 阶段接入 LLM 与 RAG 后实现。"""

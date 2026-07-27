@@ -71,7 +71,7 @@ class SQLCriticResponse:
 
 
 
-class SQLCriticAgent:
+class SQLCriticService:
 
     def critique(self, review_response: SQLReviewResponse, fix_response: SQLFixResponse, re_review_response: SQLReviewResponse | None = None, trace_id: str| None = None,) -> SQLCriticResponse:
         try: 
@@ -291,17 +291,17 @@ class CriticLLMClient(Protocol):
         ...
     
 
-class LLMSQLCriticAgent:
+class LLMSQLCriticService:
 
     def __init__(
             self,
             llm_client: CriticLLMClient,
             json_repairer: JSONRepairer | None = None,
-            fallback_agent: SQLCriticAgent | None = None,
+            fallback_agent: SQLCriticService | None = None,
     ):
         self.llm_client = llm_client
         self.json_repairer = json_repairer
-        self.fallback_agent = fallback_agent or SQLCriticAgent()
+        self.fallback_agent = fallback_agent or SQLCriticService()
 
     
     def critique(

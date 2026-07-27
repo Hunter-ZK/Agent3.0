@@ -3,7 +3,7 @@ from typing import Any
 
 from sql_review_agent.schemas.responses import SQLExplainResponse, SQLFixResponse, SQLReviewResponse
 
-from sql_review_agent.agents.sql_critic_agent import SQLCriticResponse
+from sql_review_agent.agents.sql_critic_service import SQLCriticResponse
 
 
 from uuid import uuid4
@@ -11,7 +11,7 @@ from uuid import uuid4
 from sql_review_agent.engine.sql_review_engine import SQLReviewEngine
 from sql_review_agent.schemas.requests import SQLExplainRequest, SQLFixRequest, SQLReviewRequest
 
-from sql_review_agent.agents.sql_critic_agent import  SQLCriticResponse, SQLCriticAgent
+from sql_review_agent.agents.sql_critic_service import  SQLCriticResponse
 
 @dataclass
 class SQLAgentWorkflowResult:
@@ -33,9 +33,8 @@ class SQLAgentWorkflowResult:
 
 class SQLAgentWorkflow:
 
-    def __init__(self, engine: SQLReviewEngine, critic_agent: SQLCriticAgent, max_retries: int = 1):
+    def __init__(self, engine: SQLReviewEngine, max_retries: int = 1):
         self.engine = engine
-        self.critic_agent = critic_agent
         self.max_retries = max_retries
 
     @staticmethod
@@ -110,7 +109,7 @@ class SQLAgentWorkflow:
         retry_count = 0
         critic_response = None
 
-        can_auto_fix = route_signals.get("can_auto_fix", False)
+        can_auto_fix = route_signals.get("can_auto_fix", True)
         need_metadata = route_signals.get("need_metadata", False)
         need_rag = route_signals.get("need_rag", False)
         need_human_confirm = route_signals.get(
@@ -157,7 +156,7 @@ class SQLAgentWorkflow:
 
         while True:
 
-            critic_response = self.critic_agent.critique(
+            critic_response = self.engine.critique(
                 review_response = review_response,
                 fix_response = fix_response,
                 re_review_response=re_review_response,

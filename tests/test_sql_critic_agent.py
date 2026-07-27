@@ -1,4 +1,4 @@
-from sql_review_agent.agents.sql_critic_agent import SQLCriticAgent
+from sql_review_agent.agents.sql_critic_service import SQLCriticService
 from sql_review_agent.schemas.responses import SQLFixResponse, SQLReviewResponse
 
 
@@ -55,11 +55,12 @@ def make_fix_response(
 
 
 def test_critic_should_pass_when_fix_is_valid():
-    critic = SQLCriticAgent()
+    critic = SQLCriticService()
 
     response = critic.critique(
         review_response=make_review_response(issue_count=1),
         fix_response=make_fix_response(),
+        re_review_response=make_re_review_response(),
         trace_id="trace-critic",
     )
 
@@ -71,7 +72,7 @@ def test_critic_should_pass_when_fix_is_valid():
 
 
 def test_critic_should_fail_when_fix_failed():
-    critic = SQLCriticAgent()
+    critic = SQLCriticService()
 
     response = critic.critique(
         review_response=make_review_response(issue_count=1),
@@ -86,7 +87,7 @@ def test_critic_should_fail_when_fix_failed():
 
 
 def test_critic_should_fail_when_fixed_sql_missing():
-    critic = SQLCriticAgent()
+    critic = SQLCriticService()
 
     response = critic.critique(
         review_response=make_review_response(issue_count=1),
@@ -101,7 +102,7 @@ def test_critic_should_fail_when_fixed_sql_missing():
 
 
 def test_critic_should_fail_when_applied_fixes_missing():
-    critic = SQLCriticAgent()
+    critic = SQLCriticService()
 
     response = critic.critique(
         review_response=make_review_response(issue_count=1),
@@ -116,7 +117,7 @@ def test_critic_should_fail_when_applied_fixes_missing():
 
 
 def test_critic_should_require_human_confirm_when_manual_notes_exist():
-    critic = SQLCriticAgent()
+    critic = SQLCriticService()
 
     response = critic.critique(
         review_response=make_review_response(issue_count=1),

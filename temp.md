@@ -24,9 +24,9 @@
 
 class SQLAgentWorkflow:
 
-    def __init__(self, engine: SQLReviewEngine, critic_agent: SQLCriticAgent, max_retries: int = 1):
+    def __init__(self, engine: SQLReviewEngine, critic_service: SQLCriticService, max_retries: int = 1):
         self.engine = engine
-        self.critic_agent = critic_agent
+        self.critic_service = critic_service
         self.max_retries = max_retries
 
     @staticmethod
@@ -148,7 +148,7 @@ class SQLAgentWorkflow:
 
         while True:
 
-            critic_response = self.critic_agent.critique(
+            critic_response = self.critic_service.critique(
                 orignal_sql = sql,
                 review_response = review_response,
                 fix_response = fix_response,
@@ -201,3 +201,10 @@ class SQLAgentWorkflow:
 
             route_history.append(f"fix_retry_{retry_count}")
 我现在其实不太能理解我的sql_agent_workflow里的流程了，为什么有的参数是agent、有的是egine,之前还有service，互相都是什么关系。
+
+
+4. explain和critic为什么用agent，fix和review用的都是service
+
+
+
+
