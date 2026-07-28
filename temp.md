@@ -206,5 +206,5 @@ class SQLAgentWorkflow:
 4. explain和critic为什么用agent，fix和review用的都是service
 
 
-
+5. 为什么你的review_egine参数里，只单独列出来SQLExplainAgent和critic_service, 而像fix、review都只是函数，而且为什么是review_engine，那有没有fix_engine、explain_engine, engine和agent和service是什么关系。这些是你一开始就设计好的，还是说纯粹是没考虑清楚，导致如此混乱的架构
 

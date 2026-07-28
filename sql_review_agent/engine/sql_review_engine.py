@@ -9,7 +9,7 @@ from sql_review_agent.schemas.responses import SQLFixResponse, SQLReviewResponse
 from sql_review_agent.services.review_service import ReviewService
 from sql_review_agent.core.execution_context import ReviewExecutionContext
 from sql_review_agent.agents.sql_explain_agent import SQLExplainAgent
-from sql_review_agent.agents.sql_critic_service import SQLCriticService, SQLCriticResponse
+from sql_review_agent.services.sql_critic_service import SQLCriticService, SQLCriticResponse
 
 
 class SQLReviewEngine:
@@ -23,12 +23,12 @@ class SQLReviewEngine:
         self,
         review_service: ReviewService | None = None,
         metadata_provider_factory: Callable[[], Any] | None = None,
-        engine_agent: SQLExplainAgent | None = None,
+        explain_agent: SQLExplainAgent | None = None,
         critic_service: SQLCriticService | None = None,
     ) -> None:
         self.review_service = review_service or ReviewService()
         self.metadata_provider_factory = metadata_provider_factory or MockMetadataProvider
-        self.engine_agent = engine_agent
+        self.explain_agent = explain_agent
         self.critic_service = critic_service or SQLCriticService()
 
     def review(self, request: SQLReviewRequest) -> SQLReviewResponse:
@@ -66,13 +66,13 @@ class SQLReviewEngine:
 
         context = ReviewExecutionContext.from_review_request(request)
 
-        if self.engine_agent is None:
+        if self.explain_agent is None:
             return SQLExplainResponse.failed(
                 file_path=request.file_path,
                 error_message="Explain agent is not configured",
                 trace_id=context.trace_id,
             )
-        return self.engine_agent.explain(request, trace_id = context.trace_id)
+        return self.explain_agent.explain(request, trace_id = context.trace_id)
     
 
     def critique(self,

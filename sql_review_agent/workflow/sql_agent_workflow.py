@@ -3,7 +3,7 @@ from typing import Any
 
 from sql_review_agent.schemas.responses import SQLExplainResponse, SQLFixResponse, SQLReviewResponse
 
-from sql_review_agent.agents.sql_critic_service import SQLCriticResponse
+from sql_review_agent.services.sql_critic_service import SQLCriticResponse
 
 
 from uuid import uuid4
@@ -11,7 +11,10 @@ from uuid import uuid4
 from sql_review_agent.engine.sql_review_engine import SQLReviewEngine
 from sql_review_agent.schemas.requests import SQLExplainRequest, SQLFixRequest, SQLReviewRequest
 
-from sql_review_agent.agents.sql_critic_service import  SQLCriticResponse
+from sql_review_agent.services.sql_critic_service import  SQLCriticResponse
+
+
+
 
 @dataclass
 class SQLAgentWorkflowResult:
@@ -33,6 +36,14 @@ class SQLAgentWorkflowResult:
 
 class SQLAgentWorkflow:
 
+    METADATA_BLOCKING_TYPES = {
+        "metadata_not_found",
+        "table_not_found",
+        "column_not_found",
+        "unknown_table",
+        "unknown_column",
+    }
+    
     def __init__(self, engine: SQLReviewEngine, max_retries: int = 1):
         self.engine = engine
         self.max_retries = max_retries
@@ -46,6 +57,26 @@ class SQLAgentWorkflow:
         
         return route_signals
     
+    @classmethod
+    def _has_blocking_metadata_issue(
+        cls,
+        review_response: SQLReviewResponse,
+    ) -> bool:
+        for issue in review_response.issues or []:
+            if not isinstance(issue, dict):
+                continue
+
+            issue_type = (
+                issue.get("type")
+                or issue.get("code")
+                or issue.get("rule_id")
+                or ""
+            )
+
+            if issue_type.lower() in cls.METADATA_BLOCKING_TYPES:
+                return True
+
+        return False
 
     def run(self, sql: str, file_path: str = "<memory>") -> SQLAgentWorkflowResult:
         trace_id = str(uuid4())
@@ -70,6 +101,16 @@ class SQLAgentWorkflow:
         route_signals = self._get_route_signals(explain_response)
 
         need_review = route_signals.get("need_review",True)
+        can_auto_fix = route_signals.get("can_auto_fix", True)
+        need_metadata = route_signals.get("need_metadata", False)
+        need_rag = route_signals.get("need_rag", False)
+        need_human_confirm = route_signals.get(
+            "need_human_confirm",
+            False,
+        )
+
+
+
 
         if not need_review:
             return SQLAgentWorkflowResult(
@@ -85,6 +126,7 @@ class SQLAgentWorkflow:
         )
         route_history.append("review")
 
+
         if not review_response.success:
             return SQLAgentWorkflowResult(
                 success=False,
@@ -96,6 +138,11 @@ class SQLAgentWorkflow:
                 error_message=review_response.error_message,
             )
         
+
+        if need_metadata:
+            route_history.append("metadata_checked")
+
+
         if review_response.issue_count == 0:
             return SQLAgentWorkflowResult(
                 success=True,
@@ -109,22 +156,32 @@ class SQLAgentWorkflow:
         retry_count = 0
         critic_response = None
 
-        can_auto_fix = route_signals.get("can_auto_fix", True)
-        need_metadata = route_signals.get("need_metadata", False)
-        need_rag = route_signals.get("need_rag", False)
-        need_human_confirm = route_signals.get(
-            "need_human_confirm",
-            False,
-        )
 
-        if need_metadata or need_rag:
+        if need_rag:
             return SQLAgentWorkflowResult(
                 success=False,
                 trace_id=trace_id,
-                final_status="context_required",
+                final_status="knowledge_required",
                 explain_response=explain_response,
                 review_response=review_response,
                 route_history=route_history,
+                error_message=(
+                    "The review requires knowledge retrieval, "
+                    "but RAG is not implemented."
+                ),
+            )
+
+        if self._has_blocking_metadata_issue(review_response):
+            return SQLAgentWorkflowResult(
+                success=False,
+                trace_id=trace_id,
+                final_status="metadata_required",
+                explain_response=explain_response,
+                review_response=review_response,
+                route_history=route_history,
+                error_message=(
+                    "Required table or column metadata was not found."
+                ),
             )
 
         if need_human_confirm or can_auto_fix is not True:

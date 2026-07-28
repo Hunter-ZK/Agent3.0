@@ -1,6 +1,6 @@
 from sql_review_agent.schemas.responses import SQLExplainResponse,SQLFixResponse,SQLReviewResponse
 from sql_review_agent.workflow.sql_agent_workflow import SQLAgentWorkflow
-from sql_review_agent.agents.sql_critic_service import SQLCriticService
+from sql_review_agent.services.sql_critic_service import SQLCriticService
 
 class FakeExplainAgent:
     def __init__(
@@ -68,6 +68,24 @@ class FakeExplainAgent:
             fix_source="auto",
         )
 
+
+    def critique(
+        self,
+        *,
+        review_response,
+        fix_response,
+        re_review_response,
+        trace_id=None,
+    ):
+        return SQLCriticService().critique(
+            review_response=review_response,
+            fix_response=fix_response,
+            re_review_response=re_review_response,
+            trace_id=trace_id,
+        )
+    
+
+
 class FakeEngineReviewClean:
     def review(self, request):
         return SQLReviewResponse(
@@ -85,6 +103,23 @@ class FakeEngineReviewClean:
             "Fix must not run when review has no issues."
         )
 
+
+
+    def critique(
+        self,
+        *,
+        review_response,
+        fix_response,
+        re_review_response,
+        trace_id=None,
+    ):
+        return SQLCriticService().critique(
+            review_response=review_response,
+            fix_response=fix_response,
+            re_review_response=re_review_response,
+            trace_id=trace_id,
+        )
+    
 
 class FakeEngineNoIssue:
     def explain(self, request):
@@ -108,7 +143,25 @@ class FakeEngineNoIssue:
     
     def fix(self, request):
         raise AssertionError("fix should not be called when issue_count is 0")
+
+
+    def critique(
+        self,
+        *,
+        review_response,
+        fix_response,
+        re_review_response,
+        trace_id=None,
+    ):
+        return SQLCriticService().critique(
+            review_response=review_response,
+            fix_response=fix_response,
+            re_review_response=re_review_response,
+            trace_id=trace_id,
+        )
     
+
+
 def test_workflow_should_stop_when_no_issue():
     workflow = SQLAgentWorkflow(engine=FakeEngineNoIssue())
 
@@ -133,6 +186,13 @@ class FakeEngineFixVerified:
             file_path=request.file_path,
             trace_id=request.trace_id,
             sql_summary="explain ok",
+            route_signals={
+                "need_review": True,
+                "need_metadata": True,
+                "need_rag": False,
+                "need_human_confirm": False,
+                "can_auto_fix": True,
+            },
         )
     
     def review(self, request):
@@ -193,6 +253,82 @@ class FakeEngineFixVerified:
             trace_id=trace_id,
         )
     
+
+def test_workflow_should_continue_when_metadata_is_available():
+    engine = FakeEngineFixVerified()
+
+    workflow = SQLAgentWorkflow(engine=engine)
+
+    result = workflow.run(
+        sql="select * from known_table",
+        file_path="test.sql",
+    )
+
+    assert result.success is True
+    assert result.final_status == "fix_verified"
+    assert "metadata_checked" in result.route_history
+    assert "fix" in result.route_history
+
+
+
+class FakeEngineMetadataMissing(FakeEngineFixVerified):
+
+    def review(self, request):
+        return SQLReviewResponse(
+            success=True,
+            task_type="review",
+            file_path=request.file_path,
+            trace_id=request.trace_id,
+            risk_level="high",
+            issue_count=1,
+            issues=[
+                {
+                    "type": "table_not_found",
+                    "message": "Table metadata was not found.",
+                }
+            ],
+        )
+
+    def fix(self, request):
+        raise AssertionError(
+            "Fix must not run when metadata is missing."
+        )
+
+
+def test_workflow_should_stop_when_metadata_is_missing():
+    engine = FakeEngineMetadataMissing()
+
+    workflow = SQLAgentWorkflow(engine=engine)
+
+    result = workflow.run(
+        sql="select * from unknown_table",
+        file_path="test.sql",
+    )
+
+    assert result.success is False
+    assert result.final_status == "metadata_required"
+    assert result.route_history == [
+        "explain",
+        "review",
+        "metadata_checked",
+    ]
+    assert result.fix_response is None
+
+
+def test_workflow_should_stop_when_rag_is_required():
+    engine = FakeEngineFixVerified()
+
+    workflow = SQLAgentWorkflow(engine=engine)
+
+    result = workflow.run(
+        sql="select * from user_info",
+        file_path="test.sql",
+    )
+
+    assert result.success is True
+    assert result.final_status == "knowledge_required"
+    assert result.fix_response is None
+
 
 def test_workflow_should_fix_and_verify_when_issue_exists():
     workflow = SQLAgentWorkflow(engine=FakeEngineFixVerified())
@@ -370,7 +506,7 @@ def test_workflow_should_stop_when_context_is_required():
         file_path="test.sql",
     )
 
-    assert result.success is False
+    assert result.success is True
     assert result.final_status == "context_required"
     assert result.route_history == [
         "explain",

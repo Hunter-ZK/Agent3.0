@@ -1,4 +1,4 @@
-from sql_review_agent.agents.sql_critic_service import SQLCriticService
+from sql_review_agent.services.sql_critic_service import SQLCriticService
 from sql_review_agent.schemas.responses import SQLFixResponse, SQLReviewResponse
 
 
