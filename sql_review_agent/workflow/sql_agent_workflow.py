@@ -114,7 +114,7 @@ class SQLAgentWorkflow:
 
         if not need_review:
             return SQLAgentWorkflowResult(
-                success=False,
+                success=True,
                 trace_id=trace_id,
                 final_status="explained",
                 explain_response=explain_response,
@@ -153,9 +153,6 @@ class SQLAgentWorkflow:
                 route_history=route_history,
             )
         
-        retry_count = 0
-        critic_response = None
-
 
         if need_rag:
             return SQLAgentWorkflowResult(
@@ -194,24 +191,28 @@ class SQLAgentWorkflow:
                 route_history=route_history,
             )
 
-        fix_response = self.engine.fix(
-            SQLFixRequest(sql=sql, file_path=file_path, trace_id=trace_id, retry_count=retry_count,)
-        )
-        route_history.append("fix")
-
-        re_review_response = None
-
-        if fix_response.success and fix_response.fixed_sql:
-            re_review_response = self.engine.review(
-                SQLReviewRequest(
-                    sql = fix_response.fixed_sql,
-                    file_path=file_path,
-                    trace_id=trace_id,
-                )
-            )
-            route_history.append("re_review")
+        retry_count = 0
+        critic_response = None
 
         while True:
+
+
+            fix_response = self.engine.fix(
+                SQLFixRequest(sql=sql, file_path=file_path, trace_id=trace_id, retry_count=retry_count,)
+            )
+            route_history.append("fix" if retry_count == 0 else f"fix_retry_{retry_count}")
+
+            re_review_response = None
+
+            if fix_response.success and fix_response.fixed_sql:
+                re_review_response = self.engine.review(
+                    SQLReviewRequest(
+                        sql = fix_response.fixed_sql,
+                        file_path=file_path,
+                        trace_id=trace_id,
+                    )
+                )
+            route_history.append("re_review" if retry_count == 0 else f"re_review_retry_{retry_count}")
 
             critic_response = self.engine.critique(
                 review_response = review_response,
@@ -253,14 +254,3 @@ class SQLAgentWorkflow:
 
             retry_count += 1
 
-            fix_response = self.engine.fix(
-                SQLFixRequest(
-                    sql = sql,
-                    file_path=file_path,
-                    trace_id=trace_id,
-                    retry_count=retry_count,
-                    critic_feedback=critic_response.retry_instructions,
-                )
-            )
-
-            route_history.append(f"fix_retry_{retry_count}")

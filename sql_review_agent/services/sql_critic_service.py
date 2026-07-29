@@ -309,6 +309,7 @@ class LLMSQLCriticService:
             original_sql: str,
             review_response: SQLReviewResponse,
             fix_response: SQLFixResponse,
+            re_review_response: SQLReviewResponse | None = None,
             trace_id: str | None = None,
     ) -> SQLCriticResponse:
         
@@ -346,6 +347,7 @@ class LLMSQLCriticService:
             return self.fallback_agent.critique(
                 review_response=review_response,
                 fix_response=fix_response,
+                re_review_response=re_review_response,
                 trace_id=trace_id,
             )
         
@@ -367,7 +369,7 @@ class LLMSQLCriticService:
             indent=2,
         )
 
-        notes_json = json.dump(
+        notes_json = json.dumps(
             fix_response.manual_notes,
             ensure_ascii=False,
             indent=2,

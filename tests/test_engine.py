@@ -131,7 +131,7 @@ class MockEngineExplainLLM:
 def test_engine_explain_should_use_explain_agent():
     engine = SQLReviewEngine(
         review_service=BrokenReviewService(),
-        engine_agent=SQLExplainAgent(llm_client=MockEngineExplainLLM()),
+        explain_agent=SQLExplainAgent(llm_client=MockEngineExplainLLM()),
     )
 
     response = engine.explain(SQLExplainRequest(sql="select 1", file_path="explain.sql"))

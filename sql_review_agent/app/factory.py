@@ -42,7 +42,7 @@ def build_sql_review_engine(enable_llm: bool = False, llm_provider: str = "mock"
     ReviewService 的长参数方法。
     """
     service = build_review_service(enable_llm=enable_llm, llm_provider=llm_provider)
-    return SQLReviewEngine(review_service=service, metadata_provider_factory=MockMetadataProvider, engine_agent=build_explain_agent(),critic_service=SQLCriticService(),)
+    return SQLReviewEngine(review_service=service, metadata_provider_factory=MockMetadataProvider, explain_agent=build_explain_agent(),critic_service=SQLCriticService(),)
 
 
 def build_workflow(max_retries: int = 1,) -> SQLAgentWorkflow:
