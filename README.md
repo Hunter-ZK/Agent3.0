@@ -9,7 +9,7 @@
 后续方向：
 
 ```text
-SQLReviewEngine
+SQLPilotEngine
 → FastAPI Backend
 → Streamlit Web MVP
 → RAG Knowledge Layer
@@ -66,7 +66,7 @@ DEEPSEEK_MODEL=deepseek-chat
 不要继续扩展 CLI。下一阶段建议从：
 
 ```text
-Phase B：SQLReviewEngine API 收口
+Phase B：SQLPilotEngine API 收口
 ```
 
 开始，为 FastAPI / Streamlit Web MVP 做准备。

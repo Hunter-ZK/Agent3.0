@@ -109,6 +109,6 @@ sql_review_agent/engine/sql_review_engine.py
 
 ```text
 CLI / FastAPI / Tests
-→ SQLReviewEngine
+→ SQLPilotEngine
 → ReviewService
 ```

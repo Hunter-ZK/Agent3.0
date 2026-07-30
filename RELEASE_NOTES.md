@@ -32,5 +32,5 @@ python -m pytest -q
 Start new conversation with `handoff/START_HERE_PROMPT.md`, then continue:
 
 ```text
-Phase B: SQLReviewEngine API 收口
+Phase B: SQLPilotEngine API 收口
 ```

@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+sqlpilot_review_agent.egg-info/PKG-INFO
+sqlpilot_review_agent.egg-info/SOURCES.txt
+sqlpilot_review_agent.egg-info/dependency_links.txt
+sqlpilot_review_agent.egg-info/requires.txt
+sqlpilot_review_agent.egg-info/top_level.txt
+tests/test_architecture_smoke.py

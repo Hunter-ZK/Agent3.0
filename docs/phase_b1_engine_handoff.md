@@ -35,10 +35,10 @@ sql_review_agent/
 
 ### Engine
 
-- `SQLReviewEngine.review(request)`：统一审查入口。
-- `SQLReviewEngine.fix(request)`：统一修复入口。
-- `SQLReviewEngine.explain(request)`：占位，后续接 LLM-first 单 Agent。
-- `SQLReviewEngine.optimize(request)`：占位，后续接 LLM/RAG 优化建议。
+- `SQLPilotEngine.review(request)`：统一审查入口。
+- `SQLPilotEngine.fix(request)`：统一修复入口。
+- `SQLPilotEngine.explain(request)`：占位，后续接 LLM-first 单 Agent。
+- `SQLPilotEngine.optimize(request)`：占位，后续接 LLM/RAG 优化建议。
 
 ## 已修改模块
 
