@@ -22,13 +22,13 @@ class SQLPilotEngine:
 
     def __init__(
         self,
-        review_service: ReviewService | None = None,
+        review_service: ReviewService,
         fix_service: FixService | None = None,
         metadata_provider_factory: Callable[[], Any] | None = None,
         explain_agent: SQLExplainAgent | None = None,
         critic_service: CriticService | None = None,
     ) -> None:
-        self.review_service = review_service or ReviewService()
+        self.review_service = review_service
         self.fix_service = fix_service
         self.metadata_provider_factory = metadata_provider_factory or MockMetadataProvider
         self.explain_agent = explain_agent
@@ -78,15 +78,23 @@ class SQLPilotEngine:
         return self.explain_agent.explain(request, trace_id = context.trace_id)
     
 
-    def critique(self,
-                 *,
-                 review_response: SQLReviewResponse,
-                 fix_reponse: SQLFixResponse,
-                 re_review_response: SQLReviewResponse,
-                 trace_id: str | None = None,):
+    def critique(
+        self,
+        *,
+        review_response: SQLReviewResponse,
+        fix_response: SQLFixResponse,
+        re_review_response: SQLReviewResponse | None = None,
+        trace_id: str | None = None,
+    ) -> SQLCriticResponse:
+        """验证当前修复结果是否真正通过复审。
+
+        参数前的 * 表示：
+        后续参数必须按名称传递，避免多个Response对象因顺序相近而传错。
+        """
+
         return self.critic_service.critique(
             review_response=review_response,
-            fix_response=fix_reponse,
+            fix_response=fix_response,
             re_review_response=re_review_response,
             trace_id=trace_id,
         )

@@ -3,13 +3,27 @@
 import re
 
 from sql_pilot_engine.core.context import ReviewContext
-from sql_pilot_engine.core.enums import IssueSource, Severity
+from sql_pilot_engine.core.enums import IssueSource, Severity, IssueAction
 from sql_pilot_engine.core.models import Issue
 from sql_pilot_engine.rules.base import Rule
 from sql_pilot_engine.utils.sql_text import contains_non_ascii_whitespace, normalize_sql
 
 
-def make_issue(rule_id: str, title: str, severity: Severity, message: str, suggestion: str, evidence: str, category: str) -> Issue:
+def make_issue(
+        rule_id: str, 
+        title: str, 
+        severity: Severity, 
+        message: str, 
+        suggestion: str, 
+        evidence: str, 
+        category: str,
+        *,
+        action=IssueAction(
+            IssueAction.HUMAN_REVIEW
+        ),
+        auto_fixable: bool = False,
+        blocking: bool = False,
+    ) -> Issue:
     return Issue(
         rule_id=rule_id,
         title=title,
@@ -20,41 +34,65 @@ def make_issue(rule_id: str, title: str, severity: Severity, message: str, sugge
         category=category,
         source=IssueSource.RULE,
         confidence=1.0,
+        action=action,
+        auto_fixable=auto_fixable,
+        blocking=blocking,
     )
 
 
 def check_select_star(sql: str, context: ReviewContext) -> list[Issue]:
-    normalized = normalize_sql(sql)
-    if re.search(r"\bselect\s+\*", normalized):
-        return [
-            make_issue(
-                rule_id="SELECT_STAR",
-                title="避免使用 SELECT *",
-                severity=Severity.MEDIUM,
-                message="检测到 SELECT *，字段范围不可控，可能引入不必要的数据扫描。",
-                suggestion="请显式声明需要查询的字段。",
-                evidence="SELECT *",
-                category="style",
-            )
-        ]
-    return []
+    """通过AST事实判断是否存在SELECT *。
+
+    sql参数暂时保留，是为了兼容统一Rule接口；
+    本规则的核心判断已经不依赖SQL字符串。
+    """
+    
+    facts = context.sql_facts
+    
+    if facts is None or not facts.has_select_star:
+        return []
+    
+
+    return [
+        make_issue(
+            rule_id="SELECT_STAR",
+            title="避免使用 SELECT *",
+            severity=Severity.MEDIUM,
+            message="检测到 SELECT *，字段范围不可控，可能引入不必要的数据扫描。",
+            suggestion="请显式声明需要查询的字段。",
+            evidence="AST: Select projection contains Star",
+            category="style",
+            action=IssueAction.HUMAN_REVIEW,
+        )
+    ]
 
 
 def check_drop_or_truncate(sql: str, context: ReviewContext) -> list[Issue]:
-    normalized = normalize_sql(sql)
-    if re.search(r"\b(drop\s+table|truncate\s+table)\b", normalized):
-        return [
-            make_issue(
-                rule_id="DROP_OR_TRUNCATE",
-                title="检测到高危 DROP/TRUNCATE 操作",
-                severity=Severity.HIGH,
-                message="检测到 DROP TABLE 或 TRUNCATE TABLE，生产环境执行前必须确认影响范围。",
-                suggestion="请确认是否必须执行，并增加审批或备份流程。",
-                evidence="DROP/TRUNCATE",
-                category="safety",
-            )
-        ]
-    return []
+    """通过语句类型识别DROP和TRUNCATE操作。"""
+    
+    facts = context.sql_facts
+    
+    if facts is None:
+        return []
+    
+    if not facts.has_drop and not facts.has_truncate:
+        return []
+    
+    return [
+        make_issue(
+            rule_id="DROP_OR_TRUNCATE",
+            title="检测到高危 DROP/TRUNCATE 操作",
+            severity=Severity.HIGH,
+            message="检测到 DROP TABLE 或 TRUNCATE TABLE，生产环境执行前必须确认影响范围。",
+            suggestion="请确认是否必须执行，并增加审批或备份流程。",
+            evidence="AST statement type: drop/truncate",
+            category="safety",
+            action=IssueAction.BLOCK,
+            auto_fixable=False,
+            blocking=True,
+        )
+    ]
+
 
 
 def check_non_ascii_whitespace(sql: str, context: ReviewContext) -> list[Issue]:

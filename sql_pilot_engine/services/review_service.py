@@ -1,24 +1,38 @@
 # sql_review_agent/services/review_service.py
 
 from sql_pilot_engine.core.context import ReviewContext
-from sql_pilot_engine.core.enums import IssueSource, Severity
-from sql_pilot_engine.core.models import FixedSqlResult, Issue, ReviewResult
-from sql_pilot_engine.fixing.auto_fixer import generate_fixed_sql
+from sql_pilot_engine.core.enums import IssueSource, Severity, IssueAction
+from sql_pilot_engine.core.models import Issue, ReviewResult
 from sql_pilot_engine.llm.clients import BaseLLMClient
 from sql_pilot_engine.llm.context_builder import build_analysis_context_text, build_metadata_context_text
 from sql_pilot_engine.llm.errors import LLMAPIError, LLMError, LLMResponseParseError, LLMResponseValidationError
-from sql_pilot_engine.llm.fixer import LLMFixer
 from sql_pilot_engine.llm.prompts import build_rule_issues_text
 from sql_pilot_engine.llm.reviewer import LLMReviewer
 from sql_pilot_engine.rules.registry import RuleRegistry
 from sql_pilot_engine.core.execution_context import ReviewExecutionContext
 
+from sql_pilot_engine.analysis import SQLParser
+from sql_pilot_engine.core.enums import IssueAction,IssueSource,Severity
+
+from sql_pilot_engine.analysis import SQLParser
+from sql_pilot_engine.analysis.facts import SQLFactsExtractor
+
+
 class ReviewService:
     """SQL Review Agent 主编排服务。"""
 
-    def __init__(self, rule_registry: RuleRegistry | None = None, llm_client: BaseLLMClient | None = None) -> None:
+    def __init__(
+            self, 
+            rule_registry: RuleRegistry | None = None, 
+            llm_client: BaseLLMClient | None = None,
+            sql_parser: SQLParser | None = None,
+            facts_extractor: SQLFactsExtractor | None = None,
+        ) -> None:
         self.rule_registry = rule_registry or RuleRegistry()
         self.llm_client = llm_client
+        self.sql_parser = sql_parser or SQLParser()
+        self.facts_extractos = facts_extractor or SQLFactsExtractor()
+        
 
     def review(self, context: ReviewExecutionContext) -> ReviewResult:
         """基于内部执行上下文执行 SQL Review/Fix。
@@ -53,9 +67,53 @@ class ReviewService:
         enable_llm: bool = False,
         llm_provider: str = "mock",
     ) -> ReviewResult:
+        
+        parse_result = self.sql_parser.parse(
+            sql = sql,
+            dialect = dialect,
+        )
+        
+        if not parse_result.success:
+            parse_issue = Issue(
+                rule_id="SQL_PARSE_ERROR",
+                title="SQL语法解析失败",
+                severity=Severity.HIGH,
+                message=(
+                    parse_result.error_message
+                    or "Unknown SQL parse error."
+                ),
+                suggestion=(
+                    "请检查SQL语法及当前方言配置。"
+                ),
+                evidence=sql[:500],
+                category="syntax",
+                source=IssueSource.SYSTEM,
+                confidence=1.0,
+                action=IssueAction.BLOCK,
+                auto_fixable=False,
+                blocking=True,
+                metadata={
+                    "dialect": dialect,
+                },
+            )
+
+            return ReviewResult(
+                file_path=file_path,
+                risk_level=Severity.HIGH,
+                issue_count=1,
+                issues=[parse_issue],
+                fixed_sql_result=None,
+            )
+        
+        sql_facts = self.facts_extractos.extract(
+            parse_result=parse_result
+        )
+        
         context = ReviewContext(
             mode=mode,
             dialect=dialect,
+            parse_result=parse_result,
+            sql_facts=sql_facts,
             metadata_provider=metadata_provider,
             enable_llm=enable_llm,
             llm_provider=llm_provider,

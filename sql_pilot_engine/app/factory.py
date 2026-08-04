@@ -23,7 +23,7 @@ from sql_pilot_engine.services.fix_service import (
 from sql_pilot_engine.services.review_service import (
     ReviewService,
 )
-from sql_pilot_engine.services.sql_critic_service import (
+from sql_pilot_engine.services.critic_service import (
     SQLCriticService,
 )
 from sql_pilot_engine.workflow.sql_agent_workflow import (
