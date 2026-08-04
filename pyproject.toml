@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["sql_review_agent*"]
+include = ["sql_pilot_engine*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

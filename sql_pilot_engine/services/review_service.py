@@ -17,6 +17,8 @@ from sql_pilot_engine.core.enums import IssueAction,IssueSource,Severity
 from sql_pilot_engine.analysis import SQLParser
 from sql_pilot_engine.analysis.facts import SQLFactsExtractor
 
+from sql_pilot_engine.metadata.validator import MetadataValidator
+
 
 class ReviewService:
     """SQL Review Agent 主编排服务。"""
@@ -27,11 +29,14 @@ class ReviewService:
             llm_client: BaseLLMClient | None = None,
             sql_parser: SQLParser | None = None,
             facts_extractor: SQLFactsExtractor | None = None,
+            metadata_validator: (MetadataValidator | None) = None,
         ) -> None:
         self.rule_registry = rule_registry or RuleRegistry()
         self.llm_client = llm_client
         self.sql_parser = sql_parser or SQLParser()
-        self.facts_extractos = facts_extractor or SQLFactsExtractor()
+        self.facts_extractos = (facts_extractor or SQLFactsExtractor())
+        
+        self.metadata_validator = (metadata_validator or MetadataValidator())
         
 
     def review(self, context: ReviewExecutionContext) -> ReviewResult:
@@ -124,6 +129,21 @@ class ReviewService:
         analysis_context_text = build_analysis_context_text(sql=sql, dialect=dialect)
         metadata_context_text = build_metadata_context_text(sql=sql, metadata_provider=metadata_provider)
 
+        metadata_issues: list[Issue] = []
+        
+        if metadata_provider is not None:
+            metadata_issues = (
+                self.metadata_validator.validate(
+                    facts=sql_facts,
+                    provider=metadata_provider,
+                )
+            )
+        
+        issues = [
+            *rule_issues,
+            *metadata_issues,
+        ]
+
         llm_issues: list[Issue] = []
         if enable_llm:
             llm_issues = self.run_llm_review(
@@ -134,7 +154,7 @@ class ReviewService:
                 metadata_context_text=metadata_context_text,
             )
 
-        issues = self.merge_issues(rule_issues=rule_issues, llm_issues=llm_issues)
+        issues = self.merge_issues(rule_issues=issues, llm_issues=llm_issues)
 
 
         return ReviewResult(

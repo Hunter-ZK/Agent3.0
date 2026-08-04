@@ -3,6 +3,31 @@ from dataclasses import dataclass
 from sqlglot import exp
 from sql_pilot_engine.analysis.sql_parser import SQLParseResult
 
+@dataclass(frozen=True)
+class TableReference:
+    """SQL出现的一次物理表引用"""
+    
+    physical_name: str
+    alias: str | None = None
+
+@dataclass(frozen=True)
+class ColumnReference:
+    """SQL中出现的一次字段引用。
+
+    qualifier是字段前面的限定符：
+
+    o.order_id
+    → qualifier="o"
+    → name="order_id"
+
+    user_id
+    → qualifier=None
+    → name="user_id"
+    """
+
+    name: str
+    qualifier: str | None = None
+
 
 @dataclass(frozen=True)
 class SQLFacts:
@@ -22,6 +47,10 @@ class SQLFacts:
     source_tables: tuple[str, ...]
     target_tables: tuple[str, ...]
     cte_names: tuple[str, ...]
+    
+    table_references: tuple[TableReference, ...]
+    column_references: tuple[ColumnReference, ...]
+    select_aliases: tuple[str, ...]
     
     has_select_star: bool
     has_drop: bool
@@ -71,6 +100,10 @@ class SQLFactsExtractor:
         target_tables: set[str] = set()
         cte_names: set[str] = set()
         
+        table_references: set[TableReference] = set()
+        column_references: set[ColumnReference] = set()
+        select_aliases: set[str] = set()
+        
         has_select_star = False
         
         for statement in parse_result.statements:
@@ -94,6 +127,20 @@ class SQLFactsExtractor:
             )
             source_tables.update(current_sources)
             
+            current_table_references = (
+                self._extract_table_references(
+                    statement=statement,
+                    cte_names=current_cte_names,
+                    target_tables=current_targets,
+                )
+            )
+            
+            table_references.update(current_table_references)
+            
+            column_references.update(self._extract_column_references(statement))
+            
+            select_aliases.update(self._extract_select_aliases(statement))
+            
             if self._contains_select_star(statement):
                 has_select_star = True
                 
@@ -107,6 +154,27 @@ class SQLFactsExtractor:
             source_tables=tuple(sorted(source_tables)),
             target_tables=tuple(sorted(target_tables)),
             cte_names=tuple(sorted(cte_names)),
+            table_references=tuple(
+                sorted(
+                    table_references,
+                    key=lambda item:(
+                        item.physical_name,
+                        item.alias or ""
+                    )
+                )
+            ),
+            column_references=tuple(
+                sorted(
+                    column_references,
+                    key=lambda item: (
+                        item.qualifier or "",
+                        item.name,
+                    )
+                )
+            ),
+            select_aliases=tuple(
+                sorted(select_aliases)
+            ),
             has_select_star=has_select_star,
             has_drop="drop" in statement_type_set,
             has_truncate=any(
@@ -186,7 +254,106 @@ class SQLFactsExtractor:
             
         return sources
     
+
+    def _extract_table_references(
+        self,
+        *,
+        statement: exp.Expression,
+        cte_names: set[str],
+        target_tables: str[str],
+    ) -> set[TableReference]:
+        """提取物理表及其别名"""
+        
+        references: set[TableReference] = set()
+        
+        for table in statement.find_all(exp.Table):
+            phsical_name = self._qualified_table_name(table)
+            
+            if phsical_name in cte_names:
+                continue
+            
+            if phsical_name in target_tables:
+                continue
+            
+            alias = (
+                table.alias.lower()
+                if table.alias
+                else None
+            )
+
+            references.add(
+                TableReference(
+                    physical_name=phsical_name,
+                    alias=alias,
+                )
+            )
+            
+        return references
     
+
+    def _extract_column_references(
+        self,
+        statament: exp.Expression,
+    ) -> set[ColumnReference]:
+        """提取SQL中使用的字段。
+
+        exp.Column可以表示：
+        - user_id
+        - o.user_id
+        - table_name.*
+        
+        星号不参与字段存在性校验，因此直接跳过。
+        """
+        
+        references: set[ColumnReference] = set()
+       
+        for column in statament.find_all(exp.Column):
+            column_name = column.name.lower()
+            
+            if column_name == "*":
+                continue
+                
+            qualifier = (
+                column.table.lower()
+                if column.table
+                else None
+            )
+            
+            references.add(
+                ColumnReference(
+                    name = column_name,
+                    qualifier=qualifier,
+                )
+            )
+            
+        return references
+    
+    
+    def _extract_select_aliases(
+        self,
+        statement: exp.Expression,
+    ) -> set[str]:
+        """提取SELECT表达式产生的结果别名。
+
+        示例：
+        SUM(order_amount) AS total_amount
+
+        ORDER BY total_amount中的total_amount
+        不是物理字段，因此元数据校验应排除。
+        """
+        
+        aliases: set[str] = set()
+        for select in statement.find_all(exp.Select):
+
+            for projection in select.expressions:
+                alias = projection.alias
+                
+                if alias: 
+                    aliases.add(alias.lower())
+        
+        return aliases
+
+
     def _contains_select_star(
         self,
         statement: exp.Expression,
