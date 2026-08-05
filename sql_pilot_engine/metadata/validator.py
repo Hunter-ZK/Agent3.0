@@ -27,32 +27,53 @@ class MetadataValidator:
         facts: SQLFacts,
         provider: MetadataProvider,
     ) -> list[Issue]:
-        
+        """验证SQL引用的物理表及可明确归属的字段。
+
+        本方法先统一查询源表和目标表，
+        再使用同一份请求内缓存校验字段。
+
+        同一张表在一次validate调用中只查询一次。
+        """
+
         issues: list[Issue] = []
-        
+
         table_cache: dict[
             str,
             TableLookupResult,
         ] = {}
-        
-        for table_name in facts.source_tables:
-            lookup = provider.get_table(table_name)
-            table_cache[table_name] = lookup
-            
-            issues.extend(
-                self._validate_table_lookup(
-                    table_name = table_name,
-                    lookup = lookup,
+
+        # source_tables和target_tables可能出现重复。
+        # dict.fromkeys既能去重，也能保持原顺序。
+        table_names = tuple(
+            dict.fromkeys(
+                (
+                    *facts.source_tables,
+                    *facts.target_tables,
                 )
             )
-            
+        )
+
+        for table_name in table_names:
+            lookup = provider.get_table(
+                table_name
+            )
+
+            table_cache[table_name] = lookup
+
+            issues.extend(
+                self._validate_table_lookup(
+                    table_name=table_name,
+                    lookup=lookup,
+                )
+            )
+
         issues.extend(
             self._validate_columns(
-                facts = facts,
-                table_cache = table_cache,
+                facts=facts,
+                table_cache=table_cache,
             )
         )
-        
+
         return issues
     
     def _validate_table_lookup(

@@ -11,6 +11,7 @@ from sql_pilot_engine.core.execution_context import ReviewExecutionContext
 from sql_pilot_engine.agents.sql_explain_agent import SQLExplainAgent
 from sql_pilot_engine.services.critic_service import CriticService, SQLCriticResponse
 from sql_pilot_engine.services.fix_service import FixService
+from sql_pilot_engine.metadata import MetadataProvider
 
 
 class SQLPilotEngine:
@@ -24,7 +25,7 @@ class SQLPilotEngine:
         self,
         review_service: ReviewService,
         fix_service: FixService | None = None,
-        metadata_provider_factory: Callable[[], Any] | None = None,
+        metadata_provider_factory: Callable[[], MetadataProvider] | None = None,
         explain_agent: SQLExplainAgent | None = None,
         critic_service: CriticService | None = None,
     ) -> None:

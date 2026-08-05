@@ -118,6 +118,7 @@ class MockMetadataProvider():
             TableMetadata(
                 full_name="ads_order_summary",
                 description="订单汇总结果表",
+                partition_fields=("dt",),
                 columns={
                     "user_id": ColumnMetadata(
                         name="user_id",

@@ -51,7 +51,7 @@ class TableMetadata:
     # table_name: str
     # layer: str
     # is_partitioned: bool
-    # partition_fields: list[str]
+    partition_fields: tuple[str, ...] = ()
     description: str = ""
     # comment: str = ""
 
@@ -77,6 +77,11 @@ class TableMetadata:
             for name, column in self.columns.items()
         }
         
+        normalized_partition_fields = tuple(
+            field_name.lower()
+            for field_name in self.partition_fields
+        )
+        
         object.__setattr__(
             self,
             "full_name",
@@ -87,6 +92,12 @@ class TableMetadata:
             self,
             "columns",
             MappingProxyType(normalized_columns),
+        )
+
+        object.__setattr__(
+            self,
+            "partition_fields",
+            normalized_partition_fields,
         )
     
     def get_column(
@@ -102,6 +113,9 @@ class TableMetadata:
         return {column.name.lower() for column in self.columns}
     
     
+    @property
+    def is_partitioned(self) -> bool:
+        return bool(self.partition_fields)
 
 
 @dataclass(frozen=True)

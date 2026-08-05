@@ -68,7 +68,7 @@ class SQLFactsExtractor:
     - 避免每条规则重复解析SQL。
     """
     
-    WRITE_OOPERATION_TYPES = {
+    WRITE_OPERATION_TYPES = {
         "insert",
         "update",
         "delete",
@@ -148,7 +148,7 @@ class SQLFactsExtractor:
         
         return SQLFacts(
             statement_count=(
-                parse_result.statements
+                parse_result.statement_count
             ),
             statement_types=tuple(statement_types),
             source_tables=tuple(sorted(source_tables)),
@@ -183,7 +183,7 @@ class SQLFactsExtractor:
             ),
             has_write_operation=bool(
                 statement_type_set
-                & self.WRITE_OOPERATION_TYPES
+                & self.WRITE_OPERATION_TYPES
             ),
             
         )
@@ -260,19 +260,19 @@ class SQLFactsExtractor:
         *,
         statement: exp.Expression,
         cte_names: set[str],
-        target_tables: str[str],
+        target_tables: set[str],
     ) -> set[TableReference]:
         """提取物理表及其别名"""
         
         references: set[TableReference] = set()
         
         for table in statement.find_all(exp.Table):
-            phsical_name = self._qualified_table_name(table)
+            physical_name = self._qualified_table_name(table)
             
-            if phsical_name in cte_names:
+            if physical_name in cte_names:
                 continue
             
-            if phsical_name in target_tables:
+            if physical_name in target_tables:
                 continue
             
             alias = (
@@ -283,7 +283,7 @@ class SQLFactsExtractor:
 
             references.add(
                 TableReference(
-                    physical_name=phsical_name,
+                    physical_name=physical_name,
                     alias=alias,
                 )
             )
