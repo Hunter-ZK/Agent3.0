@@ -110,7 +110,7 @@ class TableMetadata:
         
 
     def column_names(self) -> set[str]:
-        return {column.name.lower() for column in self.columns}
+        return set(self.columns)
     
     
     @property

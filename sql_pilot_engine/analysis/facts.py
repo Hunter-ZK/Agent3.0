@@ -123,7 +123,7 @@ class SQLFactsExtractor:
             current_sources = self._extract_sources(
                 statement=statement,
                 cte_names=current_cte_names,
-                target_tables=target_tables,
+                target_tables=current_targets,
             )
             source_tables.update(current_sources)
             

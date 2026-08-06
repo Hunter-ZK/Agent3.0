@@ -13,7 +13,7 @@ from sql_pilot_engine.llm.deepseek_client import (
 from sql_pilot_engine.llm.json_repair import (
     JSONRepairer,
 )
-from sql_pilot_engine.metadata.provider import (
+from sql_pilot_engine.metadata import (
     MockMetadataProvider,
 )
 from sql_pilot_engine.rules.registry import RuleRegistry
@@ -24,7 +24,7 @@ from sql_pilot_engine.services.review_service import (
     ReviewService,
 )
 from sql_pilot_engine.services.critic_service import (
-    SQLCriticService,
+    CriticService,
 )
 from sql_pilot_engine.workflow.sql_agent_workflow import (
     SQLAgentWorkflow,
@@ -77,7 +77,7 @@ def build_sql_pilot_engine(
             MockMetadataProvider
         ),
         explain_agent=build_explain_agent(),
-        critic_service=SQLCriticService(),
+        critic_service=CriticService(),
     )
 
 

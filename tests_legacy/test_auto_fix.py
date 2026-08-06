@@ -1,4 +1,4 @@
-from sql_pilot_engine.metadata.provider import MockMetadataProvider
+from sql_pilot_engine.metadata import MockMetadataProvider
 from sql_pilot_engine.services.review_service import ReviewService
 from sql_pilot_engine.services.fix_service import FixService
 from sql_pilot_engine.engine.sql_review_engine import SQLPilotEngine

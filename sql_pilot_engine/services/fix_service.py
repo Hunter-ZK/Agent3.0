@@ -45,20 +45,31 @@ class FixService:
     def fix(
         self,
         context: ReviewExecutionContext,
+        *,
+        review_result: ReviewResult | None = None,
     ) -> ReviewResult:
         if not context.fix_sql:
             raise ValueError(
                 "FixService requires fix_sql=True."
             )
+        if review_result is None:
+        
+            review_context = replace(
+                context,
+                fix_sql=False,
+            )
 
-        review_context = replace(
-            context,
-            fix_sql=False,
-        )
-
-        review_result = self.review_service.review(
-            review_context
-        )
+            review_result = (
+                self.review_service.review(
+                    review_context
+                )
+            )
+        elif review_result.reviewed_sql != context.sql:
+            # 防止SQL A的Issues被错误用于修复SQL B。
+            raise ValueError(
+                "The supplied review_result does not "
+                "belong to the SQL being fixed."
+            )
 
         analysis_context_text = (
             build_analysis_context_text(
@@ -89,6 +100,7 @@ class FixService:
 
         return ReviewResult(
             file_path=review_result.file_path,
+            reviewed_sql=context.sql,
             risk_level=review_result.risk_level,
             issue_count=review_result.issue_count,
             issues=review_result.issues,

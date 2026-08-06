@@ -79,12 +79,16 @@ class ReviewResult:
     risk_level: Severity
     issue_count: int
     issues: list[Issue]
+    
+    reviewed_sql: str = ""
+    
     fix_suggestions: list[FixSuggestion] = field(default_factory=list)
     fixed_sql_result: FixedSqlResult | None = None
 
     def to_dict(self) -> dict:
         return {
             "file_path": self.file_path,
+            "reviewed_sql": self.reviewed_sql,
             "risk_level": self.risk_level.value,
             "issue_count": self.issue_count,
             "issues": [issue.to_dict() for issue in self.issues],

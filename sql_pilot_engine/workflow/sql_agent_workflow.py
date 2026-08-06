@@ -13,6 +13,10 @@ from sql_pilot_engine.schemas.responses import (
     SQLFixResponse,
     SQLReviewResponse,
 )
+from sql_pilot_engine.workflow.review_routing import (
+    ReviewRoute,
+    decide_review_route,
+)
 
 
 @dataclass
@@ -66,57 +70,56 @@ class SQLAgentWorkflow:
         self,
         sql: str,
         file_path: str = "",
+        *,
+        categories: set[str] | None = None,
+        enable_metadata: bool = False,
+        enable_llm: bool = False,
+        llm_provider: str = "mock",
+        fix_provider: str = "auto",
     ) -> SQLAgentWorkflowResult:
+        
         trace_id = str(uuid4())
         route_history: list[str] = []
+        
+        explain_response = None
+        
+        if self.engine.explain_available:
+            
 
-        explain_response = self.engine.explain(
-            SQLExplainRequest(
-                sql=sql,
-                file_path=file_path,
-                trace_id=trace_id,
-            )
-        )
-
-        route_history.append("explain")
-
-        if not explain_response.success:
-            return SQLAgentWorkflowResult(
-                success=False,
-                trace_id=trace_id,
-                final_status="explain_failed",
-                explain_response=explain_response,
-                route_history=route_history,
-                error_message=(
-                    explain_response.error_message
-                ),
+            explain_response = self.engine.explain(
+                SQLExplainRequest(
+                    sql=sql,
+                    file_path=file_path,
+                    categories=categories,
+                    enable_metadata=enable_metadata,
+                    enable_llm=enable_llm,
+                    llm_provider=llm_provider,
+                    trace_id=trace_id,
+                )
             )
 
-        signals = (
-            explain_response.route_signals
-            if isinstance(
-                explain_response.route_signals,
-                dict,
+            route_history.append(
+                "explain"
+                if explain_response.success
+                else "explain_failed_continue"
             )
-            else {}
-        )
-
-        if not signals.get("need_review", True):
-            return SQLAgentWorkflowResult(
-                success=True,
-                trace_id=trace_id,
-                final_status="explained",
-                explain_response=explain_response,
-                route_history=route_history,
+        else:
+            route_history.append(
+                "explain_skipped"
             )
 
         review_response = self.engine.review(
             SQLReviewRequest(
                 sql=sql,
                 file_path=file_path,
+                categories=categories,
+                enable_metadata=enable_metadata,
+                enable_llm=enable_llm,
+                llm_provider=llm_provider,
                 trace_id=trace_id,
             )
         )
+
 
         route_history.append("review")
 
@@ -133,58 +136,52 @@ class SQLAgentWorkflow:
                 ),
             )
 
-        if review_response.issue_count == 0:
+        decision = decide_review_route(review_response)
+        
+        if decision.route == ReviewRoute.COMPLETE:
             return SQLAgentWorkflowResult(
                 success=True,
                 trace_id=trace_id,
-                final_status="no_issue",
-                explain_response=explain_response,
-                review_response=review_response,
-                route_history=route_history,
-            )
-
-        if signals.get("need_rag", False):
-            return SQLAgentWorkflowResult(
-                success=False,
-                trace_id=trace_id,
-                final_status="knowledge_required",
-                explain_response=explain_response,
-                review_response=review_response,
-                route_history=route_history,
-            )
-
-        if signals.get("need_metadata", False):
-            return SQLAgentWorkflowResult(
-                success=False,
-                trace_id=trace_id,
-                final_status="metadata_required",
-                explain_response=explain_response,
-                review_response=review_response,
-                route_history=route_history,
-            )
-
-        if (
-            signals.get(
-                "need_human_confirm",
-                False,
-            )
-            or not signals.get(
-                "can_auto_fix",
-                False,
-            )
-        ):
-            return SQLAgentWorkflowResult(
-                success=False,
-                trace_id=trace_id,
                 final_status=(
-                    "need_human_confirm"
+                    "no_issue"
+                    if review_response.issue_count == 0
+                    else "ignored_issues"
                 ),
                 explain_response=explain_response,
                 review_response=review_response,
                 route_history=route_history,
             )
 
+        terminal_statuses = {
+            ReviewRoute.BLOCK: "blocked",
+            ReviewRoute.METADATA_REQUIRED:
+                "metadata_required",
+            ReviewRoute.KNOWLEDGE_REQUIRED:
+                "knowledge_required",
+            ReviewRoute.CONTEXT_REQUIRED:
+                "context_required",
+            ReviewRoute.HUMAN_REVIEW:
+                "need_human_confirm",
+        }
+
+        if decision.route != ReviewRoute.AUTO_FIX:
+            return SQLAgentWorkflowResult(
+                success=False,
+                trace_id=trace_id,
+                final_status=terminal_statuses[
+                    decision.route
+                ],
+                explain_response=explain_response,
+                review_response=review_response,
+                route_history=route_history,
+                error_message=decision.reason,
+            )
+
         current_sql = sql
+
+        # 该变量始终表示current_sql对应的最新Review。
+        current_review_response = review_response
+
         critic_feedback: list[str] = []
 
         for attempt in range(
@@ -194,10 +191,18 @@ class SQLAgentWorkflow:
                 SQLFixRequest(
                     sql=current_sql,
                     file_path=file_path,
+                    categories=categories,
+                    enable_metadata=enable_metadata,
+                    enable_llm=enable_llm,
+                    llm_provider=llm_provider,
+                    fix_provider=fix_provider,
                     trace_id=trace_id,
                     retry_count=attempt,
                     critic_feedback=critic_feedback,
-                )
+                ),
+                prior_review=(
+                    current_review_response
+                ),
             )
 
             route_history.append(
@@ -215,10 +220,14 @@ class SQLAgentWorkflow:
                 re_review_response = (
                     self.engine.review(
                         SQLReviewRequest(
-                            sql=(
-                                fix_response.fixed_sql
-                            ),
+                            sql=fix_response.fixed_sql,
                             file_path=file_path,
+                            categories=categories,
+                            enable_metadata=(
+                                enable_metadata
+                            ),
+                            enable_llm=enable_llm,
+                            llm_provider=llm_provider,
                             trace_id=trace_id,
                         )
                     )
@@ -228,15 +237,16 @@ class SQLAgentWorkflow:
                     "re_review"
                     if attempt == 0
                     else (
-                        f"re_review_retry_"
-                        f"{attempt}"
+                        f"re_review_retry_{attempt}"
                     )
                 )
 
             critic_response = (
                 self.engine.critique(
+                    # Critic检查本轮Fix使用的Review，
+                    # 不是永远使用第一次Review。
                     review_response=(
-                        review_response
+                        current_review_response
                     ),
                     fix_response=fix_response,
                     re_review_response=(
@@ -246,7 +256,11 @@ class SQLAgentWorkflow:
                 )
             )
 
-            route_history.append("critic")
+            route_history.append(
+                "critic"
+                if attempt == 0
+                else f"critic_retry_{attempt}"
+            )
 
             if critic_response.passed:
                 return SQLAgentWorkflowResult(
@@ -269,10 +283,14 @@ class SQLAgentWorkflow:
                     route_history=route_history,
                 )
 
+            # 只有已经成功复审当前fixed_sql，
+            # 才具备下一轮继续修复的可信输入。
             can_retry = (
                 critic_response.need_retry
                 and attempt < self.max_retries
                 and bool(fix_response.fixed_sql)
+                and re_review_response is not None
+                and re_review_response.success
             )
 
             if not can_retry:
@@ -280,7 +298,8 @@ class SQLAgentWorkflow:
                     success=False,
                     trace_id=trace_id,
                     final_status=(
-                        "need_human_confirm"
+                        critic_response.status
+                        or "need_human_confirm"
                     ),
                     explain_response=(
                         explain_response
@@ -296,16 +315,23 @@ class SQLAgentWorkflow:
                         critic_response
                     ),
                     route_history=route_history,
+                    error_message=(
+                        critic_response.error_message
+                        or critic_response.reason
+                    ),
                 )
 
             current_sql = (
                 fix_response.fixed_sql
-                or current_sql
+            )
+
+            # 下一轮Fix必须使用当前SQL的复审结果。
+            current_review_response = (
+                re_review_response
             )
 
             critic_feedback = (
-                critic_response
-                .retry_instructions
+                critic_response.retry_instructions
             )
 
         raise RuntimeError(

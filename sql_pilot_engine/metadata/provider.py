@@ -1,14 +1,11 @@
 
 from __future__ import annotations
 
-import json
-from abc import ABC, abstractmethod
-from pathlib import Path
 
 from typing import Protocol, runtime_checkable
 
 
-from sql_pilot_engine.metadata.models import TableLookupResult,TableMetadata,ColumnMetadata
+from sql_pilot_engine.metadata.models import TableLookupResult
 
 
 

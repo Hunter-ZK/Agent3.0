@@ -1,6 +1,6 @@
 from sql_pilot_engine.app.factory import build_sql_review_engine
 from sql_pilot_engine.engine import SQLPilotEngine
-from sql_pilot_engine.metadata.provider import MockMetadataProvider
+from sql_pilot_engine.metadata import MockMetadataProvider
 from sql_pilot_engine.schemas import SQLFixRequest, SQLReviewRequest
 from sql_pilot_engine.services.review_service import ReviewService
 from sql_pilot_engine.agents.sql_explain_agent import SQLExplainAgent

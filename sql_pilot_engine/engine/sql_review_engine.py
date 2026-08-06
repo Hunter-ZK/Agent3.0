@@ -3,15 +3,16 @@
 from collections.abc import Callable
 from typing import Any
 
-from sql_pilot_engine.metadata.provider import MockMetadataProvider
+from sql_pilot_engine.metadata import MetadataProvider, MockMetadataProvider
 from sql_pilot_engine.schemas.requests import SQLExplainRequest, SQLFixRequest, SQLOptimizeRequest, SQLReviewRequest
-from sql_pilot_engine.schemas.responses import SQLFixResponse, SQLReviewResponse, SQLExplainResponse
+from sql_pilot_engine.schemas.responses import SQLFixResponse, SQLReviewResponse, SQLExplainResponse, SQLCriticResponse
 from sql_pilot_engine.services.review_service import ReviewService
 from sql_pilot_engine.core.execution_context import ReviewExecutionContext
+from sql_pilot_engine.core.models import ReviewResult
 from sql_pilot_engine.agents.sql_explain_agent import SQLExplainAgent
-from sql_pilot_engine.services.critic_service import CriticService, SQLCriticResponse
+from sql_pilot_engine.services.critic_service import CriticService
 from sql_pilot_engine.services.fix_service import FixService
-from sql_pilot_engine.metadata import MetadataProvider
+
 
 
 class SQLPilotEngine:
@@ -29,11 +30,46 @@ class SQLPilotEngine:
         explain_agent: SQLExplainAgent | None = None,
         critic_service: CriticService | None = None,
     ) -> None:
-        self.review_service = review_service
-        self.fix_service = fix_service
+        self.review_service = (review_service or ReviewService())
+        self.fix_service = (fix_service or FixService(review_service=self.review_service))
         self.metadata_provider_factory = metadata_provider_factory or MockMetadataProvider
         self.explain_agent = explain_agent
         self.critic_service = critic_service or CriticService()
+
+    @property
+    def explain_available(self) -> bool:
+        """当前Engine是否配置了Explain Agent。"""
+        return self.explain_agent is not None
+
+    @staticmethod
+    def _extract_prior_review_result(
+        *,
+        prior_review: SQLReviewResponse | None,
+        sql: str,
+    ) -> ReviewResult | None:
+        """提取可安全复用的内部ReviewResult。"""
+
+        if prior_review is None:
+            return None
+
+        if not prior_review.success:
+            return None
+
+        result = prior_review.raw_result
+
+        if result is None:
+            return None
+
+        if not result.reviewed_sql:
+            return None
+
+        if result.reviewed_sql != sql:
+            raise ValueError(
+                "prior_review does not belong "
+                "to the SQL being fixed."
+            )
+
+        return result
 
     def review(self, request: SQLReviewRequest) -> SQLReviewResponse:
         """执行 SQL 审查。"""
@@ -50,12 +86,18 @@ class SQLPilotEngine:
                 trace_id=context.trace_id,
             )
 
-    def fix(self, request: SQLFixRequest) -> SQLFixResponse:
+    def fix(
+        self, 
+        request: SQLFixRequest,
+        *,
+        prior_review: SQLReviewResponse | None = None,
+    ) -> SQLFixResponse:
         """先审查 SQL，再生成完整修复 SQL。"""
         context = ReviewExecutionContext.from_fix_request(request)
         context.metadata_provider = self._resolve_metadata_provider(context)
         try:
-            result = self.fix_service.fix(context)
+            review_result = self._extract_prior_review_result(prior_review=prior_review, sql=request.sql,)
+            result = self.fix_service.fix(context, review_result=review_result,)
             return SQLFixResponse.from_review_result(result, trace_id=context.trace_id)
         except Exception as error:
             return SQLFixResponse.failed(

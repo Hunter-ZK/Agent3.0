@@ -34,7 +34,7 @@ class ReviewService:
         self.rule_registry = rule_registry or RuleRegistry()
         self.llm_client = llm_client
         self.sql_parser = sql_parser or SQLParser()
-        self.facts_extractos = (facts_extractor or SQLFactsExtractor())
+        self.facts_extractor = (facts_extractor or SQLFactsExtractor())
         
         self.metadata_validator = (metadata_validator or MetadataValidator())
         
@@ -104,13 +104,14 @@ class ReviewService:
 
             return ReviewResult(
                 file_path=file_path,
+                reviewed_sql=sql,
                 risk_level=Severity.HIGH,
                 issue_count=1,
                 issues=[parse_issue],
                 fixed_sql_result=None,
             )
         
-        sql_facts = self.facts_extractos.extract(
+        sql_facts = self.facts_extractor.extract(
             parse_result=parse_result
         )
         
@@ -159,6 +160,7 @@ class ReviewService:
 
         return ReviewResult(
             file_path=file_path,
+            reviewed_sql=sql,
             risk_level=self.calculate_risk_level(issues),
             issue_count=len(issues),
             issues=issues,
@@ -234,3 +236,7 @@ class ReviewService:
         if any(issue.severity == Severity.MEDIUM for issue in issues):
             return Severity.MEDIUM
         return Severity.LOW
+
+
+
+

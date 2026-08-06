@@ -1,5 +1,5 @@
 from sql_pilot_engine.llm.clients import MockLLMClient
-from sql_pilot_engine.metadata.provider import MockMetadataProvider
+from sql_pilot_engine.metadata import MockMetadataProvider
 from sql_pilot_engine.services.review_service import ReviewService
 
 
