@@ -1635,3 +1635,26 @@ Skill Studio
 下一阶段应在保持架构稳定的前提下，继续提高用户对Python、SQLGlot、接口设计和数据流的理解，并逐步减少用户对AI提供完整代码的依赖。
 
 
+
+
+1. 为什么Explain Agent可以提供路由建议，但不能直接决定固定Workflow是否跳过Review？
+ agent、sevice 只提供功能实现，返回具体事实，而不应该参与流程控制，否则设计会耦合严重，且流程不够清晰，我们设计了workflow来编制整个流程。
+
+2. severity和IssueAction分别回答什么问题？
+severity 是针对review的sql进行评定，判断风险等级；
+IssueAction是针对review出来的Issue进行判断，推荐处理方式。
+
+3. 为什么FixService既要允许传入 review_result，又要保留没有传入时自行Review的能力？
+review_result提供了sql的Issue内容，fixService可以针对性的进行修复，但如果没有传入review或者review为空时，fix可以尝试进行修复，而不是流程终止。这是我的理解，我其实也不太明白。
+
+
+4. 为什么仅有 review_result 还不够，必须记录 reviewed_sql？
+reviewed_sql是源头，fix需要在这基础上进行修正，review_result结果可供参考。其实我也不太理解这一点
+
+5. 第二轮Fix应使用初次Review还是第一次Re-review？为什么？
+第一次的re-review，因为已经进入到第二轮fix，我们所需要修复的对象就应该是上一轮fix的成果，而不是反复修复原始sql。
+
+6. 为什么Re-review执行失败时，Workflow不应继续自动Retry？
+因为re-review执行失败，我们不管是传入review还是re-review结果都是不当的。
+
+你能给我再描述一下，没修改前和修改后的workflow流程区别吗？现在变动比较大。另外，为什么突然要在这里加上这个terminal_statuses，我感觉很奇怪。
