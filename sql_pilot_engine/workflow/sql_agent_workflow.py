@@ -142,40 +142,32 @@ class SQLAgentWorkflow:
             return SQLAgentWorkflowResult(
                 success=True,
                 trace_id=trace_id,
-                final_status=(
-                    "no_issue"
-                    if review_response.issue_count == 0
-                    else "ignored_issues"
-                ),
+                final_status=decision.final_status or "completed",
                 explain_response=explain_response,
                 review_response=review_response,
                 route_history=route_history,
             )
 
-        terminal_statuses = {
-            ReviewRoute.BLOCK: "blocked",
-            ReviewRoute.METADATA_REQUIRED:
-                "metadata_required",
-            ReviewRoute.KNOWLEDGE_REQUIRED:
-                "knowledge_required",
-            ReviewRoute.CONTEXT_REQUIRED:
-                "context_required",
-            ReviewRoute.HUMAN_REVIEW:
-                "need_human_confirm",
-        }
 
         if decision.route != ReviewRoute.AUTO_FIX:
+            if decision.final_status is None:
+                raise RuntimeError(
+                    "Terminal review route must "
+                    "provide final_status."
+                )
             return SQLAgentWorkflowResult(
                 success=False,
                 trace_id=trace_id,
-                final_status=terminal_statuses[
-                    decision.route
-                ],
+                final_status=decision.final_status,
                 explain_response=explain_response,
                 review_response=review_response,
                 route_history=route_history,
                 error_message=decision.reason,
             )
+        
+        route_history.append(
+            f"route:{decision.route.value}"
+        )
 
         current_sql = sql
 

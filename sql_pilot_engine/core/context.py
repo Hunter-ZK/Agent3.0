@@ -14,6 +14,9 @@ if TYPE_CHECKING:
     from sql_pilot_engine.metadata.provider import (
         MetadataProvider,
     )
+    from sql_pilot_engine.analysis.scope import (
+        ScopeAnalysisResult,
+    )
 
 
 @dataclass
@@ -45,3 +48,7 @@ class ReviewContext:
 
     rule_packs: list[str] | None = None
     extra: dict[str, Any] | None = None
+    
+    scope_analysis: (
+        ScopeAnalysisResult | None 
+    ) = None

@@ -28,6 +28,8 @@ class ReviewRouteDecision:
     reason: str
     actionable_issue_count: int
     
+    final_status: str | None = None
+    
     
 
 def _read_action(
@@ -42,7 +44,7 @@ def _read_action(
     if isinstance(action, str):
         return action
     
-    return IssueAction.HUMAN_REVIEW
+    return IssueAction.HUMAN_REVIEW.value
 
 
 def decide_review_route(
@@ -68,6 +70,11 @@ def decide_review_route(
                 "No actionable issues remain."
             ),
             actionable_issue_count=0,
+            final_status=(
+                "no_issue"
+                if response.issue_count == 0
+                else "ignored_issues"
+            ),
         )
 
     if any(
@@ -82,6 +89,7 @@ def decide_review_route(
             actionable_issue_count=len(
                 actionable_issues
             ),
+            final_status="blocked",
         )
         
     needs_metadata = any(
@@ -110,6 +118,7 @@ def decide_review_route(
             actionable_issue_count=len(
                 actionable_issues
             ),
+            final_status = "metadata&knowledge_required",
         )
         
     if needs_metadata:
@@ -119,6 +128,7 @@ def decide_review_route(
             actionable_issue_count=len(
                 actionable_issues
             ),
+            final_status = "metadata_required",
         )
 
     if needs_knowledge:
@@ -128,6 +138,7 @@ def decide_review_route(
             actionable_issue_count=len(
                 actionable_issues
             ),
+            final_status = "knowledge_required",
         )
         
     if has_context_action:
@@ -137,6 +148,7 @@ def decide_review_route(
             actionable_issue_count=len(
                 actionable_issues
             ),
+            final_status = "context_required",
         )
         
     can_auto_fix_all = all(
@@ -156,6 +168,7 @@ def decide_review_route(
             actionable_issue_count=len(
                 actionable_issues
             ),
+            final_status = None,
         )
 
 
@@ -168,4 +181,5 @@ def decide_review_route(
         actionable_issue_count=len(
             actionable_issues
         ),
+        final_status = "need_human_confirm",
     )

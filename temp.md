@@ -1658,3 +1658,22 @@ reviewed_sql是源头，fix需要在这基础上进行修正，review_result结�
 因为re-review执行失败，我们不管是传入review还是re-review结果都是不当的。
 
 你能给我再描述一下，没修改前和修改后的workflow流程区别吗？现在变动比较大。另外，为什么突然要在这里加上这个terminal_statuses，我感觉很奇怪。
+
+
+
+
+
+1.为什么 SQLFacts 和 ScopeAnalysis 是并列关系，而不是 SQLFacts → ScopeAnalysis？
+这两类对象都是AST之上的两种分析器，sqlfacts用于回答sql有什么，scopeanalysis回答这些东西在哪一层，没有输入输出关系；
+
+
+2. ScopeSource.physical_name 和 source_scope_id 为什么不会同时承担同一种含义？
+physical_name是物理表的名称，scope_id是每一次运行进程该scope对象的内部id，physical_name更多用来查询元数据、展示，scope_id我理解只是用来编号和查询scope内容。
+
+3. 外层看到 o.total_amount 时，为什么不能直接拿 dwd_order_detail 的Metadata检查 total_amount？
+我不理解你这个问题的具体意思，我觉得需要分析o和dwd_order_detail的映射关系
+
+4. id(scope) 为什么可以用于当前分析过程建立映射，却不能直接保存成正式 scope_id？
+这个id是技术字段，没有太多意义，而且每次scope也是新产生的，不确定的，没有太多保存scope_id的意义。
+
+继续吧。
