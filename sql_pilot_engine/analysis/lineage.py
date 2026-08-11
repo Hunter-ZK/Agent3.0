@@ -66,7 +66,7 @@ class SQLLineageAnalyzer:
         result: list[ColumnLineage] = []
         
         for scope in scope_analysis.scopes:
-            for projection in scope.projection:
+            for projection in scope.projections:
                 physical_sources = []
                 unresolved = []
                 

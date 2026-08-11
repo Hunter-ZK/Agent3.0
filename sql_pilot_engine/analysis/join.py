@@ -92,7 +92,7 @@ class SQLJoinAnalyzer:
     def _extract_scope_joins(
         self,
         expression: exp.Expression,
-        statement_index: str,
+        statement_index: int,
         scope_id: str,
     ) -> list[JoinReference]:
         join_nodes = (
@@ -145,13 +145,11 @@ class SQLJoinAnalyzer:
                         statement_index
                     ),
                     scope_id=scope_id,
-                    left_sources=(
+                    left_sources=tuple(
                         accumulated_sources
                     ),
                     right_source=right_source,
-                    join_type=(
-                        self._join_type(join),
-                    ),
+                    join_type=self._join_type(join),
                     condition_sql=(
                         on_expression.sql()
                         if on_expression

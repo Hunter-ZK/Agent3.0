@@ -10,9 +10,22 @@ from sql_pilot_engine.analysis.scope import (
     ScopeSource,
     ScopeSourceKind,
     ScopeColumnReference,
+    ScopeProjection,
     SQLScopeAnalyzer,
 )
 
+from sql_pilot_engine.analysis.join import (
+    JoinAnalysisResult,
+    JoinReference,
+    SQLJoinAnalyzer,
+)
+
+from sql_pilot_engine.analysis.lineage import (
+    ColumnLineage,
+    LineageAnalysisResult,
+    PhysicalColumnSource,
+    SQLLineageAnalyzer,
+)
 __all__ = [
     "SQLParseResult",
     "SQLParser",
@@ -23,4 +36,12 @@ __all__ = [
     "ScopeSourceKind",
     "ScopeColumnReference",
     "SQLScopeAnalyzer",
+    "ScopeProjection",
+    "JoinAnalysisResult",
+    "JoinReference",
+    "SQLJoinAnalyzer",
+    "ColumnLineage",
+    "LineageAnalysisResult",
+    "PhysicalColumnSource",
+    "SQLLineageAnalyzer",
 ]

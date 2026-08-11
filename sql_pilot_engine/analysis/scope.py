@@ -117,7 +117,7 @@ class ScopeInfo:
     sources: tuple[ScopeSource, ...]
     columns: tuple[ScopeColumnReference, ...]
     output_columns: tuple[str, ...]
-    projection: tuple[ScopeProjection, ...]
+    projections: tuple[ScopeProjection, ...]
     
     is_correlated: bool = False
     
@@ -155,7 +155,7 @@ class SQLScopeAnalyzer:
         parse_result: SQLParseResult,
     ) -> ScopeAnalysisResult:
         if not parse_result.success:
-            return ValueError(
+            raise ValueError(
                 "Cannot analyze scope from "
                 "a failed parse result."
             )
@@ -174,14 +174,14 @@ class SQLScopeAnalyzer:
                 for scope_index, scope in enumerate(sqlglot_scopes)
             }
             
-        for scope in sqlglot_scopes:
-            result.append(
-                self._build_scope_info(
-                    scope = scope,
-                    statement_index = (statement_index),
-                    scope_ids = scope_ids,
+            for scope in sqlglot_scopes:
+                result.append(
+                    self._build_scope_info(
+                        scope = scope,
+                        statement_index = (statement_index),
+                        scope_ids = scope_ids,
+                    )
                 )
-            )
         
         return ScopeAnalysisResult(scopes=tuple(result))
     
@@ -236,7 +236,7 @@ class SQLScopeAnalyzer:
             sources=sources,
             columns=columns,
             output_columns=output_columns,
-            projection=projections,
+            projections=projections,
             is_correlated=scope.is_correlated_subquery,
         )
         
@@ -341,7 +341,7 @@ class SQLScopeAnalyzer:
                 for column
                 in projection.find_all(exp.Column)
                 if column.name and column.name != '*'
-                and SQLScopeAnalyzer._column_belong_to_projection_scope(
+                and SQLScopeAnalyzer._column_belongs_to_projection_scope(
                     column = column,
                     scope_expressin=expression,
                 )

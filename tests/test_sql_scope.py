@@ -194,3 +194,42 @@ def test_same_column_can_exist_in_different_scopes():
         and column.qualifier == "t"
         for column in root_scope.columns
     )
+
+
+def test_multiple_statements_keep_independent_scopes():
+    result = analyze(
+        """
+        SELECT user_id
+        FROM dwd_order_detail;
+
+        SELECT user_id
+        FROM dim_user;
+        """
+    )
+
+    assert len(result.scopes) == 2
+
+    assert {
+        scope.statement_index
+        for scope in result.scopes
+    } == {0, 1}
+
+    statement_0 = result.scopes_for_statement(0)
+    statement_1 = result.scopes_for_statement(1)
+
+    assert len(statement_0) == 1
+    assert len(statement_1) == 1
+
+    assert (
+        statement_0[0]
+        .sources[0]
+        .physical_name
+        == "dwd_order_detail"
+    )
+
+    assert (
+        statement_1[0]
+        .sources[0]
+        .physical_name
+        == "dim_user"
+    )
