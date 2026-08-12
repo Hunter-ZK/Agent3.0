@@ -1,0 +1,52 @@
+{
+  "tables": [
+    {
+      "name": "dwd_order_detail",
+      "description": "订单明细事实表，每行代表一笔订单",
+      "columns": [
+        {
+          "name": "order_id",
+          "description": "订单唯一标识",
+          "data_type": "STRING",
+          "synonyms": ["订单编号"]
+        },
+        {
+          "name": "user_id",
+          "description": "下单用户唯一标识",
+          "data_type": "STRING",
+          "synonyms": ["用户", "客户"]
+        },
+        {
+          "name": "order_amount",
+          "description": "订单实际金额",
+          "data_type": "DECIMAL(18,2)",
+          "synonyms": [
+            "订单金额",
+            "消费金额",
+            "下单金额"
+          ]
+        },
+        {
+          "name": "dt",
+          "description": "业务日期",
+          "data_type": "STRING",
+          "synonyms": ["日期", "统计日期"]
+        }
+      ]
+    }
+  ],
+
+  "metrics": [
+    {
+      "name": "total_order_amount",
+      "description": "订单金额合计",
+      "expression": "SUM(order_amount)",
+      "table": "dwd_order_detail",
+      "synonyms": [
+        "订单总额",
+        "消费总额",
+        "总消费金额"
+      ]
+    }
+  ]
+}
