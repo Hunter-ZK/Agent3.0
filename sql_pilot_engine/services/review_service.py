@@ -11,11 +11,8 @@ from sql_pilot_engine.llm.reviewer import LLMReviewer
 from sql_pilot_engine.rules.registry import RuleRegistry
 from sql_pilot_engine.core.execution_context import ReviewExecutionContext
 
-from sql_pilot_engine.core.enums import IssueAction,IssueSource,Severity
 
-from sql_pilot_engine.analysis import SQLParser
-from sql_pilot_engine.analysis.facts import SQLFactsExtractor
-from sql_pilot_engine.analysis.scope import SQLScopeAnalyzer
+from sql_pilot_engine.analysis.sql_analysis import SQLAnalysisAdapter
 
 from sql_pilot_engine.metadata.validator import MetadataValidator
 
@@ -27,16 +24,13 @@ class ReviewService:
             self, 
             rule_registry: RuleRegistry | None = None, 
             llm_client: BaseLLMClient | None = None,
-            sql_parser: SQLParser | None = None,
-            scope_analyzer: SQLScopeAnalyzer | None = None,
-            facts_extractor: SQLFactsExtractor | None = None,
+            analysis_adapter: SQLAnalysisAdapter | None = None,
             metadata_validator: (MetadataValidator | None) = None,
         ) -> None:
         self.rule_registry = rule_registry or RuleRegistry()
         self.llm_client = llm_client
-        self.sql_parser = sql_parser or SQLParser()
-        self.scope_analyzer = scope_analyzer or SQLScopeAnalyzer()
-        self.facts_extractor = (facts_extractor or SQLFactsExtractor())
+        
+        self.analysis_adapter = analysis_adapter or SQLAnalysisAdapter()
         
         self.metadata_validator = (metadata_validator or MetadataValidator())
         
@@ -76,10 +70,13 @@ class ReviewService:
         llm_provider: str = "mock",
     ) -> ReviewResult:
         
-        parse_result = self.sql_parser.parse(
+        
+        analysis = self.analysis_adapter.analyze(
             sql = sql,
             dialect = dialect,
         )
+        
+        parse_result = analysis.parse_result
         
         if not parse_result.success:
             parse_issue = Issue(
@@ -114,22 +111,20 @@ class ReviewService:
                 fixed_sql_result=None,
             )
         
-        sql_facts = self.facts_extractor.extract(
-            parse_result=parse_result
-        )
         
-        scope_analysis = (
-            self.scope_analyzer.analyze(
-                parse_result=parse_result
+        sql_facts = analysis.facts
+
+        if sql_facts is None:
+            raise RuntimeError(
+                "Successful SQL analysis must contain SQLFacts."
             )
-        )
+
         
         context = ReviewContext(
             mode=mode,
             dialect=dialect,
             parse_result=parse_result,
             sql_facts=sql_facts,
-            scope_analysis=scope_analysis,
             metadata_provider=metadata_provider,
             enable_llm=enable_llm,
             llm_provider=llm_provider,

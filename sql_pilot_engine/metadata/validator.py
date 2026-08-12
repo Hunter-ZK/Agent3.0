@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from sql_pilot_engine.analysis.facts import SQLFacts
 
-from sql_pilot_engine.analysis import ScopeSourceKind
 
 from sql_pilot_engine.core.enums import IssueAction,IssueSource,Severity
 

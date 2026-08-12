@@ -1677,3 +1677,21 @@ physical_name是物理表的名称，scope_id是每一次运行进程该scope对
 这个id是技术字段，没有太多意义，而且每次scope也是新产生的，不确定的，没有太多保存scope_id的意义。
 
 继续吧。
+
+
+
+
+
+
+1. 为什么 SQLAnalysisAdapter 应该放在 analysis，而不是 services？
+SQLAnalysisAdapter产出SQL结构事实，service用这些事实判断SQL是否有问题
+
+2.为什么 SQLAnalysisResult.facts 必须允许为 None？
+这个我不清楚
+
+3. ReviewService 改成只依赖 SQLAnalysisAdapter 后，具体降低了什么耦合？
+降低了对SQL分析实现细节和功能装配的耦合，
+
+4.如果半年后从 SQLGlot 换成别的SQL解析库，哪些模块理论上应该保持不变？
+sqlanalysisadapter保持不变，修改parse_result、facts、scope、lineage的具体实现
+

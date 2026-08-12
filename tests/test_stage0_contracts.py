@@ -106,4 +106,3 @@ def test_critique_keyword_matches_workflow_contract():
     ).parameters
 
     assert "fix_response" in parameters
-    assert "fix_response" not in parameters
