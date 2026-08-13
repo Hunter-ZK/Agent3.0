@@ -45,9 +45,10 @@ class QdrantVectorStore:
         
         self.client = (
             client
-            or QdrantClient(":memory")
+            or QdrantClient(":memory:")
         )
         
+        self._ensure_collection()
     
     def _ensure_collection(
         self,

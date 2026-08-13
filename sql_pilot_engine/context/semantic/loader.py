@@ -37,7 +37,7 @@ class SemanticModelLoader:
                         data_type=column.get("data_type",""),
                         synonyms=tuple(column.get("synonyms",[])),
                     )
-                    for column in table["coulmns"]
+                    for column in table["columns"]
                 )
             )
             for table in raw.get("tables",[])

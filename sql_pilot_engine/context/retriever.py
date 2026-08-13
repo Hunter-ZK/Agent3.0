@@ -16,7 +16,7 @@ class KnowledgeRetriever:
         self,
         vector_store: VectorStore,
     ) -> None:
-        self.vector_store = VectorStore
+        self.vector_store = vector_store
         
     def retrieve(
         self,
@@ -26,7 +26,7 @@ class KnowledgeRetriever:
     ) -> list[RetrievedDocument]:
         results = (
             self.vector_store.search(
-                question,
+                query=question,
                 top_k=top_k,
             )
         )
