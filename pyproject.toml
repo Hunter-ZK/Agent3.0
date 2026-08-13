@@ -12,6 +12,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "sqlglot>=28.0.0,<29.0.0",
     "qdrant-client>=1.15,<2",
+    "langgraph>=1,<2",
 ]
 
 [tool.setuptools.packages.find]
