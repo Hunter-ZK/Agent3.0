@@ -17,14 +17,14 @@ class SemanticModelRenderer:
         for table in model.tables:
             
             lines.append(
-                f"TABLE {table.name}:"
+                f"TABLE {table.name}: "
                 f"{table.description}"
             )
             
             for column in table.columns:
                 
                 synonyms = ", ".join(
-                    column.synonyms`
+                    column.synonyms
                 )
                 
                 lines.append(

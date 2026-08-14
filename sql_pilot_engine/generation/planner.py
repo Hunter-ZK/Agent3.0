@@ -48,7 +48,7 @@ class QueryPlanner:
             prompt=prompt
         )
         
-        data = json.load(raw)
+        data = json.loads(raw)
         
         return QueryPlan(
             tables=tuple(
@@ -72,6 +72,12 @@ class QueryPlanner:
             filters=tuple(
                 data.get(
                     "filters",
+                    []
+                )
+            ),
+            group_by=tuple(
+                data.get(
+                    "group_by",
                     []
                 )
             ),
