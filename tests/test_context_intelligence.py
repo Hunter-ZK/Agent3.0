@@ -15,6 +15,9 @@ from sql_pilot_engine.context.retriever import (
 from sql_pilot_engine.context.semantic.loader import (
     SemanticModelLoader,
 )
+from sql_pilot_engine.context.semantic.renderer import (
+    SemanticModelRenderer,
+)
 
 
 def build_store():
@@ -151,4 +154,35 @@ def test_verified_sql_retrieval():
         .document
         .document_id
         == "sql_user_amount"
+    )
+    
+    
+def test_semantic_model_can_render():
+    model = (
+        SemanticModelLoader()
+        .load(
+            "sql_pilot_engine/"
+            "context/semantic/"
+            "sample_model.json"
+        )
+    )
+
+    rendered = (
+        SemanticModelRenderer()
+        .render(model)
+    )
+
+    assert (
+        "TABLE dwd_order_detail"
+        in rendered
+    )
+
+    assert (
+        "COLUMN order_amount"
+        in rendered
+    )
+
+    assert (
+        "METRIC total_order_amount"
+        in rendered
     )
