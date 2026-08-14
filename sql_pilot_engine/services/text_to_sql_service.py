@@ -24,7 +24,7 @@ from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLResult,
 )
 from sql_pilot_engine.workflow.sql_agent_workflow import (
-    SQLAgentWorkflow,
+    SQLAgentWorkflow, SQLAgentWorkflowResult
 )
 
 
@@ -120,7 +120,6 @@ class TextToSQLService:
         validation = (
             self.validation_workflow.run(
                 generated.sql,
-                dialect=request.dialect,
             )
         )
         
@@ -141,3 +140,23 @@ class TextToSQLService:
                 validation.final_status
             ),
         )
+        
+    
+    @staticmethod
+    def _resolve_trusted_sql(
+        *,
+        generated_sql: str,
+        validation: SQLAgentWorkflowResult,
+    ) -> str | None:
+        
+        if not validation.success:
+            return None
+        
+        if (
+            validation.fix_response is not None and validation.fix_response.fixed_sql
+        ):
+            return (
+                validation.fix_response.fixed_sql
+            )
+            
+        return generated_sql
