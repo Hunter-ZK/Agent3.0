@@ -3,7 +3,7 @@
 import re
 
 from sql_pilot_engine.core.context import ReviewContext
-from sql_pilot_engine.core.enums import Severity
+from sql_pilot_engine.core.enums import Severity, IssueAction
 from sql_pilot_engine.core.models import Issue
 from sql_pilot_engine.rules.base import Rule
 from sql_pilot_engine.rules.basic import make_issue
@@ -22,6 +22,8 @@ def check_insert_overwrite_requires_table(sql: str, context: ReviewContext) -> l
                 suggestion="请改为：INSERT OVERWRITE TABLE 目标表名 ...",
                 evidence="INSERT OVERWRITE without TABLE",
                 category="maxcompute",
+                action=IssueAction.AUTO_FIX,
+                auto_fixable=True,
             )
         ]
     return []

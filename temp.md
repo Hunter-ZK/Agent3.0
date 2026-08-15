@@ -1695,3 +1695,1731 @@ SQLAnalysisAdapter产出SQL结构事实，service用这些事实判断SQL是否�
 4.如果半年后从 SQLGlot 换成别的SQL解析库，哪些模块理论上应该保持不变？
 sqlanalysisadapter保持不变，修改parse_result、facts、scope、lineage的具体实现
 
+
+
+# Agent3.0 / DataAgent 工作交接文档
+
+## 一、文档用途
+
+本文档用于将当前 Agent3.0 / DataAgent 项目的开发、教学、架构设计和进度管理工作完整交接给下一次新开启对话中的 AI。
+
+新 AI 阅读本文档后，应结合 GitHub 仓库：
+
+`https://github.com/Hunter-ZK/Agent3.0`
+
+直接接续当前开发与训练工作。
+
+**不要从零重新设计项目，不要重复已经解决的架构争论，也不要仅根据README判断真实进度。**
+
+新对话第一次接续时，可以进行一次 GitHub `main` 代码级扫描，以确认本文档与最新代码是否一致。
+
+完成首次校准后，除非用户明确要求：
+
+> 默认用户已经完成上一轮对话要求的代码修改，不要每轮重新扫描GitHub。
+
+---
+
+# 二、用户背景与项目目标
+
+用户不是传统软件工程师，而是具有较强数仓、SQL、DataWorks、MaxCompute、产品设计和项目管理背景的产品/项目负责人。
+
+用户正在亲自开发 Agent3.0，目标不是简单获得一个AI生成的代码项目，而是：
+
+> **通过真实项目开发，最终具备独立理解、设计、修改、维护和继续开发完整DataAgent的能力。**
+
+因此开发必须同时服务两个目标：
+
+1. 做出真实可运行的 Agent3.0 / DataAgent。
+2. 培养用户自己的技术和系统设计能力。
+
+禁止采用：
+
+> AI一次性生成大量代码 → 用户机械复制 → 项目虽然能跑但用户不知道为什么。
+
+---
+
+# 三、主开发AI的职责
+
+主开发窗口承担：
+
+1. 项目总体架构设计。
+2. 真实代码开发指导。
+3. 模块边界设计。
+4. 具体文件和修改位置说明。
+5. Stage Gate设计。
+6. Bug分析和重构。
+7. 代码开发过程中同步讲解：
+
+   * 为什么要做；
+   * 位于架构哪层；
+   * 输入输出是什么；
+   * 谁调用谁；
+   * 为什么这样设计；
+   * 替代方案是什么；
+   * 当前实现有哪些刻意保留的限制。
+
+主开发AI**不负责进行问答考试**。
+
+用户已经明确：
+
+> 主窗口不要持续出题。
+> 问答、知识诊断和复习由另一个专门的学习窗口负责。
+
+因此主窗口只需：
+
+> **高密度推进工作 + 高质量解释。**
+
+“提高学习密度”不是多出题，而是：
+
+> 每轮推进更多实质性项目工作，同时把关键技术讲透。
+
+---
+
+# 四、另外两个辅助AI角色
+
+整个项目建议保持三个窗口分工。
+
+## 1. 主开发与训练窗口
+
+即当前角色。
+
+负责：
+
+* 架构；
+* 开发；
+* 重构；
+* 集成；
+* Stage Gate；
+* 技术讲解。
+
+不负责知识考试。
+
+---
+
+## 2. 学习巩固教练
+
+负责：
+
+* 扫描当前项目；
+* 讲解架构；
+* 代码阅读；
+* 问答；
+* 知识诊断；
+* 项目复盘；
+* 维护用户的能力掌握画像。
+
+主要知识等级：
+
+### A【必须独立掌握】
+
+用户最终应独立设计或修改：
+
+* Agent架构分层；
+* Workflow；
+* State；
+* Planning；
+* Context Builder；
+* RAG流程；
+* Provider；
+* Execution安全；
+* Tool / Skill；
+* Evaluation。
+
+### B【必须理解】
+
+用户需要能够读懂、调用、调试，但不用重写成熟算法：
+
+* SQLGlot AST；
+* Scope；
+* Lineage；
+* LangGraph API；
+* Qdrant；
+* DuckDB等。
+
+### C【知道即可】
+
+* 成熟第三方库底层算法；
+* 大量样板代码；
+* 低价值实现细节。
+
+---
+
+## 3. 独立项目进展监督师
+
+监督AI必须以GitHub真实代码为准。
+
+不得因为用户口头说：
+
+> “已经完成。”
+
+就直接判定项目通过。
+
+监督时检查：
+
+* 最新Commit；
+* 新增和删除文件；
+* 核心源码；
+* tests；
+* Demo；
+* pyproject依赖；
+* 真实调用链；
+* 文件是否只是空壳；
+* 是否真正被上层调用。
+
+完成状态必须区分：
+
+### 【已完成】
+
+代码 + 测试 + 调用链 + Stage Gate证据均存在。
+
+### 【部分完成】
+
+已有实现，但尚缺测试、集成或Demo。
+
+### 【未完成】
+
+只有设计、讨论、空文件或未接入代码。
+
+但注意：
+
+> **主开发窗口默认不每轮扫描GitHub。**
+
+两种角色不要混淆。
+
+---
+
+# 五、用户偏好的开发教学方式
+
+这是后续必须长期遵守的核心规则。
+
+## 1. 每个阶段先说明架构位置
+
+不要直接开始：
+
+> 新建A.py、新建B.py。
+
+先告诉用户：
+
+```text
+整个DataAgent在哪里
+↓
+当前阶段在哪里
+↓
+前面有什么
+↓
+当前能力为谁服务
+↓
+下一步是什么
+```
+
+用户曾因为项目文件和模块快速增加而出现明显失控感。
+
+因此后续必须持续维护“项目地图”。
+
+---
+
+## 2. 一个阶段只引入一个主要新能力
+
+曾经出现过一次节奏过快：
+
+```text
+RAG
++ Vector DB
++ Text-to-SQL
++ LangGraph
++ Evaluation
+```
+
+连续堆叠。
+
+用户明确反馈：
+
+> 进度太快，已经有点接受不良。
+
+因此后来冻结新原则：
+
+> **一个阶段只引入一个主要架构概念，但该阶段内部可以一次把工作做完整。**
+
+例如：
+
+```text
+先把Text-to-SQL普通Python链跑通
+↓
+再学LangGraph
+```
+
+而不是同时第一次学习Planner、Generator、State、Node、Edge。
+
+---
+
+## 3. 保持高工作密度，但不要碎片化
+
+用户不喜欢：
+
+* 一轮只改3行；
+* 每次只讲一个小Python语法；
+* 一直停留在局部；
+* 工作进展过慢。
+
+正确方式：
+
+```text
+一轮完成一个小Stage
++
+同步讲解几个核心技术点
++
+测试
++
+Demo
+```
+
+---
+
+## 4. 代码修改分类
+
+长期采用：
+
+### 【必须理解后手敲】
+
+核心架构和领域代码，例如：
+
+* DTO；
+* Protocol；
+* Workflow；
+* State；
+* Planner；
+* Context；
+* 安全判断；
+* Agent编排。
+
+### 【理解后修改】
+
+* Adapter；
+* Provider；
+* Service；
+* Prompt；
+* Integration Glue。
+
+### 【可直接复制】
+
+* 测试；
+* Demo；
+* 配置；
+* 重复DTO；
+* Boilerplate。
+
+---
+
+## 5. 小修改给位置，不整文件替换
+
+如果只是局部修改：
+
+应明确：
+
+```text
+文件：
+xxx.py
+
+找到：
+xxx
+
+改成：
+xxx
+```
+
+不要把整个项目重新打包。
+
+只有发生大规模重构时才考虑完整文件。
+
+---
+
+# 六、冻结的V1产品边界
+
+当前V1只保留四项核心成果：
+
+## 1. 可信SQL
+
+```text
+SQL
+→ Analysis
+→ Review
+→ Fix
+→ Re-review
+→ Critic
+→ Trusted SQL
+```
+
+## 2. Text-to-SQL智能问数
+
+```text
+自然语言
+→ Context
+→ Plan
+→ SQL Generation
+→ Validation
+→ Trusted SQL
+```
+
+## 3. 窄版数仓开发
+
+后续：
+
+```text
+自然语言开发需求
+→ Dev Plan
+→ DDL
+→ ETL
+→ SQL Validation
+```
+
+只针对简单单目标表开发。
+
+暂时不扩展成完整企业级数仓开发平台。
+
+## 4. Agent / Skill / Evaluation基础能力
+
+后续包括：
+
+* LangGraph；
+* Tool Registry；
+* Skill Registry；
+* Golden Dataset；
+* Evaluation；
+* Trace。
+
+---
+
+# 七、冻结的总体架构
+
+```text
+User
+ ↓
+Agent Runtime
+ ↓
+Planning
+ ↓
+Context Intelligence
+ ↓
+Generation
+ ↓
+SQL Validation
+ ↓
+Execution
+ ↓
+Result
+```
+
+横向能力：
+
+```text
+Evaluation
+Tool Registry
+Skill Registry
+```
+
+两个重点深挖方向：
+
+## 核心一：Agent编排
+
+重点：
+
+* LangGraph；
+* State；
+* Node；
+* Conditional Routing；
+* Retry；
+* HITL；
+* Supervisor；
+* Subgraph。
+
+## 核心二：Context Intelligence
+
+重点：
+
+* Semantic Model；
+* Metadata；
+* RAG；
+* Vector Retrieval；
+* Verified SQL；
+* Context Engineering；
+* Schema Linking。
+
+---
+
+# 八、非常重要的SQL技术ADR
+
+SQL底层明确冻结：
+
+```text
+SQLGlot
+↓
+薄 SQLAnalysisAdapter
+↓
+Agent3.0项目DTO
+```
+
+禁止重新走：
+
+```text
+自己写Scope
+自己写Join Analyzer
+自己写Lineage Engine
+```
+
+项目曾经实现：
+
+* `scope.py`
+* `join.py`
+* `lineage.py`
+
+后来确认这属于重复造SQLGlot的轮子，已经决定删除/停止正式依赖。
+
+理由：
+
+> 用户的学习目标是DataAgent，而不是SQL解析器作者。
+
+应该：
+
+```text
+成熟SQL语义算法
+→ SQLGlot负责
+
+Agent3.0
+→ 调用、封装、业务化
+```
+
+---
+
+# 九、SQL Validation的重要已确认原则
+
+必须长期保持。
+
+## 1. IssueAction驱动Workflow
+
+Workflow不要依赖：
+
+```text
+rule_id字符串判断
+```
+
+应依赖：
+
+```text
+IssueAction
+```
+
+---
+
+## 2. Severity与Action不同
+
+`severity`：
+
+> 问题风险有多大。
+
+`IssueAction`：
+
+> 系统下一步做什么。
+
+二者不可混淆。
+
+---
+
+## 3. Fix后必须Re-review
+
+绝对不能：
+
+```text
+Fix
+→ 直接相信Fixed SQL
+```
+
+必须：
+
+```text
+Fix
+↓
+Re-review
+↓
+Critic
+```
+
+---
+
+## 4. reviewed_sql是版本一致性约束
+
+如果：
+
+```text
+Review属于SQL A
+```
+
+则不能拿来Fix：
+
+```text
+SQL B
+```
+
+否则必须拒绝。
+
+---
+
+## 5. Retry使用最新SQL和最新Review
+
+不能一直使用第一次Review。
+
+正确：
+
+```text
+SQL A
+→ Review A
+→ Fix
+→ SQL B
+→ Review B
+→ Retry Fix必须使用Review B
+```
+
+---
+
+## 6. Explain是可选增强
+
+Explain失败不能阻断确定性的SQL Review能力。
+
+---
+
+## 7. Metadata状态必须区分
+
+```text
+FOUND
+NOT_FOUND
+ERROR
+```
+
+Provider查询失败：
+
+```text
+ERROR
+```
+
+绝不能当成：
+
+```text
+NOT_FOUND
+```
+
+---
+
+# 十、当前SQL Validation状态
+
+当前逻辑上已完成：
+
+```text
+SQLAnalysisAdapter
+SQLFacts
+ReviewService
+RuleRegistry
+MetadataValidator
+FixService
+Re-review
+CriticService
+SQLAgentWorkflow
+```
+
+前一阶段已经要求完成真正 E2E：
+
+### 正常SQL
+
+```text
+SELECT
+→ no_issue
+```
+
+### 危险SQL
+
+```text
+DROP
+→ BLOCK
+```
+
+### 可确定自动修复SQL
+
+```text
+INSERT OVERWRITE xxx
+→ AUTO_FIX
+→ INSERT OVERWRITE TABLE xxx
+→ Re-review
+→ Critic
+→ fix_verified
+```
+
+用户已表示完成上一轮闭环工作。
+
+因此后续默认：
+
+# `Trusted SQL V1 = CLOSED`
+
+除Bug外，不再继续扩展Parser、Scope、Lineage和Review规则。
+
+---
+
+# 十一、Context Intelligence当前状态
+
+当前V0.1已经建设：
+
+```text
+Semantic Model
+EmbeddingProvider
+TokenHashEmbeddingProvider
+VectorStore Protocol
+QdrantVectorStore
+KnowledgeRetriever
+VerifiedSQLRetriever
+QueryContextBuilder
+```
+
+逻辑：
+
+```text
+Business Knowledge
+Verified SQL
+        ↓
+ContextDocument
+        ↓
+Embedding
+        ↓
+Qdrant
+        ↓
+Retriever
+        ↓
+RetrievedDocument
+        ↓
+QueryContext
+```
+
+---
+
+## Semantic Model与Metadata必须区分
+
+Metadata：
+
+> 数据库物理上有什么。
+
+例如：
+
+```text
+order_amount DECIMAL
+```
+
+Semantic Model：
+
+> 业务上是什么意思。
+
+例如：
+
+```text
+订单总金额
+=
+SUM(order_amount)
+
+消费金额
+订单金额
+下单金额
+```
+
+这两个不能混成同一概念。
+
+---
+
+## RAG与Semantic Model也不是同一东西
+
+Semantic Model：
+
+> 确定性的业务定义。
+
+RAG：
+
+> 根据当前问题动态检索相关证据。
+
+最终模型上下文是：
+
+```text
+Semantic Model
++
+Dynamic Retrieved Context
+```
+
+---
+
+# 十二、当前Embedding策略
+
+目前开发阶段使用：
+
+```text
+TokenHashEmbeddingProvider
+```
+
+这只是为了：
+
+* 不依赖外部API；
+* 验证RAG工程链；
+* 验证Qdrant；
+* 验证Retriever。
+
+不是正式语义Embedding。
+
+后续应新增真正实现，例如：
+
+```text
+OpenAIEmbeddingProvider
+BGEEmbeddingProvider
+企业Embedding Service
+```
+
+但不要修改Retriever和VectorStore上层契约。
+
+---
+
+# 十三、Generation当前状态
+
+Generation V0.1已经存在：
+
+```text
+QueryPlan
+TextGenerationModel Protocol
+QueryPlanner
+SQLGenerator
+Prompt Builder
+GeneratedSQL
+```
+
+流程：
+
+```text
+Question
+↓
+QueryPlanner
+↓
+QueryPlan
+↓
+SQLGenerator
+↓
+GeneratedSQL
+```
+
+`QueryPlan`当前重要字段：
+
+```text
+tables
+dimensions
+metrics
+filters
+group_by
+```
+
+前一轮已要求修复：
+
+```text
+json.load(raw)
+→ json.loads(raw)
+```
+
+并确保：
+
+```text
+group_by
+```
+
+不会在Planner DTO转换时丢失。
+
+用户已经表示完成该闭环工作。
+
+---
+
+# 十四、当前正在进行的工作：TextToSQLService V0.1
+
+这是当前最重要的接续点。
+
+目标：
+
+```text
+Question
+↓
+Context Retrieval
+↓
+Semantic Context
+↓
+QueryPlanner
+↓
+SQLGenerator
+↓
+SQLAgentWorkflow
+↓
+Trusted SQL
+```
+
+当前新增：
+
+```text
+schemas/text_to_sql.py
+services/text_to_sql_service.py
+tests/test_text_to_sql_service.py
+examples/text_to_sql_demo.py
+```
+
+产品输入：
+
+```text
+TextToSQLRequest
+```
+
+产品输出：
+
+```text
+TextToSQLResult
+```
+
+Result至少包含：
+
+```text
+question
+query_plan
+generated_sql
+trusted_sql
+success
+validation_status
+```
+
+---
+
+# 十五、Generated SQL与Trusted SQL必须严格区分
+
+这是核心架构原则。
+
+```text
+Generated SQL
+```
+
+只是大模型候选结果。
+
+只有经过：
+
+```text
+Review
+Fix
+Re-review
+Critic
+```
+
+以后，才能变成：
+
+```text
+Trusted SQL
+```
+
+例如：
+
+```text
+Generator:
+INSERT OVERWRITE ads_x
+
+Validation:
+INSERT OVERWRITE TABLE ads_x
+```
+
+最终：
+
+```text
+generated_sql
+≠
+trusted_sql
+```
+
+这个区别必须一直保留到未来API和前端层。
+
+---
+
+# 十六、TextToSQLService的职责
+
+它不是新的AI算法。
+
+它属于高层Service：
+
+> **将已有专业能力组合成产品功能。**
+
+依赖：
+
+```text
+SemanticModel
+KnowledgeRetriever
+VerifiedSQLRetriever
+QueryContextBuilder
+QueryPlanner
+SQLGenerator
+SQLAgentWorkflow
+```
+
+不应该：
+
+* 自己实现Embedding；
+* 自己直接操作Qdrant；
+* 自己实现SQL Review；
+* 自己调用SQLGlot；
+* 自己重写Fix。
+
+---
+
+# 十七、当前Demo
+
+当前要求新增：
+
+```text
+examples/text_to_sql_demo.py
+```
+
+Demo使用：
+
+```text
+Fake Planner LLM
+Fake SQL LLM
+```
+
+但使用真实：
+
+```text
+Semantic Model
+Qdrant
+Retriever
+Context Builder
+Planner代码
+Generator代码
+SQL Validation Workflow
+```
+
+它验证的是：
+
+```text
+自然语言
+→ Context
+→ Plan
+→ Generate
+→ Validate
+→ Trusted SQL
+```
+
+Demo不连接数据库。
+
+---
+
+# 十八、为什么现在不做Execution
+
+用户曾明确叫停提前开发Executor。
+
+用户认为：
+
+> 在Text-to-SQL、RAG和Agent链路没有真正跑通前，过早开发数据库执行层不符合当前重点。
+
+这一判断已采纳。
+
+因此当前：
+
+```text
+Execution = 后置
+```
+
+并且目前项目阶段：
+
+> **不要求连接真实业务数据库。**
+
+即便后续开始Execution：
+
+第一阶段也可以使用：
+
+```text
+DuckDB / Mock / Local Execution
+```
+
+验证闭环。
+
+项目监督时：
+
+> 不得把“没有连接真实业务数据库”作为当前阶段延期风险或失败条件。
+
+---
+
+# 十九、为什么现在也暂缓LangGraph
+
+之前曾过快推进：
+
+```text
+RAG
+→ Generation
+→ LangGraph
+```
+
+导致用户明显跟不上。
+
+因此现在调整：
+
+```text
+先普通Python跑通产品链
+↓
+用户真正理解
+↓
+再迁移到LangGraph
+```
+
+当前建议顺序：
+
+```text
+TextToSQLService V0.1
+↓
+真实LLM
+↓
+Golden Dataset
+↓
+Evaluation V0.1
+↓
+LangGraph
+```
+
+LangGraph目前不要作为“又一个新目录”提前建设空壳。
+
+---
+
+# 二十、为什么LangGraph仍然是后续重点
+
+不是取消。
+
+后续需要使用它解决普通Service逐渐难以管理的问题：
+
+```text
+State
+Node
+Conditional Edge
+Retry
+Context Retry
+HITL
+Checkpoint
+Subgraph
+Supervisor
+```
+
+未来预期主链：
+
+```text
+START
+↓
+retrieve
+↓
+plan
+↓
+generate
+↓
+validate
+↓
+PASS → END
+
+Need Context
+→ retrieve again
+
+Human Review
+→ interrupt
+
+AUTO FIX
+→ Validation Subgraph
+```
+
+但必须等普通Python流程清楚以后再进入。
+
+---
+
+# 二十一、Evaluation是后续强制能力
+
+Evaluation不能拖到项目最后。
+
+Text-to-SQL真实LLM接入之后，应立即建设约10～20条第一批 Golden Dataset。
+
+至少评：
+
+```text
+Table Selection Accuracy
+Column Selection Accuracy
+Metric Accuracy
+SQL Parse Success
+Metadata Validity
+Review Pass Rate
+Trusted SQL Rate
+```
+
+后续Execution接入再增加：
+
+```text
+Execution Success
+Result Correctness
+```
+
+应该进行：
+
+```text
+No RAG
+VS
+RAG
+```
+
+对照实验。
+
+目标不是证明：
+
+> “我们使用了RAG。”
+
+而是证明：
+
+> **RAG是否真的让Text-to-SQL更准确。**
+
+---
+
+# 二十二、未来数仓开发线边界
+
+V1只做窄版。
+
+例如：
+
+```text
+“基于订单明细生成用户日汇总表”
+```
+
+输出：
+
+```text
+Dev Plan
+↓
+DDL
+↓
+ETL
+↓
+SQL Validation
+```
+
+Dev Planning第一版只考虑：
+
+```text
+grain
+fields
+partition
+source tables
+```
+
+不要扩展：
+
+```text
+完整企业级建模平台
+Business Analysis Agent
+Data Quality Agent
+复杂多层数仓Pipeline
+```
+
+业务分析和简单建模概念先嵌入Dev Planner，不独立建Agent。
+
+---
+
+# 二十三、Skill方向
+
+V1只需要证明：
+
+```text
+Skill Definition
+Skill Registry
+Skill Runtime
+Skill Invocation
+```
+
+第一批实际Skill建议：
+
+```text
+SQLReviewSkill
+FieldNamingSkill
+DevSQLSkill
+```
+
+其中字段规范化命名：
+
+> 做成轻量Skill。
+
+不要独立建设：
+
+```text
+Naming Agent
+```
+
+也不要现在建设：
+
+```text
+Skill Studio UI
+AI自动生成Skill平台
+```
+
+---
+
+# 二十四、GitHub对接规则
+
+仓库：
+
+`https://github.com/Hunter-ZK/Agent3.0`
+
+新AI首次接手时应：
+
+1. 查看最新 `main` commit。
+2. 查看根目录和核心package结构。
+3. 查看最近修改文件。
+4. 查看 tests。
+5. 查看 examples。
+6. 查看 `pyproject.toml`。
+7. 核对本文档描述是否已经进一步推进。
+
+不要仅查看README。
+
+README可能滞后于代码。
+
+---
+
+## 特别检查“假完成”
+
+例如：
+
+```text
+有runtime目录
+```
+
+不等于：
+
+```text
+LangGraph已经实现。
+```
+
+必须看：
+
+```text
+文件有代码吗？
+代码被调用了吗？
+依赖装了吗？
+测试有吗？
+Demo能跑吗？
+```
+
+---
+
+# 二十五、GitHub扫描频率规则
+
+用户已经明确：
+
+> 后续没有明确要求，不需要主开发AI每轮扫描main。
+
+正常开发窗口：
+
+```text
+用户说完成上一轮
+→ 默认完成
+→ 继续下一阶段
+```
+
+只有用户明确说：
+
+```text
+“重新扫描”
+“我push了”
+“结合GitHub检查”
+“监督一下”
+```
+
+才重新扫描。
+
+监督AI除外。
+
+监督AI以真实GitHub为准。
+
+---
+
+# 二十六、Python版本
+
+项目正式兼容基线已经确定：
+
+# Python 3.14
+
+`pyproject.toml`最终应表达：
+
+```toml
+requires-python = ">=3.14,<3.15"
+```
+
+不要重新讨论3.10或3.12是否更成熟。
+
+这是用户已经明确确定的项目基线。
+
+---
+
+# 二十七、依赖管理原则
+
+不要一次加入大量框架。
+
+已经采用：
+
+```text
+sqlglot
+qdrant-client
+OpenAI相关基础依赖
+```
+
+LangGraph真正进入开发时，再加入：
+
+```text
+langgraph
+```
+
+不要为了使用LangGraph顺便引入整套：
+
+```text
+langchain
+langchain-community
+langchain-openai
+...
+```
+
+除非有明确价值。
+
+原则：
+
+> 每个依赖必须对应一个真实使用能力。
+
+---
+
+# 二十八、项目开发中曾出现过的主要错误路线
+
+后续必须避免。
+
+## 错误1：自己实现SQL Scope / Join / Lineage
+
+已经纠正。
+
+以后：
+
+```text
+SQLGlot负责底层算法
+Agent3.0负责薄Adapter和业务DTO
+```
+
+---
+
+## 错误2：能力还没消费者就提前实现
+
+例如：
+
+```text
+完整Lineage
+复杂Executor
+空LangGraph Runtime
+```
+
+以后坚持：
+
+> 没有真实消费者，不提前建设。
+
+---
+
+## 错误3：文件存在就认为功能完成
+
+必须改成：
+
+```text
+实现
++
+测试
++
+接入调用链
++
+Demo
+```
+
+才算Stage Gate。
+
+---
+
+## 错误4：一次引入太多架构概念
+
+尤其避免：
+
+```text
+Planner
+Generator
+RAG
+LangGraph
+Eval
+Execution
+```
+
+同时第一次出现。
+
+---
+
+## 错误5：为了“架构漂亮”过度抽象
+
+项目目标不是构建大型企业框架。
+
+抽象必须服务：
+
+* 变化隔离；
+* 测试；
+* 多实现；
+* 明确边界。
+
+否则不要加。
+
+---
+
+# 二十九、用户当前技术掌握情况
+
+根据主开发过程中表现，大致：
+
+## 已基本掌握
+
+* Analysis与Service职责；
+* Engine / Workflow / Service基础分层；
+* Dependency Injection基本思想；
+* Adapter基本作用；
+* Provider概念；
+* SQL Review整体流程；
+* SQLFacts的业务价值；
+* IssueAction路由思想。
+
+## 需要继续加强
+
+* DTO / Result对象边界；
+* Optional状态与Invariant；
+* 数据依赖 vs 实现耦合；
+* 第三方库防腐层；
+* Protocol实际价值；
+* 安全重构；
+* 完整调用链思维；
+* 模块“实现”与产品“完成”的区别；
+* Agent State；
+* LangGraph；
+* RAG Retrieval/Rerank；
+* Evaluation。
+
+主开发过程中应自然强化这些能力，但不要重新变成考试窗口。
+
+---
+
+# 三十、当前最紧接着的工作
+
+当前正在完成：
+
+# Text-to-SQL Vertical Slice V0.1
+
+需要确认：
+
+```text
+tests/test_text_to_sql_service.py
+```
+
+通过。
+
+然后运行：
+
+```text
+python -m pytest tests -q
+```
+
+确保全量回归。
+
+最后运行：
+
+```text
+python examples/text_to_sql_demo.py
+```
+
+Demo应展示：
+
+```text
+Question
+QueryPlan
+Generated SQL
+Validation Status
+Trusted SQL
+```
+
+完成后标记：
+
+# `Text-to-SQL Vertical Slice V0.1 PASSED`
+
+---
+
+# 三十一、紧接着下一阶段
+
+不要立即开发Execution。
+
+建议顺序：
+
+## Stage 1：真实LLM接入
+
+把：
+
+```text
+FakePlannerModel
+FakeSQLModel
+```
+
+换成已有LLM基础设施的薄Adapter。
+
+不要让Planner直接依赖某一家LLM SDK。
+
+---
+
+## Stage 2：Golden Dataset + Evaluation V0.1
+
+建立真实问题集。
+
+进行：
+
+```text
+No RAG
+VS
+RAG
+```
+
+比较。
+
+这是验证Context Intelligence价值的第一场实验。
+
+---
+
+## Stage 3：LangGraph V0.1
+
+把已经稳定的普通Python链：
+
+```text
+Retrieve
+→ Plan
+→ Generate
+→ Validate
+```
+
+迁移成：
+
+```text
+State
++
+Nodes
++
+Edges
+```
+
+最开始保持线性。
+
+然后逐步增加：
+
+```text
+Context Retry
+Conditional Routing
+Checkpoint
+HITL
+```
+
+---
+
+## Stage 4：窄版Dev Agent
+
+再进入：
+
+```text
+自然语言开发需求
+→ Dev Plan
+→ DDL / ETL
+→ Validation
+```
+
+---
+
+## Stage 5：Skill / Tool
+
+---
+
+## Stage 6：Execution
+
+使用本地/模拟数据库即可完成第一阶段闭环。
+
+---
+
+# 三十二、Stage Gate哲学
+
+以后每个阶段都必须有三层验收。
+
+## 1. Unit / Contract Tests
+
+证明模块本身正确。
+
+## 2. Integration Test
+
+证明模块真正连接。
+
+## 3. Demo
+
+证明项目已经获得可见能力。
+
+例如Text-to-SQL：
+
+```text
+Unit：
+Planner / Generator
+
+Integration：
+TextToSQLService
+
+Demo：
+自然语言 → Trusted SQL
+```
+
+只有三者都存在，才宣布Stage完成。
+
+---
+
+# 三十三、新AI第一次接手的推荐动作
+
+建议严格按以下顺序：
+
+1. 阅读本文档。
+2. 代码级扫描最新GitHub main。
+3. 不重新设计架构。
+4. 对照本文档确认：
+
+   * TextToSQLService是否已完成；
+   * Demo是否存在；
+   * tests是否全绿。
+5. 如果Vertical Slice已通过：
+
+   * 直接进入真实LLM Adapter + Golden Evaluation。
+6. 如果尚有失败：
+
+   * 只修阻塞项；
+   * 不增加新架构能力。
+7. 整个过程中继续保持：
+
+   * 先架构位置；
+   * 再机制；
+   * 再代码；
+   * 再测试；
+   * 再Demo。
+
+---
+
+# 三十四、一句话项目状态
+
+当前 Agent3.0 已从：
+
+> **“可信SQL审查工具”**
+
+开始升级成：
+
+> **“能够结合业务上下文，把自然语言问数需求转换成可信SQL的DataAgent”。**
+
+目前最重要的任务不是继续扩宽功能，而是：
+
+> **把 Text-to-SQL 第一条纵向产品链真正跑稳，然后使用真实LLM和Evaluation证明它有多准确，再进入LangGraph编排。**

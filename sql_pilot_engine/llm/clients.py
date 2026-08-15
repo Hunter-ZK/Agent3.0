@@ -4,9 +4,23 @@ import json
 import os
 from abc import ABC, abstractmethod
 from typing import Any
+from dataclasses import dataclass
+
+
+from dotenv import load_dotenv
+
+from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError
 
 from sql_pilot_engine.llm.errors import LLMAPIError, LLMResponseParseError
 
+
+@dataclass(frozen=True, slots=True)
+class OpenAICompatibleConfig:
+    api_key: str
+    model: str
+    base_url: str | None = None
+    timeout_seconds: float = 60.0
 
 class BaseLLMClient(ABC):
     """LLM Client 抽象。"""
@@ -84,11 +98,6 @@ class DeepSeekLLMClient(BaseLLMClient):
     """DeepSeek JSON Output Client。"""
 
     def __init__(self) -> None:
-        try:
-            from dotenv import load_dotenv
-            from openai import OpenAI
-        except ImportError as error:
-            raise LLMAPIError("请安装 openai 和 python-dotenv 依赖。") from error
 
         load_dotenv()
 

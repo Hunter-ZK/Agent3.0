@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import logging
+import time
+import uuid
+
+logger = logging.getLogger(__name__)
+
 from sql_pilot_engine.context.builder import (
     QueryContextBuilder,
 )
@@ -70,6 +76,14 @@ class TextToSQLService:
         self,
         request: TextToSQLRequest,
     ) -> TextToSQLResult:
+
+        run_id = uuid.uuid4().hex[:8]
+        start = time.perf_counter()
+
+        logger.info(
+            "run=%s text_to_sql.start",
+            run_id,
+        )
         
         question = request.question
         
@@ -129,8 +143,12 @@ class TextToSQLService:
                 validation=validation,
             )
         )
-        
-        return TextToSQLResult(
+
+        elapsed_ms = int(
+            (time.perf_counter() - start) * 1000
+        )
+
+        result = TextToSQLResult(
             question=question,
             query_plan=query_plan,
             generated_sql=generated.sql,
@@ -140,6 +158,17 @@ class TextToSQLService:
                 validation.final_status
             ),
         )
+
+        logger.info(
+            "run=%s text_to_sql.end success=%s "
+            "validation_status=%s elapsed_ms=%d",
+            run_id,
+            result.success,
+            result.validation_status,
+            elapsed_ms,
+        )
+        
+        return result
         
     
     @staticmethod
