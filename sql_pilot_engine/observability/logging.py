@@ -3,13 +3,19 @@ from __future__ import annotations
 import logging
 import os
 
-
-DEFAULT_LOG_FORMAT = (
-    "%(asctime)s "
-    "%(levelname)s "
-    "%(name)s "
-    "%(message)s"
+from sql_pilot_engine.observability.context import (
+    get_run_id,
 )
+
+class RunIdFilter(logging.Filter):
+
+    def filter(
+        self,
+        record: logging.LogRecord,
+    ) -> bool:
+        record.run_id = get_run_id()
+        return True
+
 
 
 def configure_logging() -> None:
@@ -31,7 +37,22 @@ def configure_logging() -> None:
         logging.INFO,
     )
 
-    logging.basicConfig(
-        level=level,
-        format=DEFAULT_LOG_FORMAT,
+    handler = logging.StreamHandler()
+
+    handler.addFilter(RunIdFilter(),)
+
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s "
+            "%(levelname)s "
+            "%(name)s "
+            "run=%(run_id)s "
+            "%(message)s"
+        )
     )
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    root_logger.handlers.clear()
+    root_logger.addHandler(handler)
+

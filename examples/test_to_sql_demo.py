@@ -280,6 +280,14 @@ def parse_args() -> argparse.Namespace:
         help="是否使用真实大模型 (默认读取 AGENT3_USE_REAL_LLM 环境变量)",
     )
 
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="设置日志输出级别 (默认: INFO)",
+    )
+
     return parser.parse_args()
 
 # ============================================================

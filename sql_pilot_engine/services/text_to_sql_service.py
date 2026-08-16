@@ -32,6 +32,10 @@ from sql_pilot_engine.schemas.text_to_sql import (
 from sql_pilot_engine.workflow.sql_agent_workflow import (
     SQLAgentWorkflow, SQLAgentWorkflowResult
 )
+from sql_pilot_engine.observability.context import (
+    bind_run_id
+)
+
 
 
 class TextToSQLService:
@@ -78,95 +82,198 @@ class TextToSQLService:
     ) -> TextToSQLResult:
 
         run_id = uuid.uuid4().hex[:8]
-        start = time.perf_counter()
 
-        logger.info(
-            "run=%s text_to_sql.start",
-            run_id,
-        )
-        
-        question = request.question
-        
-        business_knowledge = (
-            self.knowledge_retriever.retrieve(
-                question=question,
-                top_k=5,
-            )
-        )
-        
-        verified_sql = (
-            self.verified_sql_retriever.retrieve(
-                question=question,
-                top_k=3,
-            )
-        )
-        
-        query_context = (
-            self.context_builder.build(
-                question=question,
-                business_knowledge=business_knowledge,
-                verified_sql=verified_sql,
-            )
-        )
-        
-        semantic_context = (
-            self.semantic_renderer.render(
-                self.semantic_model
-            )
-        )
-        
-        query_plan = self.planner.plan(
-            question=question,
-            semantic_context=semantic_context,
-            query_context=query_context,
-        )
-        
-        generated = (
-            self.sql_generator.generate(
-                question=question,
-                plan=query_plan,
-                semantic_context=semantic_context,
-                query_context=query_context,
-                dialect=request.dialect,
-            )
-        )
-        
-        validation = (
-            self.validation_workflow.run(
-                generated.sql,
-            )
-        )
-        
-        trusted_sql = (
-            self._resolve_trusted_sql(
-                generated_sql=generated.sql,
-                validation=validation,
-            )
-        )
+        with bind_run_id(run_id):
+            total_start = time.perf_counter()
 
-        elapsed_ms = int(
-            (time.perf_counter() - start) * 1000
-        )
 
-        result = TextToSQLResult(
-            question=question,
-            query_plan=query_plan,
-            generated_sql=generated.sql,
-            trusted_sql=trusted_sql,
-            success=validation.success,
-            validation_status=(
-                validation.final_status
-            ),
-        )
+            logger.info(
+                "text_to_sql.start question_chars=%d",
+                len(request.question),
+            )
+            try:
+                logger.info(
+                    "context.start"
+                )
 
-        logger.info(
-            "run=%s text_to_sql.end success=%s "
-            "validation_status=%s elapsed_ms=%d",
-            run_id,
-            result.success,
-            result.validation_status,
-            elapsed_ms,
-        )
+                question = request.question
+                
+                business_knowledge = (
+                    self.knowledge_retriever.retrieve(
+                        question=question,
+                        top_k=5,
+                    )
+                )
+                
+                verified_sql = (
+                    self.verified_sql_retriever.retrieve(
+                        question=question,
+                        top_k=3,
+                    )
+                )
+
+                stage_start = time.perf_counter()
+
+                query_context = (
+                    self.context_builder.build(
+                        question=question,
+                        business_knowledge=business_knowledge,
+                        verified_sql=verified_sql,
+                    )
+                )
+
+                elapsed_ms = int(
+                    (time.perf_counter() - stage_start) * 1000
+                )
+
+                logger.info(
+                    "context.end "
+                    "knowledge_docs=%d "
+                    "verified_sql_docs=%d "
+                    "elapsed_ms=%d",
+                    len(business_knowledge),
+                    len(verified_sql),
+                    elapsed_ms,
+                )
+                
+                semantic_context = (
+                    self.semantic_renderer.render(
+                        self.semantic_model
+                    )
+                )
+
+                stage_start = time.perf_counter()
+
+                logger.info(
+                    "planner.start"
+                )
+                
+                query_plan = self.planner.plan(
+                    question=question,
+                    semantic_context=semantic_context,
+                    query_context=query_context,
+                )
+
+                elapsed_ms = int(
+                    (
+                        time.perf_counter()
+                        - stage_start
+                    )
+                    * 1000
+                )
+
+                logger.info(
+                    "planner.end "
+                    "tables=%d "
+                    "dimensions=%d "
+                    "metrics=%d "
+                    "elapsed_ms=%d",
+                    len(query_plan.tables),
+                    len(query_plan.dimensions),
+                    len(query_plan.metrics),
+                    elapsed_ms,
+                )
+
+                stage_start = time.perf_counter()
+
+                logger.info(
+                    "generator.start"
+                )
+                
+                generated = (
+                    self.sql_generator.generate(
+                        question=question,
+                        plan=query_plan,
+                        semantic_context=semantic_context,
+                        query_context=query_context,
+                        dialect=request.dialect,
+                    )
+                )
+
+                elapsed_ms = int(
+                    (
+                        time.perf_counter()
+                        - stage_start
+                    )
+                    * 1000
+                )
+
+                logger.info(
+                    "generator.end "
+                    "sql_chars=%d "
+                    "elapsed_ms=%d",
+                    len(generated.sql),
+                    elapsed_ms,
+                )
+
+                stage_start = time.perf_counter()
+
+                logger.info(
+                    "validation.start"
+                )
+                
+                validation = (
+                    self.validation_workflow.run(
+                        generated.sql,
+                    )
+                )
+
+                elapsed_ms = int(
+                    (
+                        time.perf_counter()
+                        - stage_start
+                    )
+                    * 1000
+                )
+
+                logger.info(
+                    "validation.end "
+                    "status=%s "
+                    "elapsed_ms=%d",
+                    validation,
+                    elapsed_ms,
+                )
+                
+                trusted_sql = (
+                    self._resolve_trusted_sql(
+                        generated_sql=generated.sql,
+                        validation=validation,
+                    )
+                )
+
+                result = TextToSQLResult(
+                    question=question,
+                    query_plan=query_plan,
+                    generated_sql=generated.sql,
+                    trusted_sql=trusted_sql,
+                    success=validation.success,
+                    validation_status=(
+                        validation.final_status
+                    ),
+                )
+
+            except Exception:
+
+                elapsed_ms = int(
+                    (time.perf_counter() - total_start) * 1000
+                )
+
+                logger.exception(
+                    "text_to_sql.error elapsed_ms=%d",
+                    elapsed_ms,
+                )
+
+                raise
+                
+
+            logger.info(
+                "run=%s text_to_sql.end success=%s "
+                "validation_status=%s elapsed_ms=%d",
+                run_id,
+                result.success,
+                result.validation_status,
+                elapsed_ms,
+            )
         
         return result
         
