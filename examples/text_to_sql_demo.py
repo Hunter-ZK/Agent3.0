@@ -255,7 +255,7 @@ def build_text_to_sql_service(use_real_llm: bool) -> TextToSQLService:
 
 def parse_args() -> argparse.Namespace:
 
-    env_use_real_llm = os.getenv("AGENT3_USE_REAL_LLM")
+    env_use_real_llm = read_env_bool("AGENT3_USE_REAL_LLM")
 
     parser = argparse.ArgumentParser(description="Agent3.0 Text-to-SQL Demo 运行工具")
 
@@ -290,6 +290,40 @@ def parse_args() -> argparse.Namespace:
 
     return parser.parse_args()
 
+
+def read_env_bool(
+    name: str,
+    *,
+    default: bool = False,
+):
+    raw = os.getenv(name)
+
+    if raw is None:
+        return default
+
+    value = raw.strip().lower()
+
+    if value in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return True
+
+    if value in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }:
+        return False
+
+    raise ValueError(
+        f"{name} must be a boolean value, "
+        f"got: {raw!r}"
+    )
+
 # ============================================================
 # 3. Demo主流程
 # ============================================================
@@ -298,7 +332,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
 
     args = parse_args()
-    configure_logging()
+    configure_logging(args.log_level)
 
     service = build_text_to_sql_service(use_real_llm=args.use_real_llm)
 

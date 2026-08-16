@@ -92,6 +92,9 @@ class TextToSQLService:
                 len(request.question),
             )
             try:
+
+                stage_start = time.perf_counter()
+
                 logger.info(
                     "context.start"
                 )
@@ -112,13 +115,17 @@ class TextToSQLService:
                     )
                 )
 
-                stage_start = time.perf_counter()
 
                 query_context = (
                     self.context_builder.build(
                         question=question,
                         business_knowledge=business_knowledge,
                         verified_sql=verified_sql,
+                    )
+                )
+                semantic_context = (
+                    self.semantic_renderer.render(
+                        self.semantic_model
                     )
                 )
 
@@ -136,11 +143,6 @@ class TextToSQLService:
                     elapsed_ms,
                 )
                 
-                semantic_context = (
-                    self.semantic_renderer.render(
-                        self.semantic_model
-                    )
-                )
 
                 stage_start = time.perf_counter()
 
@@ -230,7 +232,7 @@ class TextToSQLService:
                     "validation.end "
                     "status=%s "
                     "elapsed_ms=%d",
-                    validation,
+                    validation.final_status,
                     elapsed_ms,
                 )
                 
@@ -264,15 +266,21 @@ class TextToSQLService:
                 )
 
                 raise
-                
+
+            total_elapsed_ms = int(
+                (
+                    time.perf_counter()
+                    - total_start
+                )
+                * 1000
+            )
 
             logger.info(
-                "run=%s text_to_sql.end success=%s "
+                "text_to_sql.end success=%s "
                 "validation_status=%s elapsed_ms=%d",
-                run_id,
                 result.success,
                 result.validation_status,
-                elapsed_ms,
+                total_elapsed_ms,
             )
         
         return result

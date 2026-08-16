@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "sqlpilot-agent"
 version = "0.2.5"
 description = "SQLPilot SQL Review Engine for MaxCompute / DataWorks"
-requires-python = ">=3.10"
+requires-python = ">=3.15,<3.15"
 dependencies = [
     "openai>=1.0.0",
     "python-dotenv>=1.0.0",

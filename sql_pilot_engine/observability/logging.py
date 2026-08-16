@@ -18,7 +18,9 @@ class RunIdFilter(logging.Filter):
 
 
 
-def configure_logging() -> None:
+def configure_logging(
+    level_name: str | None = None,
+) -> None:
     """配置 Agent3.0 的基础日志。
 
     默认 INFO。
@@ -26,16 +28,25 @@ def configure_logging() -> None:
     DEBUG / INFO / WARNING / ERROR
     """
 
-    level_name = os.getenv(
-        "AGENT3_LOG_LEVEL",
-        "INFO",
+    resolved_level = (
+        level_name
+        or os.getenv(
+            "AGENT3_LOG_LEVEL",
+            "INFO",
+        )
     ).upper()
 
     level = getattr(
         logging,
-        level_name,
-        logging.INFO,
+        resolved_level,
+        None,
     )
+
+    if not isinstance(level, int):
+        raise ValueError(
+            f"Unsupported log level: "
+            f"{resolved_level}"
+        )
 
     handler = logging.StreamHandler()
 
