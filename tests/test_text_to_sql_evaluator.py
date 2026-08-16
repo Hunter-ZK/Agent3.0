@@ -216,6 +216,8 @@ def test_summary_calculates_rates():
             group_by_correct=True,
             pipeline_success=True,
             trusted_sql_available=True,
+            validation_status="passed",
+            error_message=None,  # <--- 加上这一行
         ),
         SimpleNamespace(
             passed=False,
@@ -225,6 +227,8 @@ def test_summary_calculates_rates():
             group_by_correct=True,
             pipeline_success=True,
             trusted_sql_available=True,
+            validation_status="passed",
+            error_message=None,  # <--- 加上这一行
         ),
     ]
 

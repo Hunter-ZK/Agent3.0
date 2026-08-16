@@ -82,7 +82,7 @@ class TextToSQLEvaluator:
                 metric_selection_correct
             ),
             group_by_correct=(
-                group_by_correct,
+                group_by_correct
             ),
             pipeline_success=actual.success,
             trusted_sql_available=(
@@ -115,12 +115,23 @@ class TextToSQLEvaluator:
 
         total = len(items)
 
+        error_cases = sum(
+            item.error_message is not None
+            for item in items
+        )
+
         return TextToSQLEvaluationSummary(
             total_cases=total,
+
+            error_cases=error_cases,
 
             pass_rate=self._rate(
                 item.passed
                 for item in items
+            ),
+
+            error_rate=(
+                error_cases / total
             ),
 
             table_selection_accuracy=(

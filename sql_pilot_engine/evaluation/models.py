@@ -58,6 +58,9 @@ class TextToSQLEvaluation:
 
     passed: bool
 
+    error_message: str | None = None
+
+
 
 @dataclass(
     frozen=True,
@@ -67,8 +70,10 @@ class TextToSQLEvaluationSummary:
     """一组评测结果的聚合指标。"""
 
     total_cases: int
+    error_cases: int
 
     pass_rate: float
+    error_rate: float
 
     table_selection_accuracy: float
     dimension_selection_accuracy: float
@@ -77,3 +82,4 @@ class TextToSQLEvaluationSummary:
 
     pipeline_success_rate: float
     trusted_sql_rate: float
+
