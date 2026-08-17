@@ -46,6 +46,11 @@ from sql_pilot_engine.services.semantic_validation_service import (
     SemanticSQLValidator
 )
 
+from sql_pilot_engine.schemas.text_to_sql import (
+    TextToSQLClarification,
+    TextToSQLRequest,
+)
+
 # ============================================================
 # 1. Demo专用Fake模型
 # ============================================================
@@ -320,6 +325,65 @@ def main() -> None:
     configure_logging(args.log_level)
 
     service = build_text_to_sql_service(use_real_llm=args.use_real_llm)
+
+    session_context: list[str] = []
+
+    while True:
+        response = service.generate(
+            TextToSQLRequest(
+                question=args.question,
+                dialect=args.dialect,
+                session_context=tuple(
+                    session_context
+                ),
+            )
+        )
+
+        if isinstance(
+            response,
+            TextToSQLClarification,
+        ):
+            print()
+            print(
+                "[Agent needs clarification]"
+            )
+
+            print(
+                response.clarification_question
+            )
+
+            if response.reason:
+                print(
+                    "Reason:",
+                    response.reason,
+                )
+
+            answer = input(
+                "\nYour clarification > "
+            ).strip()
+
+            if not answer:
+                print(
+                    "No clarification supplied. "
+                    "Task stopped."
+                )
+                return
+
+            session_context.append(
+                "User clarification: "
+                f"{answer}"
+            )
+
+            print()
+            print(
+                "Clarification added "
+                "to session context."
+            )
+
+            continue
+
+        result = response
+        break
     
     result = service.generate(
         TextToSQLRequest(

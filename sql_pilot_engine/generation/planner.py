@@ -17,6 +17,8 @@ from sql_pilot_engine.generation.llm import (
 
 from sql_pilot_engine.generation.models import (
     QueryPlan,
+    PlanningClarification,
+    QueryPlanningOutcome,
 )
 
 from sql_pilot_engine.generation.prompts import (
@@ -40,7 +42,7 @@ class QueryPlanner:
         question: str,
         semantic_context: str,
         query_context: QueryContext,
-    ) -> QueryPlan:
+    ) -> QueryPlanningOutcome:
         
         prompt = build_planner_prompt(
             question=question,
@@ -63,7 +65,23 @@ class QueryPlanner:
         )
         
         data = json.loads(raw)
-        
+
+        status = data.get("status")
+
+        if status == "need_clarification":
+            return PlanningClarification(
+                clarification_question=(
+                    data["clarification_question"]
+                ),
+                missing_context=tuple(
+                    data.get("missing_context",[],)
+                ),
+                reason=data.get("reason","",),
+            )
+
+        if status == "ready":
+            plan_data = data["plan"]
+            
         return QueryPlan(
             tables=tuple(
                 data.get(

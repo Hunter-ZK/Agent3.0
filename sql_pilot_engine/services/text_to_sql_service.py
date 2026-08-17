@@ -28,6 +28,8 @@ from sql_pilot_engine.generation.sql_generator import (
 from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLRequest,
     TextToSQLResult,
+    TextToSQLResponse,
+    TextToSQLClarification,
 )
 from sql_pilot_engine.workflow.sql_agent_workflow import (
     SQLAgentWorkflow, SQLAgentWorkflowResult
@@ -40,7 +42,9 @@ from sql_pilot_engine.services.semantic_validation_service import (
     SemanticValidationStatus,
     SemanticValidationResult,
 )
-
+from sql_pilot_engine.generation.models import (
+    PlanningClarification,
+)
 
 
 class TextToSQLService:
@@ -99,7 +103,7 @@ class TextToSQLService:
     def generate(
         self,
         request: TextToSQLRequest,
-    ) -> TextToSQLResult:
+    ) -> TextToSQLResponse:
 
         run_id = uuid.uuid4().hex[:8]
 
@@ -157,6 +161,9 @@ class TextToSQLService:
                         question=question,
                         business_knowledge=business_knowledge,
                         verified_sql=verified_sql,
+                        session_context=(
+                            request.session_context
+                        ),
                     )
                 )
                 semantic_context = (
@@ -191,11 +198,42 @@ class TextToSQLService:
                     "planner.start"
                 )
                 
-                query_plan = self.planner.plan(
+                planning_outcome = self.planner.plan(
                     question=question,
                     semantic_context=semantic_context,
                     query_context=query_context,
                 )
+
+                if isinstance(
+                    planning_outcome,
+                    PlanningClarification,
+                ):
+                    logger.info(
+                        "planner.need_clarification "
+                        "missing_context=%d",
+                        len(
+                            planning_outcome
+                            .missing_context
+                        ),
+                    )
+
+                    return TextToSQLClarification(
+                        question=question,
+
+                        clarification_question=(
+                            planning_outcome
+                            .clarification_question
+                        ),
+
+                        missing_context=(
+                            planning_outcome
+                            .missing_context
+                        ),
+
+                        reason=(
+                            planning_outcome.reason
+                        ),
+                    )
 
                 elapsed_ms = int(
                     (
@@ -211,9 +249,9 @@ class TextToSQLService:
                     "dimensions=%d "
                     "metrics=%d "
                     "elapsed_ms=%d",
-                    len(query_plan.tables),
-                    len(query_plan.dimensions),
-                    len(query_plan.metrics),
+                    len(planning_outcome.tables),
+                    len(planning_outcome.dimensions),
+                    len(planning_outcome.metrics),
                     elapsed_ms,
                 )
 
@@ -246,7 +284,7 @@ class TextToSQLService:
                     generated = (
                         self.sql_generator.generate(
                             question=question,
-                            plan=query_plan,
+                            plan=planning_outcome,
                             semantic_context=semantic_context,
                             query_context=query_context,
                             dialect=request.dialect,
@@ -334,7 +372,7 @@ class TextToSQLService:
                         self.semantic_validator.validate(
                             question=question,
                             sql=candidate_sql,
-                            plan=query_plan,
+                            plan=planning_outcome,
                             semantic_context=(
                                 semantic_context
                             ),
@@ -440,7 +478,7 @@ class TextToSQLService:
 
                 result = TextToSQLResult(
                     question=question,
-                    query_plan=query_plan,
+                    query_plan=planning_outcome,
                     generated_sql=generated.sql,
                     trusted_sql=trusted_sql,
                     success=validation.success,

@@ -15,6 +15,15 @@ def render_query_context(
 
     sections: list[str] = []
 
+    if context.session_context:
+        sections.append(
+            "## Session Context"
+        )
+
+        sections.extend(
+            context.session_context
+        )
+
     if context.business_knowledge:
         sections.append(
             "## Business Knowledge"
@@ -55,6 +64,10 @@ def build_planner_prompt(
     return f"""
 You are a datawarehouse query planner.
 
+Your first responsibility is to determine whether
+the supplied context is sufficient to plan a
+reliable SQL query.
+
 User question:
 {question}
 
@@ -64,29 +77,49 @@ Semantic model:
 Retrieved context:
 {rag_context}
 
+Rules:
+
+- Use the Semantic Model, Retrieved Context and
+  Session Context together.
+
+- Do not invent business definitions, table mappings,
+  runtime parameters, date conventions or other
+  required business knowledge.
+
+- Do not ask the user for information that can already
+  be reliably derived from the supplied context.
+
+- If required information is missing or ambiguous,
+  ask one concise clarification question.
+
+- Only return "ready" when there is enough information
+  to produce a reliable query plan.
+
 Return JSON only.
 
-Schema:
+If context is sufficient:
 {{
-  "tables": ["table_name"],
-  "dimensions": ["column_name"],
-  "metrics": ["metric_name"],
-  "filters": ["condition"],
-  "group_by": ["column_name"]
-  "requirements",["requirements"]
+  "status": "ready",
+  "plan": {{
+    "tables": ["table_name"],
+    "dimensions": ["column_name"],
+    "metrics": ["metric_name"],
+    "filters": ["condition"],
+    "group_by": ["column_name"],
+    "requirements":["requirements"]
+  }}
 }}
 
-Planning rules:
+If context is insufficient:
 
-- Preserve every material requirement from the original question.
-- Use tables, dimensions, metrics, filters and group_by
-  for requirements that fit those structures.
-- Put requirements that cannot be fully represented by those
-  fields into "requirements".
-- Do not silently omit requirements such as time comparison,
-  ranking, Top N, ratio, trend or other analytical operations.
-- Do not invent requirements that are not present in the question
-  or context.
+{{
+  "status": "need_clarification",
+  "clarification_question": "question to ask the user",
+  "missing_context": [
+    "missing information"
+  ],
+  "reason": "why this information is required"
+}}
 """.strip()
 
 def build_sql_prompt(

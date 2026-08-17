@@ -16,6 +16,28 @@ class QueryPlan:
     
 
 @dataclass(frozen=True)
+class PlanningClarification:
+
+    clarification_question: str
+
+    missing_context: tuple[str, ...] = ()
+
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        if not (
+            self.clarification_question.strip()
+        ):
+            raise ValueError(
+                "clarification_question "
+                "cannot be empty"
+            )
+
+QueryPlanningOutcome = (
+    QueryPlan | PlanningClarification
+)
+
+@dataclass(frozen=True)
 class GeneratedSQL:
     
     sql: str

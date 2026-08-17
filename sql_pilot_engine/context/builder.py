@@ -21,6 +21,7 @@ class QueryContext:
         ...
     ]
 
+    session_context: tuple[str, ...] = ()
 
 class QueryContextBuilder:
 
@@ -34,6 +35,7 @@ class QueryContextBuilder:
         verified_sql: list[
             RetrievedDocument
         ],
+        session_context: tuple[str, ...] = (),
     ) -> QueryContext:
 
         return QueryContext(
@@ -44,4 +46,5 @@ class QueryContextBuilder:
             verified_sql=tuple(
                 verified_sql
             ),
+            session_context=session_context,
         )
