@@ -27,4 +27,14 @@ class TextToSQLResult:
     trusted_sql: str | None
     success: bool
     validation_status: str
-    
+    semantic_validation_status: (
+        str | None
+    ) = None
+
+    semantic_missing_requirements: (
+        tuple[str, ...]
+    ) = ()
+
+    semantic_issues: (
+        tuple[str, ...]
+    ) = ()

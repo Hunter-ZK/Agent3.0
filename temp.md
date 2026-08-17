@@ -1697,14 +1697,26 @@ sqlanalysisadapter保持不变，修改parse_result、facts、scope、lineage的
 
 
 
+<<<<<<< Updated upstream
 # Agent3.0 / DataAgent 工作交接文档
 
 ## 一、文档用途
+=======
+
+
+
+
+
+Agent3.0 / DataAgent 工作交接文档
+
+一、文档用途
+>>>>>>> Stashed changes
 
 本文档用于将当前 Agent3.0 / DataAgent 项目的开发、教学、架构设计和进度管理工作完整交接给下一次新开启对话中的 AI。
 
 新 AI 阅读本文档后，应结合 GitHub 仓库：
 
+<<<<<<< Updated upstream
 `https://github.com/Hunter-ZK/Agent3.0`
 
 直接接续当前开发与训练工作。
@@ -1720,12 +1732,33 @@ sqlanalysisadapter保持不变，修改parse_result、facts、scope、lineage的
 ---
 
 # 二、用户背景与项目目标
+=======
+"https://github.com/Hunter-ZK/Agent3.0"
+
+直接接续当前开发与训练工作。
+
+不要从零重新设计项目，不要重复已经解决的架构争论，也不要仅根据README判断真实进度。
+
+新对话第一次接续时，可以进行一次 GitHub "main" 代码级扫描，以确认本文档与最新代码是否一致。
+
+完成首次校准后，除非用户明确要求：
+
+«默认用户已经完成上一轮对话要求的代码修改，不要每轮重新扫描GitHub。»
+
+---
+
+二、用户背景与项目目标
+>>>>>>> Stashed changes
 
 用户不是传统软件工程师，而是具有较强数仓、SQL、DataWorks、MaxCompute、产品设计和项目管理背景的产品/项目负责人。
 
 用户正在亲自开发 Agent3.0，目标不是简单获得一个AI生成的代码项目，而是：
 
+<<<<<<< Updated upstream
 > **通过真实项目开发，最终具备独立理解、设计、修改、维护和继续开发完整DataAgent的能力。**
+=======
+«通过真实项目开发，最终具备独立理解、设计、修改、维护和继续开发完整DataAgent的能力。»
+>>>>>>> Stashed changes
 
 因此开发必须同时服务两个目标：
 
@@ -1734,11 +1767,19 @@ sqlanalysisadapter保持不变，修改parse_result、facts、scope、lineage的
 
 禁止采用：
 
+<<<<<<< Updated upstream
 > AI一次性生成大量代码 → 用户机械复制 → 项目虽然能跑但用户不知道为什么。
 
 ---
 
 # 三、主开发AI的职责
+=======
+«AI一次性生成大量代码 → 用户机械复制 → 项目虽然能跑但用户不知道为什么。»
+
+---
+
+三、主开发AI的职责
+>>>>>>> Stashed changes
 
 主开发窗口承担：
 
@@ -1749,6 +1790,7 @@ sqlanalysisadapter保持不变，修改parse_result、facts、scope、lineage的
 5. Stage Gate设计。
 6. Bug分析和重构。
 7. 代码开发过程中同步讲解：
+<<<<<<< Updated upstream
 
    * 为什么要做；
    * 位于架构哪层；
@@ -1901,6 +1943,46 @@ sqlanalysisadapter保持不变，修改parse_result、facts、scope、lineage的
 先告诉用户：
 
 ```text
+=======
+   - 为什么要做；
+   - 位于架构哪层；
+   - 输入输出是什么；
+   - 谁调用谁；
+   - 为什么这样设计；
+   - 替代方案是什么；
+   - 当前实现有哪些刻意保留的限制。
+
+主开发AI不负责进行问答考试。
+
+用户已经明确：
+
+«主窗口不要持续出题。
+问答、知识诊断和复习由另一个专门的学习窗口负责。»
+
+因此主窗口只需：
+
+«高密度推进工作 + 高质量解释。»
+
+“提高学习密度”不是多出题，而是：
+
+«每轮推进更多实质性项目工作，同时把关键技术讲透。»
+
+
+---
+
+五、用户偏好的开发教学方式
+
+这是后续必须长期遵守的核心规则。
+
+1. 每个阶段先说明架构位置
+
+不要直接开始：
+
+«新建A.py、新建B.py。»
+
+先告诉用户：
+
+>>>>>>> Stashed changes
 整个DataAgent在哪里
 ↓
 当前阶段在哪里
@@ -1910,7 +1992,10 @@ sqlanalysisadapter保持不变，修改parse_result、facts、scope、lineage的
 当前能力为谁服务
 ↓
 下一步是什么
+<<<<<<< Updated upstream
 ```
+=======
+>>>>>>> Stashed changes
 
 用户曾因为项目文件和模块快速增加而出现明显失控感。
 
@@ -1918,22 +2003,33 @@ sqlanalysisadapter保持不变，修改parse_result、facts、scope、lineage的
 
 ---
 
+<<<<<<< Updated upstream
 ## 2. 一个阶段只引入一个主要新能力
 
 曾经出现过一次节奏过快：
 
 ```text
+=======
+2. 一个阶段只引入一个主要新能力
+
+曾经出现过一次节奏过快：
+
+>>>>>>> Stashed changes
 RAG
 + Vector DB
 + Text-to-SQL
 + LangGraph
 + Evaluation
+<<<<<<< Updated upstream
 ```
+=======
+>>>>>>> Stashed changes
 
 连续堆叠。
 
 用户明确反馈：
 
+<<<<<<< Updated upstream
 > 进度太快，已经有点接受不良。
 
 因此后来冻结新原则：
@@ -1947,11 +2043,25 @@ RAG
 ↓
 再学LangGraph
 ```
+=======
+«进度太快，已经有点接受不良。»
+
+因此后来冻结新原则：
+
+«一个阶段只引入一个主要架构概念，但该阶段内部可以一次把工作做完整。»
+
+例如：
+
+先把Text-to-SQL普通Python链跑通
+↓
+再学LangGraph
+>>>>>>> Stashed changes
 
 而不是同时第一次学习Planner、Generator、State、Node、Edge。
 
 ---
 
+<<<<<<< Updated upstream
 ## 3. 保持高工作密度，但不要碎片化
 
 用户不喜欢：
@@ -1964,6 +2074,19 @@ RAG
 正确方式：
 
 ```text
+=======
+3. 保持高工作密度，但不要碎片化
+
+用户不喜欢：
+
+- 一轮只改3行；
+- 每次只讲一个小Python语法；
+- 一直停留在局部；
+- 工作进展过慢。
+
+正确方式：
+
+>>>>>>> Stashed changes
 一轮完成一个小Stage
 +
 同步讲解几个核心技术点
@@ -1971,6 +2094,7 @@ RAG
 测试
 +
 Demo
+<<<<<<< Updated upstream
 ```
 
 ---
@@ -2011,12 +2135,56 @@ Demo
 ---
 
 ## 5. 小修改给位置，不整文件替换
+=======
+
+---
+
+4. 代码修改分类
+
+长期采用：
+
+【必须理解后手敲】
+
+核心架构和领域代码，例如：
+
+- DTO；
+- Protocol；
+- Workflow；
+- State；
+- Planner；
+- Context；
+- 安全判断；
+- Agent编排。
+
+【理解后修改】
+
+- Adapter；
+- Provider；
+- Service；
+- Prompt；
+- Integration Glue。
+
+【可直接复制】
+
+- 测试；
+- Demo；
+- 配置；
+- 重复DTO；
+- Boilerplate。
+
+---
+
+5. 小修改给位置，不整文件替换
+>>>>>>> Stashed changes
 
 如果只是局部修改：
 
 应明确：
 
+<<<<<<< Updated upstream
 ```text
+=======
+>>>>>>> Stashed changes
 文件：
 xxx.py
 
@@ -2025,7 +2193,10 @@ xxx
 
 改成：
 xxx
+<<<<<<< Updated upstream
 ```
+=======
+>>>>>>> Stashed changes
 
 不要把整个项目重新打包。
 
@@ -2033,6 +2204,7 @@ xxx
 
 ---
 
+<<<<<<< Updated upstream
 # 六、冻结的V1产品边界
 
 当前V1只保留四项核心成果：
@@ -2040,6 +2212,14 @@ xxx
 ## 1. 可信SQL
 
 ```text
+=======
+六、冻结的V1产品边界
+
+当前V1只保留四项核心成果：
+
+1. 可信SQL
+
+>>>>>>> Stashed changes
 SQL
 → Analysis
 → Review
@@ -2047,17 +2227,24 @@ SQL
 → Re-review
 → Critic
 → Trusted SQL
+<<<<<<< Updated upstream
 ```
 
 ## 2. Text-to-SQL智能问数
 
 ```text
+=======
+
+2. Text-to-SQL智能问数
+
+>>>>>>> Stashed changes
 自然语言
 → Context
 → Plan
 → SQL Generation
 → Validation
 → Trusted SQL
+<<<<<<< Updated upstream
 ```
 
 ## 3. 窄版数仓开发
@@ -2065,17 +2252,28 @@ SQL
 后续：
 
 ```text
+=======
+
+3. 窄版数仓开发
+
+后续：
+
+>>>>>>> Stashed changes
 自然语言开发需求
 → Dev Plan
 → DDL
 → ETL
 → SQL Validation
+<<<<<<< Updated upstream
 ```
+=======
+>>>>>>> Stashed changes
 
 只针对简单单目标表开发。
 
 暂时不扩展成完整企业级数仓开发平台。
 
+<<<<<<< Updated upstream
 ## 4. Agent / Skill / Evaluation基础能力
 
 后续包括：
@@ -2092,6 +2290,23 @@ SQL
 # 七、冻结的总体架构
 
 ```text
+=======
+4. Agent / Skill / Evaluation基础能力
+
+后续包括：
+
+- LangGraph；
+- Tool Registry；
+- Skill Registry；
+- Golden Dataset；
+- Evaluation；
+- Trace。
+
+---
+
+七、冻结的总体架构
+
+>>>>>>> Stashed changes
 User
  ↓
 Agent Runtime
@@ -2107,6 +2322,7 @@ SQL Validation
 Execution
  ↓
 Result
+<<<<<<< Updated upstream
 ```
 
 横向能力：
@@ -2151,11 +2367,54 @@ Skill Registry
 SQL底层明确冻结：
 
 ```text
+=======
+
+横向能力：
+
+Evaluation
+Tool Registry
+Skill Registry
+
+两个重点深挖方向：
+
+核心一：Agent编排
+
+重点：
+
+- LangGraph；
+- State；
+- Node；
+- Conditional Routing；
+- Retry；
+- HITL；
+- Supervisor；
+- Subgraph。
+
+核心二：Context Intelligence
+
+重点：
+
+- Semantic Model；
+- Metadata；
+- RAG；
+- Vector Retrieval；
+- Verified SQL；
+- Context Engineering；
+- Schema Linking。
+
+---
+
+八、非常重要的SQL技术ADR
+
+SQL底层明确冻结：
+
+>>>>>>> Stashed changes
 SQLGlot
 ↓
 薄 SQLAnalysisAdapter
 ↓
 Agent3.0项目DTO
+<<<<<<< Updated upstream
 ```
 
 禁止重新走：
@@ -2171,21 +2430,43 @@ Agent3.0项目DTO
 * `scope.py`
 * `join.py`
 * `lineage.py`
+=======
+
+禁止重新走：
+
+自己写Scope
+自己写Join Analyzer
+自己写Lineage Engine
+
+项目曾经实现：
+
+- "scope.py"
+- "join.py"
+- "lineage.py"
+>>>>>>> Stashed changes
 
 后来确认这属于重复造SQLGlot的轮子，已经决定删除/停止正式依赖。
 
 理由：
 
+<<<<<<< Updated upstream
 > 用户的学习目标是DataAgent，而不是SQL解析器作者。
 
 应该：
 
 ```text
+=======
+«用户的学习目标是DataAgent，而不是SQL解析器作者。»
+
+应该：
+
+>>>>>>> Stashed changes
 成熟SQL语义算法
 → SQLGlot负责
 
 Agent3.0
 → 调用、封装、业务化
+<<<<<<< Updated upstream
 ```
 
 ---
@@ -2219,11 +2500,42 @@ IssueAction
 `IssueAction`：
 
 > 系统下一步做什么。
+=======
+
+---
+
+九、SQL Validation的重要已确认原则
+
+必须长期保持。
+
+1. IssueAction驱动Workflow
+
+Workflow不要依赖：
+
+rule_id字符串判断
+
+应依赖：
+
+IssueAction
+
+---
+
+2. Severity与Action不同
+
+"severity"：
+
+«问题风险有多大。»
+
+"IssueAction"：
+
+«系统下一步做什么。»
+>>>>>>> Stashed changes
 
 二者不可混淆。
 
 ---
 
+<<<<<<< Updated upstream
 ## 3. Fix后必须Re-review
 
 绝对不能：
@@ -2236,11 +2548,23 @@ Fix
 必须：
 
 ```text
+=======
+3. Fix后必须Re-review
+
+绝对不能：
+
+Fix
+→ 直接相信Fixed SQL
+
+必须：
+
+>>>>>>> Stashed changes
 Fix
 ↓
 Re-review
 ↓
 Critic
+<<<<<<< Updated upstream
 ```
 
 ---
@@ -2258,34 +2582,63 @@ Review属于SQL A
 ```text
 SQL B
 ```
+=======
+
+---
+
+4. reviewed_sql是版本一致性约束
+
+如果：
+
+Review属于SQL A
+
+则不能拿来Fix：
+
+SQL B
+>>>>>>> Stashed changes
 
 否则必须拒绝。
 
 ---
 
+<<<<<<< Updated upstream
 ## 5. Retry使用最新SQL和最新Review
+=======
+5. Retry使用最新SQL和最新Review
+>>>>>>> Stashed changes
 
 不能一直使用第一次Review。
 
 正确：
 
+<<<<<<< Updated upstream
 ```text
+=======
+>>>>>>> Stashed changes
 SQL A
 → Review A
 → Fix
 → SQL B
 → Review B
 → Retry Fix必须使用Review B
+<<<<<<< Updated upstream
 ```
 
 ---
 
 ## 6. Explain是可选增强
+=======
+
+---
+
+6. Explain是可选增强
+>>>>>>> Stashed changes
 
 Explain失败不能阻断确定性的SQL Review能力。
 
 ---
 
+<<<<<<< Updated upstream
 ## 7. Metadata状态必须区分
 
 ```text
@@ -2313,6 +2666,28 @@ NOT_FOUND
 当前逻辑上已完成：
 
 ```text
+=======
+7. Metadata状态必须区分
+
+FOUND
+NOT_FOUND
+ERROR
+
+Provider查询失败：
+
+ERROR
+
+绝不能当成：
+
+NOT_FOUND
+
+---
+
+十、当前SQL Validation状态
+
+当前逻辑上已完成：
+
+>>>>>>> Stashed changes
 SQLAnalysisAdapter
 SQLFacts
 ReviewService
@@ -2322,6 +2697,7 @@ FixService
 Re-review
 CriticService
 SQLAgentWorkflow
+<<<<<<< Updated upstream
 ```
 
 前一阶段已经要求完成真正 E2E：
@@ -2343,12 +2719,30 @@ DROP
 ### 可确定自动修复SQL
 
 ```text
+=======
+
+前一阶段已经要求完成真正 E2E：
+
+正常SQL
+
+SELECT
+→ no_issue
+
+危险SQL
+
+DROP
+→ BLOCK
+
+可确定自动修复SQL
+
+>>>>>>> Stashed changes
 INSERT OVERWRITE xxx
 → AUTO_FIX
 → INSERT OVERWRITE TABLE xxx
 → Re-review
 → Critic
 → fix_verified
+<<<<<<< Updated upstream
 ```
 
 用户已表示完成上一轮闭环工作。
@@ -3423,3 +3817,185 @@ Demo：
 目前最重要的任务不是继续扩宽功能，而是：
 
 > **把 Text-to-SQL 第一条纵向产品链真正跑稳，然后使用真实LLM和Evaluation证明它有多准确，再进入LangGraph编排。**
+=======
+
+用户已表示完成上一轮闭环
+
+
+
+
+
+
+【表1】
+
+表名：dwd_hd_201_cldwdk
+表用途：绿色单位贷款的明细宽表，一条数据是一笔贷款存量情况
+
+字段：
+1. 字段名：fin_org_branch_code
+   类型：STRING
+   含义：该笔贷款的经办金融机构统一社会信用代码
+   常见业务叫法：经办机构代码
+
+1. 字段名：fin_org_branch_area_code
+   类型：STRING
+   含义：该笔贷款的经办金融机构的所在地
+   常见业务叫法：经办机构所在地、地区
+
+1. 字段名：green_loan_type_code
+   类型：STRING
+   含义：该笔贷款属于哪一类绿色贷款
+   常见业务叫法：绿色贷款类型
+
+
+2. 字段名：loan_bal_rmb
+   类型：DECIMAL(22,2)
+   含义：该笔贷款余额
+   常见业务叫法：余额
+
+3. 字段名：rate
+   类型：DECIMAL(15,5)
+   含义：该笔贷款的存量利率
+   常见业务叫法：利率
+
+4. 字段名：loan_iou_no
+   类型：STRING
+   含义：贷款借据号
+   常见业务叫法：借据号
+
+5. 字段名：ent_code
+   类型：STRING
+   含义：借款人统一社会信用代码
+   常见业务叫法：企业代码、借款人代码
+
+6. 字段名：loan_grant_date
+   类型：STRING
+   含义：该笔贷款的发放日期
+   常见业务叫法：贷款发放日期
+
+7. 字段名：loan_due_date
+   类型：STRING
+   含义：该笔贷款的到期日期
+   常见业务叫法：贷款到期日期
+
+8. 字段名：fin_org_code
+   类型：STRING
+   含义：该笔贷款所属的金融法人机构统一社会信用代码
+   常见业务叫法：金融机构代码
+
+9. 字段名：fin_org_type_code
+   类型：STRING
+   含义：该笔贷款所属的金融法人机构类型
+   常见业务叫法：金融机构类型
+   
+
+10. 字段名：data_date
+   类型：STRING
+   含义：该笔数据的报送日期
+   常见业务叫法：数据日期
+
+11. 字段名：dt
+   类型：STRING
+   含义：该笔数据的报送日期分区字段
+   常见业务叫法：数据日期
+
+
+【指标】
+
+指标名：loan_bal_rmb
+业务中文名：贷款余额、余额、存量贷款余额
+
+计算方式：sum()
+
+来源表：
+
+相关字段：loan_bal_rmb
+
+业务口径：统计某期的贷款余额，跨期不可相加
+
+业务中还会怎么叫它：
+
+【指标】
+
+指标名：ent_num
+业务中文名：获贷企业数、获贷企业数量、企业数量
+
+计算方式：COUNT(DISTINCT )
+
+来源表：
+
+相关字段：ent_code
+
+业务口径：去重统计获得贷款的企业数量，不可加总
+
+业务中还会怎么叫它：
+
+【指标】
+
+指标名：rate
+业务中文名：利率、加权利率、存量利率
+
+计算方式：SUM(loan_bal_rmb * rate) / SUM(loan_bal_rmb)
+
+来源表：
+
+相关字段：rate
+
+业务口径：计算加权利率
+
+业务中还会怎么叫它：
+
+
+1. 金额统计一般都统计当期的存量，不能跨期加总
+
+2. 统计客户数要记得去重
+
+3. 如果指定了贷款企业类型，需要加入对应条件
+
+
+
+问题：
+统计下本期高新技术企业的贷款余额
+
+SQL：
+SELECT SUM(loan_bal_rmb) AS loan_bal_rmb, dt
+FROM odps_prd_dwd.dwd_hd_101_cldwdk
+WHERE is_high_tech_ent_code = '1'
+AND dt = "${p_month_yyyymm}"
+GROUP BY dt
+
+问题：
+统计下本期科技中小企业的获贷企业数
+
+SQL：
+SELECT COUNT(DISTINCT ent_code) AS ent_num,dt
+FROM odps_prd_dwd.dwd_hd_101_cldwdk
+WHERE is_sci_medium_ent_code = '1'
+AND dt = "${p_month_yyyymm}"
+GROUP BY dt
+
+
+问题：
+按机构类型统计本期科技贷款情况
+
+SQL：
+SELECT 
+    fin_org_type_code,
+    SUM(loan_bal_rmb) AS loan_bal_rmb, 
+    SUM(loan_bal_rmb * rate) AS SUM(loan_bal_rmb) AS rate,
+    COUNT(DISTINCT ent_code) AS ent_num,
+    dt
+FROM odps_prd_dwd.dwd_hd_101_cldwdk
+WHERE is_sci_medium_ent_code = '1'
+AND dt = "${p_month_yyyymm}"
+GROUP BY fin_org_type_code,dt
+
+
+按地区统计科技贷款情况
+分机构类型统计高新技术企业贷款情况
+统计今年到期的科技贷款余额
+统计本期存量科技贷款的环比、同比
+
+
+以上是我整理的一张数据表的内容，我发现有个问题，就是我数仓会有很多数据表存在相似的指标字段，比如贷款余额、利率等，那么我提问的时候一定要明确是我要找哪张业务表，否则我觉得无法统计的，你看如何改进。
+>>>>>>> Stashed changes

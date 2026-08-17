@@ -38,7 +38,11 @@ class SemanticModelLoader:
                         synonyms=tuple(column.get("synonyms",[])),
                     )
                     for column in table["columns"]
-                )
+                ),
+                synonyms=tuple(
+                    table.get("synonms",[],)
+                ),
+                grain=table.get("grain","",),
             )
             for table in raw.get("tables",[])
         )

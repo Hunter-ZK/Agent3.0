@@ -12,7 +12,7 @@ class QueryPlan:
     metrics: tuple[str, ...]
     filters: tuple[str, ...] = ()
     group_by: tuple[str, ...] = ()
-    
+    requirements: tuple[str, ...] = ()
     
 
 @dataclass(frozen=True)

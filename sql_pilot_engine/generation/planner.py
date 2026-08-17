@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import json
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from sql_pilot_engine.context.builder import (
     QueryContext,
 )
@@ -44,8 +48,18 @@ class QueryPlanner:
             query_context=query_context,
         )
         
+        logger.debug(
+            "planner.prompt\n%s",
+            prompt,
+        )
+        
         raw = self.model.generate(
             prompt=prompt
+        )
+        
+        logger.debug(
+            "planner.response\n%s",
+            raw,
         )
         
         data = json.loads(raw)
@@ -81,4 +95,10 @@ class QueryPlanner:
                     []
                 )
             ),
+            requirements=tuple(
+                data.get(
+                    "requirements",
+                    [],
+                )
+            )
         )

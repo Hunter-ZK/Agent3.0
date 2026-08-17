@@ -189,6 +189,7 @@ class TextToSQLEvaluationRunner:
             table_selection_correct=False,
             dimension_selection_correct=False,
             metric_selection_correct=False,
+            filter_selection_correct=False,
             group_by_correct=False,
 
             pipeline_success=False,

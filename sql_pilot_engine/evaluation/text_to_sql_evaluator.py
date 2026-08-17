@@ -33,6 +33,8 @@ def _normalize_names(
         for value in values 
         if value.strip()
     )
+    
+
 
 class TextToSQLEvaluator:
 
@@ -53,6 +55,7 @@ class TextToSQLEvaluator:
         table_selection_correct = _normalize_names(plan.tables) == _normalize_names(case.expected_tables)
         dimension_selection_correct = _normalize_names(plan.dimensions) == _normalize_names(case.expected_dimensions)
         metric_selection_correct = _normalize_names(plan.metrics) == _normalize_names(case.expected_metrics)
+        filter_selection_correct = _normalize_names(plan.filters) == _normalize_names(case.expected_filters)
         group_by_correct = _normalize_names(plan.group_by) == _normalize_names(case.expected_group_by)
 
         trusted_sql_available = bool(actual.trusted_sql and actual.trusted_sql.strip())
@@ -64,6 +67,7 @@ class TextToSQLEvaluator:
                 table_selection_correct,
                 dimension_selection_correct,
                 metric_selection_correct,
+                filter_selection_correct,
                 group_by_correct,
                 actual.success,
                 trusted_sql_expectation_met,
@@ -80,6 +84,9 @@ class TextToSQLEvaluator:
             ),
             metric_selection_correct=(
                 metric_selection_correct
+            ),
+            filter_selection_correct=(
+                filter_selection_correct
             ),
             group_by_correct=(
                 group_by_correct
@@ -153,6 +160,11 @@ class TextToSQLEvaluator:
                     item.metric_selection_correct
                     for item in items
                 )
+            ),
+
+            filter_accuracy=self._rate(
+                item.filter_selection_correct
+                for item in items
             ),
 
             group_by_accuracy=self._rate(

@@ -16,9 +16,13 @@ class SemanticModelRenderer:
         
         for table in model.tables:
             
+            synonyms = ", ".join(table.synonyms)
+            
             lines.append(
                 f"TABLE {table.name}: "
                 f"{table.description}"
+                f"grain={table.grain}; "
+                f"synonyms=[{synonyms}]"
             )
             
             for column in table.columns:

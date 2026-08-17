@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from sql_pilot_engine.context.builder import (
     QueryContext,
 )
@@ -35,6 +39,7 @@ class SQLGenerator:
         semantic_context: str,
         query_context: QueryContext,
         dialect: str="maxcompute",
+        revision_feedback: tuple[str, ...] = (),
     ) -> GeneratedSQL:
         
         prompt = build_sql_prompt(
@@ -43,10 +48,21 @@ class SQLGenerator:
             semantic_context=semantic_context,
             query_context=query_context,
             dialect=dialect,
+            revision_feedback=revision_feedback,
         )
-        
+
+        logger.debug(
+            "generator.prompt\n%s",
+            prompt,
+        )
+                
         sql = (
             self.model.generate(prompt).strip()
+        )
+        
+        logger.debug(
+            "generator.response\n%s",
+            sql,
         )
         
         return GeneratedSQL(

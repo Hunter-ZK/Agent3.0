@@ -16,6 +16,7 @@ class GoldenTextToSQLCase:
     expected_tables: tuple[str, ...]
     expected_dimensions: tuple[str, ...] = ()
     expected_metrics: tuple[str, ...] = ()
+    expected_filters: tuple[str, ...] = ()
     expected_group_by: tuple[str, ...] = ()
 
     expected_trusted_sql: bool = True
@@ -48,6 +49,7 @@ class TextToSQLEvaluation:
     table_selection_correct: bool
     dimension_selection_correct: bool
     metric_selection_correct: bool
+    filter_selection_correct: bool
     group_by_correct: bool
 
     pipeline_success: bool
@@ -78,6 +80,7 @@ class TextToSQLEvaluationSummary:
     table_selection_accuracy: float
     dimension_selection_accuracy: float
     metric_selection_accuracy: float
+    filter_accuracy: float
     group_by_accuracy: float
 
     pipeline_success_rate: float

@@ -39,6 +39,12 @@ from sql_pilot_engine.llm.deepseek_client import (
 from sql_pilot_engine.observability.logging import (
     configure_logging,
 )
+from sql_pilot_engine.context.semantic.loan_domain import (
+    LOAN_DOMAIN_CONTEXT_DOCUMENTS,
+)
+from sql_pilot_engine.services.semantic_validation_service import (
+    SemanticSQLValidator
+)
 
 # ============================================================
 # 1. Demo专用Fake模型
@@ -68,19 +74,22 @@ class FakePlannerModel:
     ) -> str:
         return """
         {
-          "tables": [
-            "dwd_order_detail"
-          ],
-          "dimensions": [
-            "user_id"
-          ],
-          "metrics": [
-            "total_order_amount"
-          ],
-          "filters": [],
-          "group_by": [
-            "user_id"
-          ]
+        "tables": [
+            "dwd_hd_101_cldwdk"
+        ],
+        "dimensions": [
+            "dt"
+        ],
+        "metrics": [
+            "tech_loan_balance"
+        ],
+        "filters": [
+            "is_high_tech_ent_loan_code = '1'",
+            "dt = '${p_month_yyyymm}'"
+        ],
+        "group_by": [
+            "dt"
+        ]
         }
         """
 
@@ -94,10 +103,12 @@ class FakeSQLModel:
     ) -> str:
         return """
         SELECT
-            user_id,
-            SUM(order_amount) AS total_order_amount
-        FROM dwd_order_detail
-        GROUP BY user_id
+            SUM(loan_bal_rmb) AS loan_bal_rmb,
+            dt
+        FROM dwd_hd_101_cldwdk
+        WHERE is_high_tech_ent_loan_code = '1'
+        AND dt = '${p_month_yyyymm}'
+        GROUP BY dt
         """
 
 
@@ -157,41 +168,7 @@ def build_text_to_sql_service(use_real_llm: bool) -> TextToSQLService:
     # --------------------------------------------------------
 
     vector_store.add(
-        [
-            ContextDocument(
-                document_id="knowledge_order_amount",
-                kind=(
-                    ContextDocumentKind
-                    .BUSINESS_KNOWLEDGE
-                ),
-                text=(
-                    "订单金额指订单实际成交金额，"
-                    "对应字段为 "
-                    "dwd_order_detail.order_amount。"
-                ),
-                metadata={
-                    "domain": "order",
-                },
-            ),
-            ContextDocument(
-                document_id="verified_user_amount",
-                kind=(
-                    ContextDocumentKind
-                    .VERIFIED_SQL
-                ),
-                text=(
-                    "问题：统计每个用户订单总金额。\n"
-                    "SQL："
-                    "SELECT user_id, "
-                    "SUM(order_amount) AS total_order_amount "
-                    "FROM dwd_order_detail "
-                    "GROUP BY user_id"
-                ),
-                metadata={
-                    "domain": "order",
-                },
-            ),
-        ]
+        LOAN_DOMAIN_CONTEXT_DOCUMENTS
     )
 
     # --------------------------------------------------------
@@ -205,7 +182,7 @@ def build_text_to_sql_service(use_real_llm: bool) -> TextToSQLService:
         / "sql_pilot_engine"
         / "context"
         / "semantic"
-        / "sample_model.json"
+        / "loan_model.json"
     )
 
     semantic_model = SemanticModelLoader().load(
@@ -217,9 +194,15 @@ def build_text_to_sql_service(use_real_llm: bool) -> TextToSQLService:
 
         planner_model = model
         sql_model = model
+        semantic_validator = (
+            SemanticSQLValidator(
+                model = model
+            )
+        )
     else:
         planner_model = FakePlannerModel()
         sql_model = FakeSQLModel()
+        semantic_model = None
 
     # --------------------------------------------------------
     # 组装TextToSQLService
@@ -247,6 +230,8 @@ def build_text_to_sql_service(use_real_llm: bool) -> TextToSQLService:
         sql_generator=SQLGenerator(
             model=sql_model
         ),
+        
+        semantic_validator=semantic_validator,
 
         validation_workflow=build_workflow(
             max_retries=0
@@ -262,7 +247,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--question",
         type=str,
-        default="统计这个月订单总金额",
+        default="统计下本期高新技术企业的贷款余额",
         help="用户查询的业务问题",
     )
     parser.add_argument(
@@ -335,7 +320,7 @@ def main() -> None:
     configure_logging(args.log_level)
 
     service = build_text_to_sql_service(use_real_llm=args.use_real_llm)
-
+    
     result = service.generate(
         TextToSQLRequest(
             question=args.question,
@@ -390,8 +375,27 @@ def main() -> None:
         "success:",
         result.success,
     )
+    
+    print(
+        "\n[5] Semantic Validation"
+    )
 
-    print("\n[5] Trusted SQL")
+    print(
+        "status:",
+        result.semantic_validation_status,
+    )
+
+    print(
+        "missing requirements:",
+        result.semantic_missing_requirements,
+    )
+
+    print(
+        "issues:",
+        result.semantic_issues,
+    )
+
+    print("\n[6] Trusted SQL")
 
     if result.trusted_sql is None:
         print(

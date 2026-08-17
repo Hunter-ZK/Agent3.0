@@ -18,6 +18,9 @@ class SemanticTable:
     description: str
     columns: tuple[SemanticColumn, ...]
     
+    synonyms: tuple[str, ...] = ()
+    grain: str = ""
+    
     
 @dataclass(frozen=True)
 class SemanticMetric:

@@ -73,7 +73,20 @@ Schema:
   "metrics": ["metric_name"],
   "filters": ["condition"],
   "group_by": ["column_name"]
+  "requirements",["requirements"]
 }}
+
+Planning rules:
+
+- Preserve every material requirement from the original question.
+- Use tables, dimensions, metrics, filters and group_by
+  for requirements that fit those structures.
+- Put requirements that cannot be fully represented by those
+  fields into "requirements".
+- Do not silently omit requirements such as time comparison,
+  ranking, Top N, ratio, trend or other analytical operations.
+- Do not invent requirements that are not present in the question
+  or context.
 """.strip()
 
 def build_sql_prompt(
@@ -83,12 +96,32 @@ def build_sql_prompt(
     semantic_context: str,
     query_context: QueryContext,
     dialect: str,
+    revision_feedback: tuple[str, ...] = (),
 ) -> str:
     
     rag_context = render_query_context(
         query_context
     )
     
+    feedback_text = ""
+    
+    if revision_feedback:
+        feedback_lines = "\n".join(
+            f"- {item}"
+            for item in revision_feedback
+        )
+
+        feedback_text = f"""
+        Previous SQL was rejected.
+
+        Revision feedback:
+        {feedback_lines}
+
+        Generate a revised SQL that addresses every
+        feedback item while still satisfying the
+        original user question and business context.
+        """.strip()
+
     return f"""
 Generate one SQL statement.
 
@@ -104,6 +137,7 @@ dimensions={plan.dimensions}
 metrics={plan.metrics}
 filters={plan.filters}
 group_by={plan.group_by}
+requirements={plan.requirements}
 
 Semantic model:
 {semantic_context}
@@ -111,6 +145,10 @@ Semantic model:
 Retrieved context:
 {rag_context}
 
-Return SQL only.
-Do not use markdown code fences.
+Retrieved context:
+{render_query_context(query_context)}
+
+{feedback_text}
+
+Generate SQL only.
 """.strip()

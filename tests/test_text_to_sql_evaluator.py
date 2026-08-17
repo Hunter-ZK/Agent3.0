@@ -16,6 +16,7 @@ def build_actual_result(
     tables: tuple[str, ...],
     dimensions: tuple[str, ...],
     metrics: tuple[str, ...],
+    filters: tuple[str, ...]  = [],
     group_by: tuple[str, ...],
     success: bool = True,
     trusted_sql: str | None = (
@@ -29,6 +30,7 @@ def build_actual_result(
         tables=tables,
         dimensions=dimensions,
         metrics=metrics,
+        filters=filters,
         group_by=group_by,
     )
 
@@ -60,6 +62,9 @@ def test_perfect_case_passes() -> None:
         expected_metrics=(
             "total_order_amount",
         ),
+        expected_filters=(
+            "dt='${p_month_yyyymm}",
+        ),
         expected_group_by=(
             "user_id",
         ),
@@ -75,6 +80,9 @@ def test_perfect_case_passes() -> None:
         ),
         metrics=(
             "total_order_amount",
+        ),
+        filters=(
+            "dt='${p_month_yyyymm}",
         ),
         group_by=(
             "user_id",
@@ -213,6 +221,7 @@ def test_summary_calculates_rates():
             table_selection_correct=True,
             dimension_selection_correct=True,
             metric_selection_correct=True,
+            filter_selection_correct=False,
             group_by_correct=True,
             pipeline_success=True,
             trusted_sql_available=True,
@@ -224,6 +233,7 @@ def test_summary_calculates_rates():
             table_selection_correct=False,
             dimension_selection_correct=True,
             metric_selection_correct=False,
+            filter_selection_correct=False,
             group_by_correct=True,
             pipeline_success=True,
             trusted_sql_available=True,

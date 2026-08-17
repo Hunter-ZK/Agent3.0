@@ -1,0 +1,355 @@
+{
+  "tables": [
+    {
+      "name": "dwd_hd_101_cldwdk",
+      "description": "科技贷款明细宽表，记录科技贷款的存量情况",
+      "grain": "每个数据日期下，一条记录代表一笔贷款借据的存量情况",
+      "synonyms": [
+        "科技贷款",
+        "科技企业贷款",
+        "科技型企业贷款",
+        "科技贷款存量"
+      ],
+      "columns": [
+        {
+          "name": "fin_org_branch_code",
+          "description": "该笔贷款经办金融机构的统一社会信用代码",
+          "data_type": "STRING",
+          "synonyms": [
+            "经办机构代码"
+          ]
+        },
+        {
+          "name": "fin_org_branch_area_code",
+          "description": "该笔贷款经办金融机构所在地",
+          "data_type": "STRING",
+          "synonyms": [
+            "经办机构所在地",
+            "地区"
+          ]
+        },
+        {
+          "name": "is_high_tech_ent_loan_code",
+          "description": "该笔贷款是否属于高新技术企业贷款",
+          "data_type": "STRING",
+          "synonyms": [
+            "是否高新技术企业贷款",
+            "高新技术企业贷款"
+          ]
+        },
+        {
+          "name": "is_sci_medium_ent_loan_code",
+          "description": "该笔贷款是否属于科技中小企业贷款",
+          "data_type": "STRING",
+          "synonyms": [
+            "是否科技中小企业贷款",
+            "科技中小企业贷款"
+          ]
+        },
+        {
+          "name": "loan_bal_rmb",
+          "description": "该笔贷款在当前数据日期的贷款余额",
+          "data_type": "DECIMAL(22,2)",
+          "synonyms": [
+            "贷款余额",
+            "余额",
+            "存量贷款余额"
+          ]
+        },
+        {
+          "name": "rate",
+          "description": "该笔贷款的存量贷款利率",
+          "data_type": "DECIMAL(15,5)",
+          "synonyms": [
+            "利率",
+            "存量利率"
+          ]
+        },
+        {
+          "name": "loan_iou_no",
+          "description": "贷款借据号",
+          "data_type": "STRING",
+          "synonyms": [
+            "借据号"
+          ]
+        },
+        {
+          "name": "ent_code",
+          "description": "借款企业统一社会信用代码",
+          "data_type": "STRING",
+          "synonyms": [
+            "企业代码",
+            "借款人代码",
+            "客户代码"
+          ]
+        },
+        {
+          "name": "loan_grant_date",
+          "description": "贷款发放日期",
+          "data_type": "STRING",
+          "synonyms": [
+            "贷款发放日期",
+            "发放日期"
+          ]
+        },
+        {
+          "name": "loan_due_date",
+          "description": "贷款到期日期",
+          "data_type": "STRING",
+          "synonyms": [
+            "贷款到期日期",
+            "到期日期"
+          ]
+        },
+        {
+          "name": "fin_org_code",
+          "description": "贷款所属金融法人机构统一社会信用代码",
+          "data_type": "STRING",
+          "synonyms": [
+            "金融机构代码"
+          ]
+        },
+        {
+          "name": "fin_org_type_code",
+          "description": "贷款所属金融法人机构类型",
+          "data_type": "STRING",
+          "synonyms": [
+            "金融机构类型",
+            "机构类型"
+          ]
+        },
+        {
+          "name": "data_date",
+          "description": "数据报送日期",
+          "data_type": "STRING",
+          "synonyms": [
+            "数据日期",
+            "报送日期"
+          ]
+        },
+        {
+          "name": "dt",
+          "description": "数据报送日期分区字段，用于确定贷款存量统计时点",
+          "data_type": "STRING",
+          "synonyms": [
+            "数据日期",
+            "统计日期",
+            "报送日期",
+            "本期"
+          ]
+        }
+      ]
+    },
+
+    {
+      "name": "dwd_hd_201_cldwdk",
+      "description": "绿色单位贷款明细宽表，记录绿色贷款的存量情况",
+      "grain": "每个数据日期下，一条记录代表一笔绿色单位贷款借据的存量情况",
+      "synonyms": [
+        "绿色贷款",
+        "绿色单位贷款",
+        "绿色信贷",
+        "绿色贷款存量"
+      ],
+      "columns": [
+        {
+          "name": "fin_org_branch_code",
+          "description": "该笔贷款经办金融机构的统一社会信用代码",
+          "data_type": "STRING",
+          "synonyms": [
+            "经办机构代码"
+          ]
+        },
+        {
+          "name": "fin_org_branch_area_code",
+          "description": "该笔贷款经办金融机构所在地",
+          "data_type": "STRING",
+          "synonyms": [
+            "经办机构所在地",
+            "地区"
+          ]
+        },
+        {
+          "name": "green_loan_type_code",
+          "description": "该笔贷款所属绿色贷款类型",
+          "data_type": "STRING",
+          "synonyms": [
+            "绿色贷款类型"
+          ]
+        },
+        {
+          "name": "loan_bal_rmb",
+          "description": "该笔贷款在当前数据日期的贷款余额",
+          "data_type": "DECIMAL(22,2)",
+          "synonyms": [
+            "贷款余额",
+            "余额",
+            "存量贷款余额"
+          ]
+        },
+        {
+          "name": "rate",
+          "description": "该笔贷款的存量贷款利率",
+          "data_type": "DECIMAL(15,5)",
+          "synonyms": [
+            "利率",
+            "存量利率"
+          ]
+        },
+        {
+          "name": "loan_iou_no",
+          "description": "贷款借据号",
+          "data_type": "STRING",
+          "synonyms": [
+            "借据号"
+          ]
+        },
+        {
+          "name": "ent_code",
+          "description": "借款企业统一社会信用代码",
+          "data_type": "STRING",
+          "synonyms": [
+            "企业代码",
+            "借款人代码",
+            "客户代码"
+          ]
+        },
+        {
+          "name": "loan_grant_date",
+          "description": "贷款发放日期",
+          "data_type": "STRING",
+          "synonyms": [
+            "贷款发放日期",
+            "发放日期"
+          ]
+        },
+        {
+          "name": "loan_due_date",
+          "description": "贷款到期日期",
+          "data_type": "STRING",
+          "synonyms": [
+            "贷款到期日期",
+            "到期日期"
+          ]
+        },
+        {
+          "name": "fin_org_code",
+          "description": "贷款所属金融法人机构统一社会信用代码",
+          "data_type": "STRING",
+          "synonyms": [
+            "金融机构代码"
+          ]
+        },
+        {
+          "name": "fin_org_type_code",
+          "description": "贷款所属金融法人机构类型",
+          "data_type": "STRING",
+          "synonyms": [
+            "金融机构类型",
+            "机构类型"
+          ]
+        },
+        {
+          "name": "data_date",
+          "description": "数据报送日期",
+          "data_type": "STRING",
+          "synonyms": [
+            "数据日期",
+            "报送日期"
+          ]
+        },
+        {
+          "name": "dt",
+          "description": "数据报送日期分区字段，用于确定绿色贷款存量统计时点",
+          "data_type": "STRING",
+          "synonyms": [
+            "数据日期",
+            "统计日期",
+            "报送日期",
+            "本期"
+          ]
+        }
+      ]
+    }
+  ],
+
+  "metrics": [
+    {
+      "name": "tech_loan_balance",
+      "description": "科技贷款存量贷款余额",
+      "expression": "SUM(loan_bal_rmb)",
+      "table": "dwd_hd_101_cldwdk",
+      "synonyms": [
+        "科技贷款余额",
+        "科技贷款存量余额",
+        "贷款余额",
+        "存量贷款余额",
+        "余额"
+      ]
+    },
+    {
+      "name": "tech_loan_enterprise_count",
+      "description": "获得科技贷款的去重企业数量",
+      "expression": "COUNT(DISTINCT ent_code)",
+      "table": "dwd_hd_101_cldwdk",
+      "synonyms": [
+        "科技贷款获贷企业数",
+        "获贷企业数",
+        "企业数量",
+        "客户数"
+      ]
+    },
+    {
+      "name": "tech_loan_weighted_rate",
+      "description": "按贷款余额加权计算的科技贷款存量利率",
+      "expression": "SUM(loan_bal_rmb * rate) / SUM(loan_bal_rmb)",
+      "table": "dwd_hd_101_cldwdk",
+      "synonyms": [
+        "科技贷款利率",
+        "科技贷款加权利率",
+        "加权利率",
+        "存量利率",
+        "利率"
+      ]
+    },
+
+    {
+      "name": "green_loan_balance",
+      "description": "绿色贷款存量贷款余额",
+      "expression": "SUM(loan_bal_rmb)",
+      "table": "dwd_hd_201_cldwdk",
+      "synonyms": [
+        "绿色贷款余额",
+        "绿色贷款存量余额",
+        "贷款余额",
+        "存量贷款余额",
+        "余额"
+      ]
+    },
+    {
+      "name": "green_loan_enterprise_count",
+      "description": "获得绿色贷款的去重企业数量",
+      "expression": "COUNT(DISTINCT ent_code)",
+      "table": "dwd_hd_201_cldwdk",
+      "synonyms": [
+        "绿色贷款获贷企业数",
+        "获贷企业数",
+        "企业数量",
+        "客户数"
+      ]
+    },
+    {
+      "name": "green_loan_weighted_rate",
+      "description": "按贷款余额加权计算的绿色贷款存量利率",
+      "expression": "SUM(loan_bal_rmb * rate) / SUM(loan_bal_rmb)",
+      "table": "dwd_hd_201_cldwdk",
+      "synonyms": [
+        "绿色贷款利率",
+        "绿色贷款加权利率",
+        "加权利率",
+        "存量利率",
+        "利率"
+      ]
+    }
+  ]
+}
