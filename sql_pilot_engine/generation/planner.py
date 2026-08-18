@@ -68,6 +68,10 @@ class QueryPlanner:
 
         status = data.get("status")
 
+        # ========================================================
+        # 1. Context不足：向用户追问
+        # ========================================================
+
         if status == "need_clarification":
             return PlanningClarification(
                 clarification_question=(
@@ -79,42 +83,65 @@ class QueryPlanner:
                 reason=data.get("reason","",),
             )
 
+        # ========================================================
+        # 2. 新版Planner契约：
+        #
+        # {
+        #   "status": "ready",
+        #   "plan": {...}
+        # }
+        # ========================================================
+
         if status == "ready":
             plan_data = data["plan"]
+
+        # ========================================================
+        # 3. 向后兼容旧Fake Model：
+        #
+        # {
+        #   "tables": [...],
+        #   ...
+        # }
+        # ========================================================
+        else:
+            plan_data = data
             
+        # ========================================================
+        # 4. 一定从plan_data读取
+        # ========================================================
         return QueryPlan(
             tables=tuple(
-                data.get(
+                plan_data.get(
                     "tables",
                     []
                 )
             ),
             dimensions=tuple(
-                data.get(
+                plan_data.get(
                     "dimensions",
                     []
                 )
             ),
             metrics=tuple(
-                data.get(
+                plan_data.get(
                     "metrics",
                     []
                 )
             ),
             filters=tuple(
-                data.get(
+                plan_data.get(
                     "filters",
                     []
                 )
             ),
             group_by=tuple(
-                data.get(
+                plan_data.get(
                     "group_by",
                     []
                 )
             ),
             requirements=tuple(
-                data.get(
+                plan_data.get(
                     "requirements",
                     [],
                 )

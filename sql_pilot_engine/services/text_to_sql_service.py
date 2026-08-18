@@ -398,7 +398,23 @@ class TextToSQLService:
                             time.perf_counter() - stage_start 
                         ) * 1000
                     )
-                    
+
+                    logger.info(
+                        "semantic_validation.end "
+                        "status=%s "
+                        "missing=%d "
+                        "issues=%d "
+                        "elapsed_ms=%d",
+                        semantic_result.status.value,
+                        len(
+                            semantic_result.missing_requirements
+                        ),
+                        len(
+                            semantic_result.issues
+                        ),
+                        elapsed_ms,
+                    )
+
                     if semantic_result.passed:
                         logger.info(
                             "generation_attempt.end "
@@ -445,23 +461,6 @@ class TextToSQLService:
                         attempt,
                         len(revision_feedback),
                     )
-                if semantic_result is not None:
-                    logger.info(
-                        "semantic_validation.end "
-                        "status=%s "
-                        "missing=%d "
-                        "issues=%d "
-                        "elapsed_ms=%d",
-                        semantic_result.status.value,
-                        len(
-                            semantic_result
-                            .missing_requirements
-                        ),
-                        len(
-                            semantic_result.issues
-                        ),
-                        elapsed_ms,
-                    )
                         
                     
                 deterministic_passed = (
@@ -494,7 +493,7 @@ class TextToSQLService:
                     query_plan=planning_outcome,
                     generated_sql=generated.sql,
                     trusted_sql=trusted_sql,
-                    success=validation.success,
+                    success=success,
                     validation_status=(
                         validation.final_status
                     ),

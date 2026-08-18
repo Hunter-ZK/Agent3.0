@@ -4,35 +4,10 @@ from pathlib import Path
 import argparse
 import os
 
-from sql_pilot_engine.app.factory import build_workflow
-from sql_pilot_engine.context.builder import QueryContextBuilder
-from sql_pilot_engine.context.embedding import (
-    TokenHashEmbeddingProvider,
-)
-from sql_pilot_engine.context.models import (
-    ContextDocument,
-    ContextDocumentKind,
-)
-from sql_pilot_engine.context.qdrant_store import (
-    QdrantVectorStore,
-)
-from sql_pilot_engine.context.retriever import (
-    KnowledgeRetriever,
-    VerifiedSQLRetriever,
-)
-from sql_pilot_engine.context.semantic.loader import (
-    SemanticModelLoader,
-)
-from sql_pilot_engine.generation.planner import QueryPlanner
-from sql_pilot_engine.generation.sql_generator import (
-    SQLGenerator,
-)
-from sql_pilot_engine.schemas.text_to_sql import (
-    TextToSQLRequest,
-)
-from sql_pilot_engine.services.text_to_sql_service import (
-    TextToSQLService,
-)
+
+
+
+
 from sql_pilot_engine.llm.deepseek_client import (
     DeepSeekLLMClient,
 )
@@ -42,13 +17,15 @@ from sql_pilot_engine.observability.logging import (
 from sql_pilot_engine.context.semantic.loan_domain import (
     LOAN_DOMAIN_CONTEXT_DOCUMENTS,
 )
-from sql_pilot_engine.services.semantic_validation_service import (
-    SemanticSQLValidator
-)
-
 from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLClarification,
     TextToSQLRequest,
+)
+from sql_pilot_engine.services.text_to_sql_service import (
+    TextToSQLService,
+)
+from sql_pilot_engine.app.text_to_sql_factory import (
+    build_text_to_sql_service,
 )
 
 # ============================================================
@@ -122,66 +99,20 @@ class FakeSQLModel:
 # ============================================================
 
 
-def build_text_to_sql_service(use_real_llm: bool) -> TextToSQLService:
-    """组装一次完整的Text-to-SQL Service。
+def build_demo_service(use_real_llm: bool) -> TextToSQLService:
+    """构建Demo使用的Text-to-SQL服务。
 
-    当前调用关系：
+    Demo只决定：
+    - 使用真实LLM还是Fake LLM；
+    - 使用贷款Mini Domain。
 
-    Semantic Model
-        +
-    Qdrant / Retriever
-        ↓
-    QueryContext
-        ↓
-    QueryPlanner
-        ↓
-    SQLGenerator
-        ↓
-    SQL Validation Workflow
-        ↓
-    Trusted SQL
+    具体组件组装交给正式Factory。
     """
-
-    # --------------------------------------------------------
-    # Embedding
-    # --------------------------------------------------------
-    # TokenHashEmbeddingProvider只是开发/测试实现，
-    # 不代表未来正式Embedding模型。
-    #
-    # 它的作用是让RAG工程链在不依赖外部模型API的情况下
-    # 可以真实运行。
-    # --------------------------------------------------------
-
-    embedding_provider = TokenHashEmbeddingProvider(
-        dimensions=128,
+    
+    project_root = (
+        Path(__file__).resolve().parents[1]
     )
-
-    # --------------------------------------------------------
-    # Vector Store
-    # --------------------------------------------------------
-    # 使用Qdrant本地内存模式。
-    # Demo结束后数据自动消失。
-    # --------------------------------------------------------
-
-    vector_store = QdrantVectorStore(
-        embedding_provider=embedding_provider,
-        collection_name="text_to_sql_demo",
-    )
-
-    # --------------------------------------------------------
-    # 写入Demo上下文
-    # --------------------------------------------------------
-
-    vector_store.add(
-        LOAN_DOMAIN_CONTEXT_DOCUMENTS
-    )
-
-    # --------------------------------------------------------
-    # Semantic Model
-    # --------------------------------------------------------
-
-    project_root = Path(__file__).resolve().parents[1]
-
+    
     semantic_model_path = (
         project_root
         / "sql_pilot_engine"
@@ -189,58 +120,44 @@ def build_text_to_sql_service(use_real_llm: bool) -> TextToSQLService:
         / "semantic"
         / "loan_model.json"
     )
-
-    semantic_model = SemanticModelLoader().load(
-        semantic_model_path
-    )
-
+    
     if use_real_llm:
-        model = DeepSeekLLMClient.from_env()
-
+        model = (
+            DeepSeekLLMClient.from_env()
+        )
+        
         planner_model = model
-        sql_model = model
-        semantic_validator = (
-            SemanticSQLValidator(
-                model = model
-            )
+        sql_model = model 
+        semantic_validator_model = (
+            model
         )
     else:
-        planner_model = FakePlannerModel()
-        sql_model = FakeSQLModel()
-        semantic_model = None
-
-    # --------------------------------------------------------
-    # 组装TextToSQLService
-    # --------------------------------------------------------
-
-    return TextToSQLService(
-        semantic_model=semantic_model,
-
-        knowledge_retriever=KnowledgeRetriever(
-            vector_store
-        ),
-
-        verified_sql_retriever=(
-            VerifiedSQLRetriever(
-                vector_store
-            )
-        ),
-
-        context_builder=QueryContextBuilder(),
-
-        planner=QueryPlanner(
-            model=planner_model
-        ),
-
-        sql_generator=SQLGenerator(
-            model=sql_model
-        ),
+        planner_model = (
+            FakePlannerModel()
+        )
         
-        semantic_validator=semantic_validator,
-
-        validation_workflow=build_workflow(
-            max_retries=0
+        sql_model = (
+            FakeSQLModel()
+        )
+        semantic_validator_model = None
+        
+    return build_text_to_sql_service(
+        semantic_model_path=(
+            semantic_model_path
         ),
+        context_documents=(
+            LOAN_DOMAIN_CONTEXT_DOCUMENTS
+        ),
+        planner_model=planner_model,
+        sql_model=sql_model,
+        semantic_validator_model=(
+            semantic_validator_model
+        ),
+        collection_name=(
+            "text_to_sql_demo"
+        ),
+        max_sql_retries=0,
+        max_semantic_retries=1,
     )
 
 def parse_args() -> argparse.Namespace:
@@ -324,7 +241,7 @@ def main() -> None:
     args = parse_args()
     configure_logging(args.log_level)
 
-    service = build_text_to_sql_service(use_real_llm=args.use_real_llm)
+    service = build_demo_service(use_real_llm=args.use_real_llm)
 
     session_context: list[str] = []
     

@@ -119,6 +119,30 @@ Rules:
 
 - Do not repeat a clarification question that has already been
   answered by the user.
+  
+- Verified SQL examples are implementation references only.
+  Do not use the business subject of a retrieved example as
+  evidence that the user's ambiguous question refers to the
+  same business subject.
+
+Ambiguity rules:
+
+- Do not arbitrarily choose between multiple plausible
+  business subjects, tables, metrics, dimensions or business
+  definitions.
+
+- If two or more candidates are reasonably consistent with
+  the original question and the supplied context does not
+  clearly identify one of them, return need_clarification.
+
+- A clarification question should identify the competing
+  interpretations concisely so the user can choose between them.
+
+- Do not treat a generic synonym as sufficient evidence when
+  that synonym is shared by multiple business subjects.
+
+- Prefer clarification over guessing when choosing the wrong
+  business subject would materially change the query result.
 
 Return JSON only.
 

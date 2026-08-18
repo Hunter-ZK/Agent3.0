@@ -126,4 +126,27 @@ LOAN_DOMAIN_CONTEXT_DOCUMENTS = (
             "topic": "sci_medium_enterprise_count",
         },
     ),
+    
+    ContextDocument(
+        document_id="loan_current_period_rule",
+
+        kind=(
+            ContextDocumentKind
+            .BUSINESS_KNOWLEDGE
+        ),
+
+        text=(
+            "贷款业务查询中的“本期”表示当前统计期。"
+            "当前统计期使用 dt 字段限定，"
+            "条件为 dt = '${p_month_yyyymm}'。"
+            "除非用户明确指定其他时间范围，"
+            "出现“本期”时应使用该统计期参数，"
+            "无需再次向用户确认具体日期。"
+        ),
+
+        metadata={
+            "domain": "loan",
+            "topic": "current_period",
+        },
+    ),
 )
