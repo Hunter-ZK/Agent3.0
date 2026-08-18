@@ -309,3 +309,188 @@ def test_graph_interrupts_and_resumes():
         ]
         is not None
     )
+
+class AlwaysClarifyPlanner:
+    """
+    无论用户补充什么信息，
+    都持续认为 Context 不足。
+
+    这个 Planner 不是模拟真实业务，
+    而是专门测试 Runtime 的
+    clarification safety limit。
+    """
+
+    def plan(
+        self,
+        *,
+        question: str,
+        semantic_context: str,
+        query_context,
+    ):
+        return PlanningClarification(
+            clarification_question=(
+                "仍缺少必要业务信息，请继续补充。"
+            ),
+            missing_context=(
+                "必要业务信息",
+            ),
+            reason=(
+                "当前 Context 仍不足。"
+            ),
+        )
+
+
+def test_graph_stops_after_max_clarification_rounds():
+    graph = QueryAgentGraph(
+        semantic_model=(
+            build_semantic_model()
+        ),
+
+        knowledge_retriever=(
+            EmptyRetriever()
+        ),
+
+        verified_sql_retriever=(
+            EmptyRetriever()
+        ),
+
+        context_builder=(
+            QueryContextBuilder()
+        ),
+
+        planner=(
+            AlwaysClarifyPlanner()
+        ),
+
+        sql_generator=(
+            FakeSQLGenerator()
+        ),
+
+        validation_workflow=(
+            PassingValidationWorkflow()
+        ),
+
+        semantic_validator=None,
+
+        max_semantic_retries=1,
+
+        # 为了让测试更短，
+        # 这里只允许最多追问两轮。
+        max_clarification_rounds=2,
+    )
+
+    thread_id = (
+        "clarification-limit-thread"
+    )
+
+    # ========================================================
+    # Round 1
+    # ========================================================
+
+    first = graph.start(
+        thread_id=thread_id,
+        question=(
+            "统计贷款余额"
+        ),
+    )
+
+    assert "__interrupt__" in first
+
+    first_payload = (
+        first["__interrupt__"][0].value
+    )
+
+    assert first_payload["round"] == 1
+
+    assert (
+        first_payload["max_rounds"]
+        == 2
+    )
+
+    # ========================================================
+    # Human answer 1
+    # Planner仍然认为Context不足
+    # → Round 2
+    # ========================================================
+
+    second = graph.resume(
+        thread_id=thread_id,
+        answer=(
+            "先按绿色贷款理解。"
+        ),
+    )
+
+    assert "__interrupt__" in second
+
+    second_payload = (
+        second[
+            "__interrupt__"
+        ][0].value
+    )
+
+    assert (
+        second_payload["round"]
+        == 2
+    )
+
+    assert (
+        second_payload[
+            "max_rounds"
+        ]
+        == 2
+    )
+
+    # 第一轮用户回答已经完成，
+    # 所以 clarification_round = 1。
+    assert (
+        second[
+            "clarification_round"
+        ]
+        == 1
+    )
+
+    # ========================================================
+    # Human answer 2
+    #
+    # Planner仍然CLARIFY，
+    # 但Runtime已经达到max_rounds，
+    # 不能出现第三次interrupt。
+    # ========================================================
+
+    third = graph.resume(
+        thread_id=thread_id,
+        answer=(
+            "没有更多信息可以补充。"
+        ),
+    )
+
+    assert (
+        "__interrupt__"
+        not in third
+    )
+
+    assert (
+        third[
+            "clarification_round"
+        ]
+        == 2
+    )
+
+    assert (
+        third["success"]
+        is False
+    )
+
+    assert (
+        third.get(
+            "trusted_sql"
+        )
+        is None
+    )
+
+    assert (
+        "连续多次"
+        in third[
+            "error_message"
+        ]
+    )

@@ -241,7 +241,7 @@ def main() -> None:
             )
             return
 
-        result = graph.resum(
+        result = graph.resume(
             thread_id=thread_id,
             answer=answer,
         )

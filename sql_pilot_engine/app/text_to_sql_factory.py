@@ -68,13 +68,13 @@ def build_text_to_sql_service(
     可以共享完全相同的产品调用链。
     """
     if embedding_dimensions <= 0:
-        return ValueError(
+        raise ValueError(
             "embedding_dimensions "
             "must be greater than 0"
         )
         
     if max_sql_retries < 0:
-        return ValueError(
+        raise ValueError(
             "max_sql_retries "
             "must be >= 0"
         )

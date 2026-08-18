@@ -214,10 +214,11 @@ def test_graph_runs_happy_path():
         max_semantic_retries=1,
     )
 
-    state = graph.invoke(
+    state = graph.start(
+        thread_id='aaaa',
         question=(
             "统计本期绿色贷款余额"
-        )
+        ),
     )
 
     assert (

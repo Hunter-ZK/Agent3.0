@@ -439,6 +439,8 @@ class QueryAgentGraph:
             "candidate_sql": (
                 candidate_sql
             ),
+            "trusted_sql": None,
+            "success": False,
         }
 
     
@@ -572,9 +574,6 @@ class QueryAgentGraph:
             )
             is None
         ):
-            return "end"
-
-        if self.semantic_validator is None:
             return "end"
 
         return "semantic_validate"
@@ -860,30 +859,11 @@ class QueryAgentGraph:
             "success": False,
 
             "error_message": None,
+
+            "generation_attempt":0,
         }
 
-    def invoke(
-        self,
-        *,
-        question: str,
-        dialect: str = "maxcompute",
-        session_context: (
-            tuple[str, ...]
-        ) = (),
-    ) -> QueryAgentState:
 
-        return self.graph.invoke(
-            {
-                "question": question,
-
-                "dialect": dialect,
-
-                "session_context": (
-                    session_context
-                ),
-            }
-        )
-        
     def start(
         self,
         *,
@@ -898,6 +878,11 @@ class QueryAgentGraph:
         if not thread_id.strip():
             raise ValueError(
                 "thread_id cannot be empty"
+            )
+
+        if not question.strip():
+            raise ValueError(
+                "question cannot be empty"
             )
             
         config = {
@@ -932,7 +917,7 @@ class QueryAgentGraph:
             config = config,
         )
         
-    def resum(
+    def resume(
         self,
         *,
         thread_id: str,
