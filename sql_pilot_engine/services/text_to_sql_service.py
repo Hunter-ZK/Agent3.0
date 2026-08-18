@@ -166,6 +166,19 @@ class TextToSQLService:
                         ),
                     )
                 )
+                
+                if query_context.session_context:
+                    for index, item in enumerate(
+                        query_context.session_context,
+                        start=1,
+                    ):
+                        logger.debug(
+                            "context.session "
+                            "index=%d text=%s",
+                            index,
+                            item,
+                        )
+                
                 semantic_context = (
                     self.semantic_renderer.render(
                         self.semantic_model
@@ -432,24 +445,24 @@ class TextToSQLService:
                         attempt,
                         len(revision_feedback),
                     )
-                    
-                logger.info(
-                    "semantic_validation.end "
-                    "status=%s "
-                    "missing=%d "
-                    "issues=%d "
-                    "elapsed_ms=%d",
-                    semantic_result.status.value,
-                    len(
-                        semantic_result
-                        .missing_requirements
-                    ),
-                    len(
-                        semantic_result.issues
-                    ),
-                    elapsed_ms,
-                )
-                    
+                if semantic_result is not None:
+                    logger.info(
+                        "semantic_validation.end "
+                        "status=%s "
+                        "missing=%d "
+                        "issues=%d "
+                        "elapsed_ms=%d",
+                        semantic_result.status.value,
+                        len(
+                            semantic_result
+                            .missing_requirements
+                        ),
+                        len(
+                            semantic_result.issues
+                        ),
+                        elapsed_ms,
+                    )
+                        
                     
                 deterministic_passed = (
                     validation is not None

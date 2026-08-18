@@ -94,6 +94,31 @@ Rules:
 
 - Only return "ready" when there is enough information
   to produce a reliable query plan.
+  
+- Session Context contains information supplied by the user
+  during the current task. Treat it as valid context for this task.
+
+- Before requesting clarification, carefully check the Semantic
+  Model, Retrieved Context and Session Context.
+
+- Do not ask the user for information that has already been
+  supplied in Session Context.
+
+- Ask only for information that is necessary to generate a
+  reliable query.
+
+- Prefer one concise clarification question that groups closely
+  related missing information instead of asking many fragmented
+  questions.
+  
+- Treat Session Context as authoritative information supplied
+  by the user for the current task.
+
+- Before asking for clarification, check whether the required
+  information has already been supplied in Session Context.
+
+- Do not repeat a clarification question that has already been
+  answered by the user.
 
 Return JSON only.
 
@@ -178,8 +203,6 @@ Semantic model:
 Retrieved context:
 {rag_context}
 
-Retrieved context:
-{render_query_context(query_context)}
 
 {feedback_text}
 

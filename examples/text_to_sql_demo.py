@@ -327,6 +327,9 @@ def main() -> None:
     service = build_text_to_sql_service(use_real_llm=args.use_real_llm)
 
     session_context: list[str] = []
+    
+    clarification_round = 0
+    max_clarification_rounds = 3
 
     while True:
         response = service.generate(
@@ -343,6 +346,19 @@ def main() -> None:
             response,
             TextToSQLClarification,
         ):
+            
+            clarification_round += 1
+            
+            if (
+                clarification_round > max_clarification_rounds
+            ):
+                print()
+                print(
+                    "Agent连续多次无法获得足够上下文，"
+                    "当前任务停止。"
+                )
+                return
+            
             print()
             print(
                 "[Agent needs clarification]"
@@ -385,12 +401,6 @@ def main() -> None:
         result = response
         break
     
-    result = service.generate(
-        TextToSQLRequest(
-            question=args.question,
-            dialect=args.dialect,
-       )
-    )
 
     print("=" * 70)
     print("Agent3.0 · Text-to-SQL Demo")
