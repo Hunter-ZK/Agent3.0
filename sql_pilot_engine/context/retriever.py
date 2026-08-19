@@ -27,15 +27,20 @@ class KnowledgeRetriever:
         results = (
             self.vector_store.search(
                 query=question,
-                top_k=top_k,
+                top_k=max(
+                    top_k * 2,
+                    top_k,
+                ),
             )
         )
         
-        return [
+        knowledge_results =  [
             item
             for item in results
             if item.document.kind == ContextDocumentKind.BUSINESS_KNOWLEDGE
         ]
+        
+        return knowledge_results[:top_k]
         
 class VerifiedSQLRetriever:
     

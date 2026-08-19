@@ -44,6 +44,9 @@ class GoldenTextToSQLCase:
     expected_metrics: tuple[str, ...] = ()
     expected_filters: tuple[str, ...] = ()
     expected_group_by: tuple[str, ...] = ()
+    
+    require_dimension_match: bool = False
+    require_group_by_match: bool = False
 
     expected_trusted_sql: bool = True
 

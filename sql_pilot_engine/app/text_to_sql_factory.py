@@ -40,7 +40,10 @@ from sql_pilot_engine.services.semantic_validation_service import (
 from sql_pilot_engine.services.text_to_sql_service import (
     TextToSQLService,
 )
-
+from sql_pilot_engine.context.mandatory_rules import (
+    MandatoryBusinessRule,
+    MandatoryRuleMatcher,
+)
 
 def build_text_to_sql_service(
     *,
@@ -48,6 +51,7 @@ def build_text_to_sql_service(
     context_documents: Iterable[ContextDocument],
     planner_model: TextGenerationModel,
     sql_model: TextGenerationModel,
+    mandatory_rules: tuple[MandatoryBusinessRule, ...] = (),
     semantic_validator_model: (TextGenerationModel | None) = None,
     collection_name: str = ("agent3_text_to_sql"),
     embedding_dimensions: int = 128,
@@ -163,7 +167,15 @@ def build_text_to_sql_service(
         ),
         
         context_builder=(
-            QueryContextBuilder()
+            QueryContextBuilder(
+                mandatory_rule_matcher=(
+                    MandatoryRuleMatcher(
+                        mandatory_rules
+                    )
+                    if mandatory_rules
+                    else None
+                )
+            )
         ),
         
         planner=(

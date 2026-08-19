@@ -45,7 +45,13 @@ from sql_pilot_engine.runtime.query_graph import (
 from sql_pilot_engine.services.semantic_validation_service import (
     SemanticSQLValidator,
 )
+from sql_pilot_engine.context.mandatory_rules import (
+    MandatoryRuleMatcher,
+)
 
+from sql_pilot_engine.context.semantic.loan_domain import (
+    LOAN_MANDATORY_RULES,
+)
 
 def build_graph() -> QueryAgentGraph:
     project_root = (
@@ -110,7 +116,13 @@ def build_graph() -> QueryAgentGraph:
         ),
 
         context_builder=(
-            QueryContextBuilder()
+            QueryContextBuilder(
+                mandatory_rule_matcher=(
+                    MandatoryRuleMatcher(
+                        LOAN_MANDATORY_RULES
+                    )
+                )
+            )
         ),
 
         planner=(

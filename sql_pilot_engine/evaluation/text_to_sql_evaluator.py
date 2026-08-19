@@ -203,15 +203,6 @@ class TextToSQLEvaluator:
             )
         )
 
-        dimension_selection_correct = (
-            _normalize_names(
-                plan.dimensions
-            )
-            == _normalize_names(
-                case.expected_dimensions
-            )
-        )
-
         metric_selection_correct = (
             _normalize_names(
                 plan.metrics
@@ -230,6 +221,21 @@ class TextToSQLEvaluator:
             )
         )
 
+        dimension_selection_correct = (
+            _normalize_names(
+                plan.dimensions
+            )
+            == _normalize_names(
+                case.expected_dimensions
+            )
+        )
+        
+        dimension_requirement_met = (
+            dimension_selection_correct
+            if case.require_dimension_match
+            else True
+        )
+
         group_by_correct = (
             _normalize_names(
                 plan.group_by
@@ -237,6 +243,12 @@ class TextToSQLEvaluator:
             == _normalize_names(
                 case.expected_group_by
             )
+        )
+        
+        group_by_requirement_met = (
+            group_by_correct
+            if case.require_group_by_match
+            else True
         )
 
         trusted_sql_available = bool(
@@ -253,10 +265,10 @@ class TextToSQLEvaluator:
             (
                 behavior_correct,
                 table_selection_correct,
-                dimension_selection_correct,
                 metric_selection_correct,
                 filter_selection_correct,
-                group_by_correct,
+                dimension_requirement_met,
+                group_by_requirement_met,
                 actual.success,
                 trusted_sql_expectation_met,
             )

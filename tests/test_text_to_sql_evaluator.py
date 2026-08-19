@@ -544,3 +544,144 @@ def test_summary_excludes_clarify_from_sql_accuracy():
         summary.filter_selection_accuracy
         == 1.0
     )
+    
+    
+def test_dimension_and_group_by_difference_can_be_diagnostic_only():
+    evaluator = TextToSQLEvaluator()
+
+    case = GoldenTextToSQLCase(
+        case_id="diagnostic-grouping",
+        question="统计本期绿色贷款余额",
+
+        expected_tables=(
+            "dwd_hd_201_cldwdk",
+        ),
+
+        expected_dimensions=("dt",),
+
+        expected_metrics=(
+            "green_loan_balance",
+        ),
+
+        expected_filters=(
+            "dt = '${p_month_yyyymm}'",
+        ),
+
+        expected_group_by=("dt",),
+
+        # 默认False：
+        # dimension/group_by只作为诊断指标。
+    )
+
+    actual = build_actual_result(
+        question=case.question,
+
+        tables=(
+            "dwd_hd_201_cldwdk",
+        ),
+
+        dimensions=(),
+
+        metrics=(
+            "green_loan_balance",
+        ),
+
+        filters=(
+            "dt = '${p_month_yyyymm}'",
+        ),
+
+        group_by=(),
+    )
+
+    result = evaluator.evaluate(
+        case=case,
+        actual=actual,
+    )
+
+    # Planner形态与Golden不同，
+    # 因此诊断指标仍然准确反映差异。
+    assert (
+        result.dimension_selection_correct
+        is False
+    )
+
+    assert (
+        result.group_by_correct
+        is False
+    )
+
+    # 但这些不是用户业务硬约束，
+    # 不应该导致最终Case失败。
+    assert result.passed is True
+
+
+def test_required_grouping_difference_fails_case():
+    evaluator = TextToSQLEvaluator()
+
+    case = GoldenTextToSQLCase(
+        case_id="required-grouping",
+        question=(
+            "按机构类型统计本期绿色贷款余额"
+        ),
+
+        expected_tables=(
+            "dwd_hd_201_cldwdk",
+        ),
+
+        expected_dimensions=(
+            "fin_org_type_code",
+        ),
+
+        expected_metrics=(
+            "green_loan_balance",
+        ),
+
+        expected_filters=(
+            "dt = '${p_month_yyyymm}'",
+        ),
+
+        expected_group_by=(
+            "fin_org_type_code",
+        ),
+
+        require_dimension_match=True,
+        require_group_by_match=True,
+    )
+
+    actual = build_actual_result(
+        question=case.question,
+
+        tables=(
+            "dwd_hd_201_cldwdk",
+        ),
+
+        # Agent漏掉了用户明确要求的机构类型。
+        dimensions=(),
+
+        metrics=(
+            "green_loan_balance",
+        ),
+
+        filters=(
+            "dt = '${p_month_yyyymm}'",
+        ),
+
+        group_by=(),
+    )
+
+    result = evaluator.evaluate(
+        case=case,
+        actual=actual,
+    )
+
+    assert (
+        result.dimension_selection_correct
+        is False
+    )
+
+    assert (
+        result.group_by_correct
+        is False
+    )
+
+    assert result.passed is False

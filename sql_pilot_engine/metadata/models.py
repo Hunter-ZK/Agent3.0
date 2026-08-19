@@ -155,3 +155,63 @@ class TableLookupResult:
             status=MetadataLookupStatus.ERROR,
             error_message=error_message,
         )
+        
+        
+@dataclass(frozen=True, slots=True,)
+class MetadataColumnSnapshot:
+    """
+    一次元数据快照中的字段事实。
+
+    nullable / is_partition 使用 None 表示：
+    当前元数据源没有提供该信息。
+
+    这和 True / False 必须区分。
+    """
+    name: str
+    description: tuple[str, ...] = ()
+    data_type: str = ""
+    ordinal_position: int | None = None
+    is_partition: bool | None = None
+    
+    
+@dataclass(frozen=True, slots=True,)
+class MetadataTableSnapshot:
+    """
+    一次元数据快照中的物理表。
+
+    descriptions允许多个，是因为真实元数据中
+    同一个物理表可能存在多个中文说明。
+    """
+    
+    full_name: str
+    
+    descriptions: tuple[str, ...] = ()
+    
+    layer: str = ""
+    
+    columns: tuple[MetadataColumnSnapshot, ...] = ()
+    
+@dataclass(frozen=True,slots=True,)
+class MetadataSnapshot:
+    source_name: str
+    snapshot_label: str
+    tables: tuple[MetadataTableSnapshot, ...]
+
+@dataclass(frozen=True, slots=True,)
+class MetadataTableMatch:
+    
+    full_name: str
+    description: str
+    layer: str
+    
+
+@dataclass(frozen=True, slots=True,)
+class MetadataColumnMatch:
+    
+    table_full_name: str
+    tabel_description: str
+    name: str
+    description: str
+    data_type: str
+    
+    

@@ -4000,3 +4000,168 @@ GROUP BY fin_org_type_code,dt
 以上是我整理的一张数据表的内容，我发现有个问题，就是我数仓会有很多数据表存在相似的指标字段，比如贷款余额、利率等，那么我提问的时候一定要明确是我要找哪张业务表，否则我觉得无法统计的，你看如何改进。
 >>>>>>> Stashed changes
 
+<<<<<<< Updated upstream
+=======
+
+
+
+
+
+
+
+
+
+
+
+
+>>>>>>> Stashed changes
+
+
+**最适合的是结构化 Excel/CSV，而不是 Word/PDF；如果你能整理，我建议用一个 Excel 工作簿分 4～5 个 Sheet，这样后面可以直接用于 Context、命名规则抽取和 Warehouse Design Skill。**
+
+## 推荐格式
+
+### Sheet 1：`tables`
+一行一张表。
+
+| 字段 | 含义 |
+|---|---|
+| table_name | 物理表名 |
+| table_comment | 表中文名 |
+| layer | ODS/DWD/DWS/ADS 等 |
+| business_domain | 业务域 |
+| business_process | 业务过程 |
+| grain | 表粒度，如“一笔贷款一行” |
+| partition_field | 分区字段(一般含dt、sourc_bw、batch_num都为分区字段) |
+
+
+### Sheet 2：`fields`
+一行一个字段，**这是最重要的 Sheet**。
+
+| 字段 | 含义 |
+|---|---|
+| table_name | 所属表 |
+| field_name | 物理字段名 |
+| field_comment | 中文含义 |
+| data_type | 数据类型 |
+| field_role | key/dimension/metric/attribute/partition |
+| expression | 加工逻辑，可空 |
+| remark | 补充说明 |
+
+有真实表结构的话，**尽量不要只给字段名，要保留“表名 + 字段名 + 中文注释”关系**。否则像 `amt`、`type_code` 这种字段很难判断真实命名语义。
+
+---
+
+### Sheet 3：`naming_roots`
+如果你们有词根、缩写或命名规范，单独整理。
+
+| business_term | standard_root | type | english_name | aliases | remark |
+|---|---|---|---|---|---|
+| 贷款 | loan | 词根 | loan | 借款 | |
+| 余额 | bal | 词根 | balance | 贷款余额 | |
+| 企业 | ent | 词根 | enterprise | 公司 | |
+| 机构 | org | 词根 | organization | 法人机构 | |
+
+`type` 可以区分：
+
+```text
+word_root
+abbreviation
+suffix
+prefix
+enum
+reserved_word
+```
+
+这个 Sheet 后面可以直接发展成：
+
+```text
+Naming Context
++
+NamingValidator
+```
+
+---
+
+### Sheet 4：`naming_rules`
+存规范，而不是实例。
+
+| rule_id | scope | rule | good_example | bad_example |
+|---|---|---|---|---|
+| R001 | table | DWS汇总表以dws_开头 | dws_green_loan_monthly | green_loan |
+| R002 | field | 金额字段统一使用_amt或_bal | loan_bal | loan_money |
+| R003 | field | code字段表示编码 | org_type_code | org_type |
+
+如果规范目前只有文档，没有结构化数据，**直接把原始规范文档一起给我也可以**，不需要你为了我人工全部重录。
+
+---
+
+### Sheet 5：`approved_examples`（很推荐）
+放你们认为“命名得比较标准”的真实表和字段。
+
+| object_type | physical_name | business_meaning | why_good |
+|---|---|---|---|
+| table | dwd_hd_201_cldwdk | 绿色单位贷款明细宽表 | 已上线标准表 |
+| field | loan_bal_rmb | 人民币贷款余额 | 已有统一口径 |
+
+这个 Sheet 很有价值，因为：
+
+> **规范告诉 Agent“应该怎样”，真实优秀案例告诉 Agent“你们实际上怎样落地”。**
+
+两者不能完全互相替代。
+
+---
+
+# 如果数据量很大
+
+几十万字段也没问题，优先给：
+
+```text
+.xlsx
+或
+tables.csv
+fields.csv
+naming_roots.csv
+naming_rules.csv
+```
+
+如果超过 Excel 方便处理的规模，可以直接给多个 CSV 压缩包。
+
+**不要为了整理得非常漂亮而人工加工太多。** 如果你手里本来就是元数据导出，类似：
+
+```text
+database
+table_name
+table_comment
+column_name
+column_comment
+data_type
+```
+
+先原样给我也行，我可以先分析现有命名模式，再告诉你还缺什么。
+
+---
+
+## 我最希望你至少提供的 5 列
+
+如果时间有限，最低要求就是：
+
+```text
+table_name
+table_comment
+field_name
+field_comment
+data_type
+```
+
+只要这五列规模足够大，我就可以先分析：
+
+- 表命名结构；
+- 字段常用词根；
+- 缩写习惯；
+- `code/name/id/amt/bal/num/cnt/rate` 等后缀规律；
+- 同义词是否存在多种命名；
+- 哪些命名已经形成事实标准；
+- 哪些命名存在不一致；
+- 后续怎样转成 Agent 可消费的 Naming Context。
+

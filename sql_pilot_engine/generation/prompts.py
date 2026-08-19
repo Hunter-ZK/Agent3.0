@@ -101,6 +101,16 @@ Rules:
 - Before requesting clarification, carefully check the Semantic
   Model, Retrieved Context and Session Context.
 
+- If the Semantic Model provides one clear mapping from the
+  user's business term to a table, metric, dimension or column,
+  treat that mapping as sufficient context. Do not ask the user
+  to confirm the internal field name merely because the user
+  used a business-friendly synonym.
+
+- Clarification is required only when two or more plausible
+  mappings remain after considering the original question,
+  Semantic Model, Retrieved Context and Session Context.
+
 - Do not ask the user for information that has already been
   supplied in Session Context.
 
@@ -124,6 +134,27 @@ Rules:
   Do not use the business subject of a retrieved example as
   evidence that the user's ambiguous question refers to the
   same business subject.
+
+Context sufficiency rules:
+
+- Treat explicit business rules in Retrieved Context as
+  authoritative for the current planning task.
+
+- If the context explicitly defines a runtime convention such as
+  “本期” = dt = 'p_month_yyyymm', apply it directly.
+  Do not ask the user to provide the concrete date again.
+
+- If a user-facing business term has exactly one clear mapping
+  in the Semantic Model, use that mapping directly.
+  Do not ask the user to confirm the internal table or column name.
+
+- Clarification is required only when unresolved alternatives
+  would materially change the business meaning or SQL result.
+
+
+Clarification is only appropriate when the available context
+still leaves two or more materially different interpretations
+that would produce different business results.
 
 Ambiguity rules:
 

@@ -21,9 +21,9 @@ from sql_pilot_engine.schemas.text_to_sql import (
 
 # 目前只诊断这三个失败Case。
 TARGET_CASE_IDS = {
-    "green_balance_current",
-    "green_enterprise_count_current",
-    "green_by_org_type_current",
+    case.case_id
+    for case
+    in TEXT_TO_SQL_GOLDEN_V0_1
 }
 
 
@@ -532,6 +532,48 @@ def print_case(
         state
     )
 
+def _accuracy(
+    values,
+) -> tuple[int, int, float]:
+
+    valid = [
+        value
+        for value in values
+        if value is not None
+    ]
+
+    if not valid:
+        return 0, 0, 0.0
+
+    correct = sum(
+        value is True
+        for value in valid
+    )
+
+    total = len(valid)
+
+    return (
+        correct,
+        total,
+        correct / total,
+    )
+
+
+def _print_metric(
+    name: str,
+    values,
+) -> None:
+
+    correct, total, rate = (
+        _accuracy(values)
+    )
+
+    print(
+        f"{name:<28}"
+        f"{correct}/{total} "
+        f"({rate:.1%})"
+    )
+
 
 def main() -> None:
 
@@ -541,29 +583,27 @@ def main() -> None:
         TextToSQLEvaluator()
     )
 
+    # 不再筛选失败Case。
+    # Text-to-SQL最终Gate必须跑全部Golden。
     cases = tuple(
-        case
-        for case
-        in TEXT_TO_SQL_GOLDEN_V0_1
-        if case.case_id
-        in TARGET_CASE_IDS
+        TEXT_TO_SQL_GOLDEN_V0_1
     )
 
+    results = []
+
+    print()
+    print("=" * 88)
     print(
         "Agent3.0 "
-        "LangGraph Golden Diagnostic"
+        "Text-to-SQL V1 Final Evaluation"
     )
-
-    print(
-        "Cases:",
-        len(cases),
-    )
+    print("=" * 88)
 
     for case in cases:
 
         state = graph.start(
             thread_id=(
-                "diagnostic-"
+                "final-eval-"
                 f"{case.case_id}-"
                 f"{uuid4().hex}"
             ),
@@ -589,6 +629,148 @@ def main() -> None:
             )
         )
 
+        results.append(
+            (
+                case,
+                state,
+                evaluation,
+            )
+        )
+
+        status = (
+            "PASS"
+            if evaluation.passed
+            else "FAIL"
+        )
+
+        print(
+            f"{case.case_id:<45}"
+            f"{status}"
+        )
+
+    print()
+    print("=" * 88)
+    print("Summary")
+    print("=" * 88)
+
+    total_cases = len(results)
+
+    passed_cases = sum(
+        evaluation.passed
+        for _, _, evaluation
+        in results
+    )
+
+    print(
+        f"Cases:                       "
+        f"{passed_cases}/{total_cases} "
+        f"({passed_cases / total_cases:.1%})"
+    )
+
+    print()
+
+    _print_metric(
+        "Behavior accuracy:",
+        [
+            evaluation.behavior_correct
+            for _, _, evaluation
+            in results
+        ],
+    )
+
+    _print_metric(
+        "Table accuracy:",
+        [
+            evaluation.table_selection_correct
+            for _, _, evaluation
+            in results
+        ],
+    )
+
+    _print_metric(
+        "Dimension diagnostic:",
+        [
+            evaluation.dimension_selection_correct
+            for _, _, evaluation
+            in results
+        ],
+    )
+
+    _print_metric(
+        "Metric accuracy:",
+        [
+            evaluation.metric_selection_correct
+            for _, _, evaluation
+            in results
+        ],
+    )
+
+    _print_metric(
+        "Filter accuracy:",
+        [
+            evaluation.filter_selection_correct
+            for _, _, evaluation
+            in results
+        ],
+    )
+
+    _print_metric(
+        "GroupBy diagnostic:",
+        [
+            evaluation.group_by_correct
+            for _, _, evaluation
+            in results
+        ],
+    )
+
+    _print_metric(
+        "Pipeline success:",
+        [
+            evaluation.pipeline_success
+            for _, _, evaluation
+            in results
+        ],
+    )
+
+    _print_metric(
+        "Trusted SQL expectation:",
+        [
+            evaluation
+            .trusted_sql_expectation_met
+            for _, _, evaluation
+            in results
+        ],
+    )
+
+    # ========================================================
+    # Failure Analysis
+    # ========================================================
+
+    failures = [
+        item
+        for item in results
+        if not item[2].passed
+    ]
+
+    print()
+    print("=" * 88)
+    print(
+        f"Failures: {len(failures)}"
+    )
+    print("=" * 88)
+
+    if not failures:
+        print(
+            "No failed Golden Cases."
+        )
+
+    for (
+        case,
+        state,
+        evaluation,
+    ) in failures:
+
+        # 复用原来的详细诊断函数。
         print_case(
             case=case,
             state=state,
