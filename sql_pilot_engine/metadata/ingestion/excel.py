@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import sqlite3
+
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
 from openpyxl import load_workbook
 
-from sql_pilot_engine.metadata.models import (
-    MetadataColumnSnapshot,
-    MetadataSnapshot,
-    MetadataTableSnapshot,
+from sql_pilot_engine.metadata.schema import (
+    initialize_metadata_database,
 )
 
 
@@ -34,8 +35,19 @@ KNOWN_LAYERS = {
     frozen=True,
     slots=True,
 )
-class ExcelMetadataLoadResult:
-    snapshot: MetadataSnapshot
+class ExcelMetadataImportResult:
+    """
+    Excel元数据导入结果。
+
+    这是Ingestion层的工程DTO，
+    不属于Metadata核心Domain Model。
+    """
+
+    batch_id: int
+
+    table_count: int
+
+    column_count: int
 
     raw_rows: int
 
@@ -64,10 +76,7 @@ def _infer_layer(
         table_name
         .strip()
         .lower()
-        .split(
-            "_",
-            1,
-        )[0]
+        .split("_", 1)[0]
     )
 
     if prefix in KNOWN_LAYERS:
@@ -76,278 +85,376 @@ def _infer_layer(
     return ""
 
 
-def load_metadata_excel(
-    path: str | Path,
+def _primary_description(
+    counter: Counter[str],
+) -> str:
+    """
+    一个物理对象只保留一个主描述。
+
+    规则：
+    1. 出现次数最多；
+    2. 次数相同时使用最早出现的描述。
+
+    Counter保持插入顺序，
+    因此most_common在并列时会保留首次顺序。
+    """
+
+    if not counter:
+        return ""
+
+    return counter.most_common(1)[0][0]
+
+
+def import_metadata_excel(
+    source_path: str | Path,
+    database_path: str | Path,
     *,
     snapshot_label: str,
     source_name: str | None = None,
-) -> ExcelMetadataLoadResult:
+    activate: bool = True,
+) -> ExcelMetadataImportResult:
+    """
+    将Excel元数据持久化导入SQLite。
 
-    source_path = Path(path)
+    注意：
+    这是维护流程，不应该由Agent Runtime调用。
+    """
+
+    source = Path(source_path)
+    database = Path(database_path)
+
+    # 数据库建表只发生在维护/导入流程。
+    initialize_metadata_database(
+        database
+    )
 
     workbook = load_workbook(
-        source_path,
+        source,
         read_only=True,
         data_only=True,
     )
 
-    sheet = (
-        workbook[
-            "每个表的字段"
-        ]
-        if "每个表的字段"
-        in workbook.sheetnames
-        else workbook.active
-    )
+    try:
 
-    rows = sheet.iter_rows(
-        values_only=True
-    )
-
-    headers = tuple(
-        _clean(value)
-        for value
-        in next(rows)
-    )
-
-    index = {
-        header: position
-        for position, header
-        in enumerate(headers)
-    }
-
-    missing = (
-        REQUIRED_COLUMNS
-        - set(index)
-    )
-
-    if missing:
-        raise ValueError(
-            "Missing required columns: "
-            + ", ".join(
-                sorted(missing)
-            )
+        sheet = (
+            workbook["每个表的字段"]
+            if "每个表的字段"
+            in workbook.sheetnames
+            else workbook.active
         )
 
-    # {
-    #   table_name: {
-    #       descriptions: set[str],
-    #       columns: {
-    #           column_name: {
-    #               descriptions: set[str],
-    #               ordinal_position: int
-    #           }
-    #       }
-    #   }
-    # }
-    tables: dict[
-        str,
-        dict,
-    ] = {}
+        rows = sheet.iter_rows(
+            values_only=True
+        )
 
-    seen_records: set[
-        tuple[
+        headers = tuple(
+            _clean(value)
+            for value in next(rows)
+        )
+
+        column_indexes = {
+            name: index
+            for index, name
+            in enumerate(headers)
+        }
+
+        missing_columns = (
+            REQUIRED_COLUMNS
+            - set(column_indexes)
+        )
+
+        if missing_columns:
+            raise ValueError(
+                "Missing required columns: "
+                + ", ".join(
+                    sorted(missing_columns)
+                )
+            )
+
+        # --------------------------------------------------
+        # 先在内存中按物理表 / 字段聚合。
+        #
+        # 这里不是Runtime缓存，
+        # 只是一次Excel导入过程中的临时结构。
+        # --------------------------------------------------
+
+        tables: dict[
             str,
-            str,
-            str,
-            str,
-        ]
-    ] = set()
+            dict,
+        ] = {}
 
-    raw_rows = 0
-    accepted_rows = 0
-    duplicate_rows = 0
-    skipped_rows = 0
-
-    for row in rows:
-
-        raw_rows += 1
-
-        column_name = _clean(
-            row[
-                index["字段英文"]
+        seen_records: set[
+            tuple[
+                str,
+                str,
+                str,
+                str,
             ]
-        )
+        ] = set()
 
-        column_description = (
-            _clean(
+        raw_rows = 0
+        accepted_rows = 0
+        duplicate_rows = 0
+        skipped_rows = 0
+
+        for row in rows:
+
+            raw_rows += 1
+
+            column_name = _clean(
                 row[
-                    index["字段中文"]
-                ]
-            )
-        )
-
-        table_name = _clean(
-            row[
-                index["英文表名"]
-            ]
-        )
-
-        table_description = (
-            _clean(
-                row[
-                    index["中文表名"]
-                ]
-            )
-        )
-
-        if (
-            not table_name
-            or not column_name
-        ):
-            skipped_rows += 1
-            continue
-
-        normalized_table = (
-            table_name.lower()
-        )
-
-        normalized_column = (
-            column_name.lower()
-        )
-
-        record = (
-            normalized_table,
-            normalized_column,
-            table_description,
-            column_description,
-        )
-
-        if record in seen_records:
-            duplicate_rows += 1
-            continue
-
-        seen_records.add(record)
-
-        accepted_rows += 1
-
-        table_data = tables.setdefault(
-            normalized_table,
-            {
-                "descriptions": set(),
-                "columns": {},
-            },
-        )
-
-        if table_description:
-            table_data[
-                "descriptions"
-            ].add(
-                table_description
-            )
-
-        columns = table_data[
-            "columns"
-        ]
-
-        column_data = columns.setdefault(
-            normalized_column,
-            {
-                "descriptions": set(),
-
-                # 第一次出现的位置，
-                # 作为当前快照中的近似字段顺序。
-                "ordinal_position": (
-                    len(columns) + 1
-                ),
-            },
-        )
-
-        if column_description:
-            column_data[
-                "descriptions"
-            ].add(
-                column_description
-            )
-
-    table_snapshots = []
-
-    for table_name in sorted(
-        tables
-    ):
-
-        table_data = tables[
-            table_name
-        ]
-
-        columns = tuple(
-            MetadataColumnSnapshot(
-                name=column_name,
-
-                descriptions=tuple(
-                    sorted(
-                        column_data[
-                            "descriptions"
-                        ]
-                    )
-                ),
-
-                # 当前Excel未提供：
-                data_type="",
-                nullable=None,
-                is_partition=None,
-
-                ordinal_position=(
-                    column_data[
-                        "ordinal_position"
+                    column_indexes[
+                        "字段英文"
                     ]
-                ),
+                ]
             )
+
+            column_description = _clean(
+                row[
+                    column_indexes[
+                        "字段中文"
+                    ]
+                ]
+            )
+
+            table_name = _clean(
+                row[
+                    column_indexes[
+                        "英文表名"
+                    ]
+                ]
+            )
+
+            table_description = _clean(
+                row[
+                    column_indexes[
+                        "中文表名"
+                    ]
+                ]
+            )
+
+            if (
+                not table_name
+                or not column_name
+            ):
+                skipped_rows += 1
+                continue
+
+            normalized_table_name = (
+                table_name.lower()
+            )
+
+            normalized_column_name = (
+                column_name.lower()
+            )
+
+            record = (
+                normalized_table_name,
+                normalized_column_name,
+                table_description,
+                column_description,
+            )
+
+            # 完全相同的原始记录只保留一次。
+            if record in seen_records:
+                duplicate_rows += 1
+                continue
+
+            seen_records.add(record)
+
+            accepted_rows += 1
+
+            table_data = tables.setdefault(
+                normalized_table_name,
+                {
+                    "descriptions": Counter(),
+                    "columns": {},
+                },
+            )
+
+            if table_description:
+                table_data[
+                    "descriptions"
+                ][table_description] += 1
+
+            columns = table_data[
+                "columns"
+            ]
+
+            if (
+                normalized_column_name
+                not in columns
+            ):
+                columns[
+                    normalized_column_name
+                ] = {
+                    "descriptions": Counter(),
+
+                    # 按第一次遇到字段的顺序保存。
+                    "ordinal_position": (
+                        len(columns) + 1
+                    ),
+                }
+
+            column_data = columns[
+                normalized_column_name
+            ]
+
+            if column_description:
+                column_data[
+                    "descriptions"
+                ][column_description] += 1
+
+    finally:
+
+        workbook.close()
+
+    # ------------------------------------------------------
+    # 持久化
+    # ------------------------------------------------------
+
+    with sqlite3.connect(
+        database
+    ) as connection:
+
+        connection.execute(
+            "PRAGMA foreign_keys = ON"
+        )
+
+        batch_cursor = connection.execute(
+            """
+            INSERT INTO metadata_batch (
+                source_name,
+                snapshot_label,
+                is_active
+            )
+            VALUES (?, ?, 0)
+            """,
+            (
+                source_name
+                or source.name,
+
+                snapshot_label,
+            ),
+        )
+
+        batch_id = int(
+            batch_cursor.lastrowid
+        )
+
+        table_count = 0
+        column_count = 0
+
+        for (
+            table_name,
+            table_data,
+        ) in tables.items():
+
+            table_cursor = (
+                connection.execute(
+                    """
+                    INSERT INTO metadata_table (
+                        batch_id,
+                        full_name,
+                        description,
+                        layer
+                    )
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        batch_id,
+
+                        table_name,
+
+                        _primary_description(
+                            table_data[
+                                "descriptions"
+                            ]
+                        ),
+
+                        _infer_layer(
+                            table_name
+                        ),
+                    ),
+                )
+            )
+
+            table_id = int(
+                table_cursor.lastrowid
+            )
+
+            table_count += 1
+
             for (
                 column_name,
                 column_data,
-            )
-            in sorted(
-                table_data[
-                    "columns"
-                ].items(),
-                key=lambda item: (
-                    item[1][
-                        "ordinal_position"
-                    ]
-                ),
-            )
-        )
+            ) in table_data[
+                "columns"
+            ].items():
 
-        table_snapshots.append(
-            MetadataTableSnapshot(
-                full_name=table_name,
-
-                descriptions=tuple(
-                    sorted(
-                        table_data[
-                            "descriptions"
-                        ]
+                connection.execute(
+                    """
+                    INSERT INTO metadata_column (
+                        table_id,
+                        name,
+                        description,
+                        data_type,
+                        nullable,
+                        ordinal_position,
+                        is_partition
                     )
-                ),
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        table_id,
 
-                layer=(
-                    _infer_layer(
-                        table_name
-                    )
-                ),
+                        column_name,
 
-                columns=columns,
+                        _primary_description(
+                            column_data[
+                                "descriptions"
+                            ]
+                        ),
+
+                        # 当前Excel暂时没有这些信息。
+                        "",
+                        None,
+
+                        column_data[
+                            "ordinal_position"
+                        ],
+
+                        None,
+                    ),
+                )
+
+                column_count += 1
+
+        if activate:
+
+            # 当前只有一个Active Snapshot。
+            connection.execute(
+                """
+                UPDATE metadata_batch
+                SET is_active = 0
+                """
             )
-        )
 
-    snapshot = MetadataSnapshot(
-        source_name=(
-            source_name
-            or source_path.name
-        ),
+            connection.execute(
+                """
+                UPDATE metadata_batch
+                SET is_active = 1
+                WHERE id = ?
+                """,
+                (batch_id,),
+            )
 
-        snapshot_label=(
-            snapshot_label
-        ),
+    return ExcelMetadataImportResult(
+        batch_id=batch_id,
 
-        tables=tuple(
-            table_snapshots
-        ),
-    )
+        table_count=table_count,
 
-    return ExcelMetadataLoadResult(
-        snapshot=snapshot,
+        column_count=column_count,
 
         raw_rows=raw_rows,
 

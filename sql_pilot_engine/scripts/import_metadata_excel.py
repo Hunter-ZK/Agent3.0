@@ -5,11 +5,7 @@ import argparse
 from pathlib import Path
 
 from sql_pilot_engine.metadata.ingestion.excel import (
-    load_metadata_excel,
-)
-
-from sql_pilot_engine.metadata.sqlite_repository import (
-    SQLiteMetadataRepository,
+    import_metadata_excel,
 )
 
 
@@ -17,98 +13,102 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Import warehouse metadata "
-            "from Excel into SQLite."
+            "Import metadata Excel "
+            "into persistent SQLite DB."
         )
     )
 
     parser.add_argument(
         "source",
         type=Path,
+
+        help=(
+            "Metadata Excel file."
+        ),
     )
 
     parser.add_argument(
         "database",
         type=Path,
+
+        help=(
+            "Persistent SQLite "
+            "metadata database."
+        ),
     )
 
     parser.add_argument(
         "--snapshot-label",
         required=True,
+
+        help=(
+            "Metadata version label, "
+            "for example 2026-05."
+        ),
     )
 
     args = parser.parse_args()
 
-    result = load_metadata_excel(
+    result = import_metadata_excel(
         args.source,
+
+        args.database,
 
         snapshot_label=(
             args.snapshot_label
         ),
     )
 
-    repository = (
-        SQLiteMetadataRepository(
-            args.database
-        )
-    )
-
-    repository.initialize()
-
-    batch_id = (
-        repository.import_snapshot(
-            result.snapshot,
-            activate=True,
-        )
-    )
-
+    print()
     print(
         "Metadata import completed."
     )
-
     print(
-        f"Batch ID: {batch_id}"
+        "=" * 50
     )
 
     print(
-        "Tables:",
-        len(
-            result.snapshot.tables
-        ),
+        f"Batch ID:       "
+        f"{result.batch_id}"
     )
 
     print(
-        "Columns:",
-        sum(
-            len(table.columns)
-            for table
-            in result.snapshot.tables
-        ),
+        f"Tables:         "
+        f"{result.table_count}"
     )
 
     print(
-        "Raw rows:",
-        result.raw_rows,
+        f"Columns:        "
+        f"{result.column_count}"
     )
 
     print(
-        "Accepted rows:",
-        result.accepted_rows,
+        f"Raw rows:       "
+        f"{result.raw_rows}"
     )
 
     print(
-        "Duplicate rows:",
-        result.duplicate_rows,
+        f"Accepted rows:  "
+        f"{result.accepted_rows}"
     )
 
     print(
-        "Skipped rows:",
-        result.skipped_rows,
+        f"Duplicate rows: "
+        f"{result.duplicate_rows}"
     )
 
     print(
-        "Database:",
-        args.database,
+        f"Skipped rows:   "
+        f"{result.skipped_rows}"
+    )
+
+    print(
+        "=" * 50
+    )
+
+    print(
+        f"Database: "
+        f"{args.database}"
     )
 
 
