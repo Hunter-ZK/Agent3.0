@@ -8,9 +8,6 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from sql_pilot_engine.metadata.schema import (
-    initialize_metadata_database,
-)
 
 
 REQUIRED_COLUMNS = {
@@ -36,25 +33,12 @@ KNOWN_LAYERS = {
     slots=True,
 )
 class ExcelMetadataImportResult:
-    """
-    Excel元数据导入结果。
-
-    这是Ingestion层的工程DTO，
-    不属于Metadata核心Domain Model。
-    """
-
-    batch_id: int
-
     table_count: int
-
     column_count: int
 
     raw_rows: int
-
     accepted_rows: int
-
     duplicate_rows: int
-
     skipped_rows: int
 
 
@@ -108,10 +92,6 @@ def _primary_description(
 def import_metadata_excel(
     source_path: str | Path,
     database_path: str | Path,
-    *,
-    snapshot_label: str,
-    source_name: str | None = None,
-    activate: bool = True,
 ) -> ExcelMetadataImportResult:
     """
     将Excel元数据持久化导入SQLite。
@@ -123,10 +103,6 @@ def import_metadata_excel(
     source = Path(source_path)
     database = Path(database_path)
 
-    # 数据库建表只发生在维护/导入流程。
-    initialize_metadata_database(
-        database
-    )
 
     workbook = load_workbook(
         source,
@@ -311,6 +287,10 @@ def import_metadata_excel(
 
     # ------------------------------------------------------
     # 持久化
+    #
+    # 注意：
+    # 这里写入的是 Rebuild 阶段创建的临时数据库。
+    # Runtime 不调用这个函数。
     # ------------------------------------------------------
 
     with sqlite3.connect(
@@ -319,27 +299,6 @@ def import_metadata_excel(
 
         connection.execute(
             "PRAGMA foreign_keys = ON"
-        )
-
-        batch_cursor = connection.execute(
-            """
-            INSERT INTO metadata_batch (
-                source_name,
-                snapshot_label,
-                is_active
-            )
-            VALUES (?, ?, 0)
-            """,
-            (
-                source_name
-                or source.name,
-
-                snapshot_label,
-            ),
-        )
-
-        batch_id = int(
-            batch_cursor.lastrowid
         )
 
         table_count = 0
@@ -354,16 +313,21 @@ def import_metadata_excel(
                 connection.execute(
                     """
                     INSERT INTO metadata_table (
-                        batch_id,
                         full_name,
                         description,
-                        layer
+                        layer,
+                        row_count,
+                        size_bytes
                     )
-                    VALUES (?, ?, ?, ?)
+                    VALUES (
+                        ?,
+                        ?,
+                        ?,
+                        NULL,
+                        NULL
+                    )
                     """,
                     (
-                        batch_id,
-
                         table_name,
 
                         _primary_description(
@@ -401,9 +365,19 @@ def import_metadata_excel(
                         data_type,
                         nullable,
                         ordinal_position,
-                        is_partition
+                        is_partition,
+                        distinct_count
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (
+                        ?,
+                        ?,
+                        ?,
+                        '',
+                        NULL,
+                        ?,
+                        NULL,
+                        NULL
+                    )
                     """,
                     (
                         table_id,
@@ -416,51 +390,20 @@ def import_metadata_excel(
                             ]
                         ),
 
-                        # 当前Excel暂时没有这些信息。
-                        "",
-                        None,
-
                         column_data[
                             "ordinal_position"
                         ],
-
-                        None,
                     ),
                 )
 
                 column_count += 1
 
-        if activate:
-
-            # 当前只有一个Active Snapshot。
-            connection.execute(
-                """
-                UPDATE metadata_batch
-                SET is_active = 0
-                """
-            )
-
-            connection.execute(
-                """
-                UPDATE metadata_batch
-                SET is_active = 1
-                WHERE id = ?
-                """,
-                (batch_id,),
-            )
-
     return ExcelMetadataImportResult(
-        batch_id=batch_id,
-
         table_count=table_count,
-
         column_count=column_count,
 
         raw_rows=raw_rows,
-
         accepted_rows=accepted_rows,
-
         duplicate_rows=duplicate_rows,
-
         skipped_rows=skipped_rows,
     )

@@ -1,73 +1,55 @@
-# SQLPilot / SQL Review Agent Latest Source
+# Agent3.0 / DataAgent
 
-这是当前对话整理出的最新可延续开发版源码包。
+Agent3.0 是面向数仓开发与数据知识工作的 Domain Agent Harness。
 
-## 当前定位
+项目目标不是构建一个单一 Text-to-SQL 工具，
+而是沉淀一套可复用的：
 
-当前项目已经从命令行 SQL Review 工具，收口为未来 SQLPilot Web 应用的底层 Engine。
+- Shared Agent Runtime
+- Context Intelligence
+- Metadata / Semantic / Knowledge / Standards
+- SQL Analysis & Validation
+- Capability Workflow
+- Evaluation & Observability
 
-后续方向：
+基础设施。
 
-```text
-SQLPilotEngine
-→ FastAPI Backend
-→ Streamlit Web MVP
-→ RAG Knowledge Layer
-→ Agent Workflow
-```
+---
 
-## 当前能力
+## 当前产品边界
 
-- 基础 SQL 规则检查
-- MaxCompute / DataWorks 规则检查
-- Mock 元数据检查
-- 表、字段、分区检查
-- LLM Review：Mock / DeepSeek
-- LLM JSON Schema Repair
-- Auto Fix / Unified Fixed SQL
-- LLM Fixer
-- SQL 轻量分析上下文
-- Text / JSON / Markdown 报告
-- CLI 调试入口
-- 兼容旧入口 `python -m sql_review_agent.cli`
+Agent3.0 当前负责：
 
-## 安装
+- 自然语言生成高可信 SQL
+- SQL 静态分析与验证
+- Metadata 驱动的 Grounding
+- Semantic Model 驱动的业务映射
+- Business Knowledge / Verified SQL 检索
+- Clarification / HITL
+- 后续 SQL Review & Optimization
+- 后续 Knowledge & Asset QA
+- 后续数模与命名建议
 
-```powershell
-pip install -e .
-```
+当前不负责：
 
-## 测试
+- 在生产数据库执行 SQL
+- 数据调度执行
+- 数据库运维
+- 血缘平台实现
+- 完整 Skill / Plugin Platform
 
-```powershell
-python -m pytest -q
-```
+---
 
-## CLI 示例
+## Capability
 
-```powershell
-python -m sql_review_agent.app.cli examples\sample_refactor.sql --format text
-python -m sql_review_agent.app.cli examples\sample_refactor.sql --enable-metadata --fix-sql --format markdown --output reports\review.md
-python -m sql_review_agent.app.cli examples\sample_refactor.sql --enable-metadata --enable-llm --llm-provider mock --fix-sql --fix-provider llm --format markdown
-```
+### C1. Text-to-SQL
 
-## DeepSeek 配置
-
-复制 `.env.example` 为 `.env`，填写：
-
-```env
-DEEPSEEK_API_KEY=你的key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
-```
-
-## 下一步
-
-不要继续扩展 CLI。下一阶段建议从：
+当前最成熟的 Capability。
 
 ```text
-Phase B：SQLPilotEngine API 收口
-```
-
-开始，为 FastAPI / Streamlit Web MVP 做准备。
-# Agent3.0
+Question
+→ Context
+→ Query Planning
+→ SQL Generation
+→ Validation
+→ Trusted SQL

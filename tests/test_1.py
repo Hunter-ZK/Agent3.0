@@ -1,31 +1,39 @@
-from sql_pilot_engine.metadata.sqlite_repository import (
-    SQLiteMetadataRepository,
+from sql_pilot_engine.metadata.ingestion.rebuild import (
+    rebuild_metadata_database,
 )
 
 
-metadata = SQLiteMetadataRepository(
-    "data/metadata/agent_metadata.db"
+result = rebuild_metadata_database(
+    metadata_source_path=(
+        "data/metadata.xlsx"
+    ),
+
+    standards_source_path=(
+        "data/字段命名规则资产_V0.1.xlsx"
+    ),
+
+    database_path=(
+        "data/metadata.db"
+    ),
+
+    metadata_source_label=(
+        "2026-05"
+    ),
+
+    standards_source_label=(
+        "V0.1"
+    ),
 )
 
 
 print(
-    metadata.find_tables(
-        "绿色贷款"
-    )
+    result.metadata.table_count
 )
 
-
 print(
-    metadata.find_columns(
-        "贷款余额",
-        limit=10,
-    )
+    result.metadata.column_count
 )
 
-
 print(
-    metadata.find_column_usages(
-        "loan_bal_rmb",
-        limit=20,
-    )
+    result.standards
 )

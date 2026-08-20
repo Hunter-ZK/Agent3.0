@@ -62,7 +62,6 @@ class QueryAgentState(TypedDict):
     # Context Intelligence
     # ========================================================
     
-    semantic_context: NotRequired[str | None]
     query_context: NotRequired[
         QueryContext | None
     ]

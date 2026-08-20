@@ -62,10 +62,14 @@ class MetadataCatalog(Protocol):
     def find_column_usages(
         self,
         column_name: str,
-        *,
-        limit: int = 100,
     ) -> tuple[
         ColumnSearchResult,
         ...
     ]:
-        ...
+    """
+    查询一个精确字段名在全部物理表中的使用情况。
+
+    这是 Complete Fact Query，
+    不允许使用隐式 Top-N limit。
+    """
+    ...

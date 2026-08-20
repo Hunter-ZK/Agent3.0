@@ -672,7 +672,6 @@ class QueryAgentGraph:
             ),
 
             # Context
-            "semantic_context": None,
             "query_context": None,
 
             # Planning

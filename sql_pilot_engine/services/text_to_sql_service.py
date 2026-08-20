@@ -1,601 +1,343 @@
 from __future__ import annotations
 
-import logging
-import time
-import uuid
+from uuid import uuid4
 
-logger = logging.getLogger(__name__)
+from sql_pilot_engine.runtime.query_graph import (
+    QueryAgentGraph,
+)
 
-from sql_pilot_engine.context.builder import (
-    QueryContextBuilder,
-)
-from sql_pilot_engine.context.retriever import (
-    KnowledgeRetriever,
-    VerifiedSQLRetriever,
-)
-from sql_pilot_engine.context.semantic.models import (
-    SemanticModel,
-)
-from sql_pilot_engine.context.semantic.renderer import (
-    SemanticModelRenderer,
-)
-from sql_pilot_engine.generation.planner import (
-    QueryPlanner,
-)
-from sql_pilot_engine.generation.sql_generator import (
-    SQLGenerator,
-)
 from sql_pilot_engine.schemas.text_to_sql import (
-    TextToSQLRequest,
-    TextToSQLResult,
-    TextToSQLResponse,
     TextToSQLClarification,
-)
-from sql_pilot_engine.workflow.sql_agent_workflow import (
-    SQLAgentWorkflow, SQLAgentWorkflowResult
-)
-from sql_pilot_engine.observability.context import (
-    bind_run_id
-)
-from sql_pilot_engine.services.semantic_validation_service import (
-    SemanticSQLValidator,
-    SemanticValidationStatus,
-    SemanticValidationResult,
-)
-from sql_pilot_engine.generation.models import (
-    PlanningClarification,
+    TextToSQLRequest,
+    TextToSQLResponse,
+    TextToSQLResult,
 )
 
 
 class TextToSQLService:
+    """
+    Text-to-SQL Application Facade。
+
+    重要边界：
+
+    Service 不再负责：
+    - Context Retrieval
+    - Planning
+    - SQL Generation
+    - SQL Validation
+    - Semantic Validation
+    - Retry
+    - Clarification Workflow
+
+    上述流程全部归 QueryAgentGraph。
+
+    Service 只负责：
+    - Application Request
+    - Runtime start / resume
+    - Graph State → Application Response
+    """
 
     def __init__(
         self,
         *,
-        semantic_model: SemanticModel,
-        knowledge_retriever: KnowledgeRetriever,
-        verified_sql_retriever: VerifiedSQLRetriever,
-        context_builder: QueryContextBuilder,
-        planner: QueryPlanner,
-        sql_generator: SQLGenerator,
-        semantic_validator: SemanticSQLValidator | None = None,
-        max_semantic_retries: int = 1,
-        validation_workflow: SQLAgentWorkflow,
+        graph: QueryAgentGraph,
     ) -> None:
 
-        self.semantic_model = semantic_model
+        self._graph = graph
 
-        self.knowledge_retriever = (
-            knowledge_retriever
-        )
+    # ========================================================
+    # Public API
+    # ========================================================
 
-        self.verified_sql_retriever = (
-            verified_sql_retriever
-        )
-
-        self.context_builder = context_builder
-
-        self.planner = planner
-
-        self.sql_generator = sql_generator
-
-        self.validation_workflow = (
-            validation_workflow
-        )
-
-        self.semantic_renderer = (
-            SemanticModelRenderer()
-        )
-        
-        self.semantic_validator = (
-            semantic_validator
-        )
-        
-        if max_semantic_retries < 0:
-            raise ValueError(
-                "max_semantic_retries "
-                "must be >= 0"
-            )
-        self.max_semantic_retries = (
-            max_semantic_retries
-        )
-        
     def generate(
         self,
         request: TextToSQLRequest,
     ) -> TextToSQLResponse:
+        """
+        开启一个新的 Text-to-SQL Turn。
+        """
 
-        run_id = uuid.uuid4().hex[:8]
+        thread_id = uuid4().hex
 
-        with bind_run_id(run_id):
-            total_start = time.perf_counter()
+        state = self._graph.start(
+            thread_id=thread_id,
 
+            question=request.question,
 
-            logger.info(
-                "text_to_sql.start question_chars=%d",
-                len(request.question),
-            )
-            try:
+            dialect=request.dialect,
 
-                stage_start = time.perf_counter()
+            session_context=(
+                request.session_context
+            ),
+        )
 
-                logger.info(
-                    "context.start"
-                )
+        return self._state_to_response(
+            state=state,
 
-                question = request.question
-                
-                business_knowledge = (
-                    self.knowledge_retriever.retrieve(
-                        question=question,
-                        top_k=5,
-                    )
-                )
-                
-                for item in business_knowledge:
-                    logger.debug(
-                        "context.business_knowledge "
-                        "document_id=%s text=%s",
-                        item.document.document_id,
-                        item.document.text,
-                    )
-                
-                verified_sql = (
-                    self.verified_sql_retriever.retrieve(
-                        question=question,
-                        top_k=3,
-                    )
-                )
-                
-                for item in verified_sql:
-                    logger.debug(
-                        "context.verified_sql "
-                        "document_id=%s text=%s",
-                        item.document.document_id,
-                        item.document.text,
-                    )
+            question=request.question,
 
+            thread_id=thread_id,
+        )
 
-                query_context = (
-                    self.context_builder.build(
-                        question=question,
-                        business_knowledge=business_knowledge,
-                        verified_sql=verified_sql,
-                        session_context=(
-                            request.session_context
-                        ),
-                    )
-                )
-                
-                if query_context.session_context:
-                    for index, item in enumerate(
-                        query_context.session_context,
-                        start=1,
-                    ):
-                        logger.debug(
-                            "context.session "
-                            "index=%d text=%s",
-                            index,
-                            item,
-                        )
-                
-                semantic_context = (
-                    self.semantic_renderer.render(
-                        self.semantic_model
-                    )
-                )
-                
-                logger.debug(
-                    "context.semantic\n%s",
-                    semantic_context,
-                )
-
-                elapsed_ms = int(
-                    (time.perf_counter() - stage_start) * 1000
-                )
-
-                logger.info(
-                    "context.end "
-                    "knowledge_docs=%d "
-                    "verified_sql_docs=%d "
-                    "elapsed_ms=%d",
-                    len(business_knowledge),
-                    len(verified_sql),
-                    elapsed_ms,
-                )
-                
-
-                stage_start = time.perf_counter()
-
-                logger.info(
-                    "planner.start"
-                )
-                
-                planning_outcome = self.planner.plan(
-                    question=question,
-                    semantic_context=semantic_context,
-                    query_context=query_context,
-                )
-
-                if isinstance(
-                    planning_outcome,
-                    PlanningClarification,
-                ):
-                    logger.info(
-                        "planner.need_clarification "
-                        "missing_context=%d",
-                        len(
-                            planning_outcome
-                            .missing_context
-                        ),
-                    )
-
-                    return TextToSQLClarification(
-                        question=question,
-
-                        clarification_question=(
-                            planning_outcome
-                            .clarification_question
-                        ),
-
-                        missing_context=(
-                            planning_outcome
-                            .missing_context
-                        ),
-
-                        reason=(
-                            planning_outcome.reason
-                        ),
-                    )
-
-                elapsed_ms = int(
-                    (
-                        time.perf_counter()
-                        - stage_start
-                    )
-                    * 1000
-                )
-
-                logger.info(
-                    "planner.end "
-                    "tables=%d "
-                    "dimensions=%d "
-                    "metrics=%d "
-                    "elapsed_ms=%d",
-                    len(planning_outcome.tables),
-                    len(planning_outcome.dimensions),
-                    len(planning_outcome.metrics),
-                    elapsed_ms,
-                )
-
-                revision_feedback: tuple[str, ...] = ()
-                
-                semantic_result = None
-                validation = None
-                current_generated_sql = None
-                candidate_sql = None
-                
-                max_attempts = (
-                    self.max_semantic_retries + 1
-                )
-                
-                for attempt in range(1, max_attempts + 1,):
-                
-                    logger.info(
-                        "generation_attempt.start "
-                        "attempt=%d/%d",
-                        attempt,
-                        max_attempts,
-                    )
-
-                    stage_start = time.perf_counter()
-
-                    logger.info(
-                        "generator.start"
-                    )
-                    
-                    generated = (
-                        self.sql_generator.generate(
-                            question=question,
-                            plan=planning_outcome,
-                            semantic_context=semantic_context,
-                            query_context=query_context,
-                            dialect=request.dialect,
-                            revision_feedback=(revision_feedback),
-                        )
-                    )
-                    
-                    current_generated_sql = generated.sql
-
-                    elapsed_ms = int(
-                        (
-                            time.perf_counter()
-                            - stage_start
-                        )
-                        * 1000
-                    )
-
-                    logger.info(
-                        "generator.end "
-                        "sql_chars=%d "
-                        "elapsed_ms=%d",
-                        len(generated.sql),
-                        elapsed_ms,
-                    )
-
-                    stage_start = time.perf_counter()
-
-                    logger.info(
-                        "validation.start"
-                    )
-                    
-                    validation = (
-                        self.validation_workflow.run(
-                            current_generated_sql
-                        )
-                    )
-
-                    elapsed_ms = int(
-                        (
-                            time.perf_counter()
-                            - stage_start
-                        )
-                        * 1000
-                    )
-
-                    logger.info(
-                        "validation.end "
-                        "status=%s "
-                        "elapsed_ms=%d",
-                        validation.final_status,
-                        elapsed_ms,
-                    )
-                    
-
-                    candidate_sql = (
-                        self._resolve_trusted_sql(
-                            generated_sql=current_generated_sql,
-                            validation=validation,
-                        )
-                    )
-                    
-                    semantic_result = None
-                    semantic_passed = True
-                    
-                    if candidate_sql is None:
-                        logger.info(
-                            "generation_attempt.end "
-                            "attempt=%d "
-                            "deterministic_passed=False",
-                            attempt,
-                        )
-
-                        break
-                    
-                    if self.semantic_validator is None:
-                        break
-                        
-                    logger.info(
-                        "semantic_validation.start"
-                    )
-                    
-                    stage_start = time.perf_counter()
-                    
-                    semantic_result = (
-                        self.semantic_validator.validate(
-                            question=question,
-                            sql=candidate_sql,
-                            plan=planning_outcome,
-                            semantic_context=(
-                                semantic_context
-                            ),
-                            query_context=query_context,
-                        )
-                    )
-                    
-                    elapsed_ms = int(
-                        (
-                            time.perf_counter() - stage_start 
-                        ) * 1000
-                    )
-
-                    logger.info(
-                        "semantic_validation.end "
-                        "status=%s "
-                        "missing=%d "
-                        "issues=%d "
-                        "elapsed_ms=%d",
-                        semantic_result.status.value,
-                        len(
-                            semantic_result.missing_requirements
-                        ),
-                        len(
-                            semantic_result.issues
-                        ),
-                        elapsed_ms,
-                    )
-
-                    if semantic_result.passed:
-                        logger.info(
-                            "generation_attempt.end "
-                            "attempt=%d "
-                            "semantic_status=pass",
-                            attempt,
-                        )
-
-                        break
-                    
-                    if (
-                        semantic_result.status
-                        is SemanticValidationStatus
-                        .NEED_CLARIFICATION
-                    ):
-                        logger.info(
-                            "semantic_validation "
-                            "need_clarification"
-                        )
-                        break
-                    
-                    if attempt >= max_attempts:
-                        logger.info(
-                            "generation_attempt.end "
-                            "attempt=%d "
-                            "semantic_status=%s "
-                            "retry=False",
-                            attempt,
-                            semantic_result.status.value,
-                        )
-
-                        break
-                    
-                    revision_feedback = (
-                        self._build_revision_feedback(
-                            semantic_result
-                        )
-                    )                   
-
-                    logger.info(
-                        "semantic_retry "
-                        "attempt=%d "
-                        "feedback_items=%d",
-                        attempt,
-                        len(revision_feedback),
-                    )
-                        
-                    
-                deterministic_passed = (
-                    validation is not None
-                    and validation.success
-                    and candidate_sql is not None
-                )
-                    
-                    
-                semantic_passed = (
-                    self.semantic_validator is None 
-                    or (
-                        semantic_result is not None
-                        and semantic_result.passed
-                    )
-                )
-
-                success = (
-                    deterministic_passed
-                    and semantic_passed
-                )
-                
-                trusted_sql = (
-                    candidate_sql if success else None
-                )
-
-
-                result = TextToSQLResult(
-                    question=question,
-                    query_plan=planning_outcome,
-                    generated_sql=generated.sql,
-                    trusted_sql=trusted_sql,
-                    success=success,
-                    validation_status=(
-                        validation.final_status
-                    ),
-                    semantic_validation_status=(
-                        semantic_result.status.value
-                        if semantic_result
-                        else None
-                    ),
-
-                    semantic_missing_requirements=(
-                        semantic_result
-                        .missing_requirements
-                        if semantic_result
-                        else ()
-                    ),
-
-                    semantic_issues=(
-                        semantic_result.issues
-                        if semantic_result
-                        else ()
-                    ),
-                )
-
-            except Exception:
-
-                elapsed_ms = int(
-                    (time.perf_counter() - total_start) * 1000
-                )
-
-                logger.exception(
-                    "text_to_sql.error elapsed_ms=%d",
-                    elapsed_ms,
-                )
-
-                raise
-
-            total_elapsed_ms = int(
-                (
-                    time.perf_counter()
-                    - total_start
-                )
-                * 1000
-            )
-
-            logger.info(
-                "text_to_sql.end success=%s "
-                "validation_status=%s elapsed_ms=%d",
-                result.success,
-                result.validation_status,
-                total_elapsed_ms,
-            )
-        
-        return result
-        
-    
-    @staticmethod
-    def _resolve_trusted_sql(
+    def resume(
+        self,
         *,
-        generated_sql: str,
-        validation: SQLAgentWorkflowResult,
-    ) -> str | None:
-        
-        if not validation.success:
-            return None
-        
-        if (
-            validation.fix_response is not None and validation.fix_response.fixed_sql
-        ):
-            return (
-                validation.fix_response.fixed_sql
+        thread_id: str,
+        answer: str,
+    ) -> TextToSQLResponse:
+        """
+        从 Clarification / HITL
+        继续原有 Runtime Thread。
+
+        注意：
+        这里不是重新 generate()。
+        """
+
+        normalized_thread_id = (
+            thread_id.strip()
+        )
+
+        normalized_answer = (
+            answer.strip()
+        )
+
+        if not normalized_thread_id:
+            raise ValueError(
+                "thread_id cannot be empty"
             )
-            
-        return generated_sql
-    
-    
+
+        if not normalized_answer:
+            raise ValueError(
+                "answer cannot be empty"
+            )
+
+        state = self._graph.resume(
+            thread_id=(
+                normalized_thread_id
+            ),
+
+            answer=(
+                normalized_answer
+            ),
+        )
+
+        question = str(
+            state.get(
+                "question",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if not question:
+            raise RuntimeError(
+                "Runtime resumed without "
+                "the original question."
+            )
+
+        return self._state_to_response(
+            state=state,
+
+            question=question,
+
+            thread_id=(
+                normalized_thread_id
+            ),
+        )
+
+    # ========================================================
+    # Application Boundary Mapping
+    # ========================================================
+
+    @classmethod
+    def _state_to_response(
+        cls,
+        *,
+        state: dict,
+        question: str,
+        thread_id: str,
+    ) -> TextToSQLResponse:
+        """
+        将内部 LangGraph State
+        转成稳定的 Application DTO。
+
+        这里只做数据转换，
+        不做业务判断或 Workflow 路由。
+        """
+
+        interrupts = state.get(
+            "__interrupt__"
+        )
+
+        # ====================================================
+        # CLARIFICATION / HITL
+        # ====================================================
+
+        if interrupts:
+
+            payload = getattr(
+                interrupts[0],
+                "value",
+                None,
+            )
+
+            if not isinstance(
+                payload,
+                dict,
+            ):
+                raise RuntimeError(
+                    "Invalid LangGraph "
+                    "interrupt payload."
+                )
+
+            clarification_question = str(
+                payload.get(
+                    "question",
+                    "",
+                )
+                or ""
+            ).strip()
+
+            if not clarification_question:
+                raise RuntimeError(
+                    "Clarification question "
+                    "is missing."
+                )
+
+            return TextToSQLClarification(
+                question=question,
+
+                clarification_question=(
+                    clarification_question
+                ),
+
+                thread_id=thread_id,
+
+                missing_context=tuple(
+                    payload.get(
+                        "missing_context",
+                        (),
+                    )
+                    or ()
+                ),
+
+                reason=str(
+                    payload.get(
+                        "reason",
+                        "",
+                    )
+                    or ""
+                ),
+            )
+
+        # ====================================================
+        # FINAL RESULT
+        # ====================================================
+
+        query_plan = state.get(
+            "query_plan"
+        )
+
+        if query_plan is None:
+            raise RuntimeError(
+                "Text-to-SQL Runtime "
+                "finished without QueryPlan "
+                "or clarification."
+            )
+
+        semantic_result = state.get(
+            "semantic_result"
+        )
+
+        return TextToSQLResult(
+            question=question,
+
+            query_plan=query_plan,
+
+            generated_sql=str(
+                state.get(
+                    "generated_sql",
+                    "",
+                )
+                or ""
+            ),
+
+            trusted_sql=state.get(
+                "trusted_sql"
+            ),
+
+            success=bool(
+                state.get(
+                    "success",
+                    False,
+                )
+            ),
+
+            validation_status=(
+                cls._status_text(
+                    state.get(
+                        "validation_status"
+                    )
+                )
+            ),
+
+            semantic_validation_status=(
+                cls._optional_status_text(
+                    state.get(
+                        "semantic_validation_status"
+                    )
+                )
+            ),
+
+            semantic_missing_requirements=(
+                tuple(
+                    getattr(
+                        semantic_result,
+                        "missing_requirements",
+                        (),
+                    )
+                )
+            ),
+
+            semantic_issues=tuple(
+                getattr(
+                    semantic_result,
+                    "issues",
+                    (),
+                )
+            ),
+        )
+
     @staticmethod
-    def _build_revision_feedback(
-        semantic_result:(SemanticValidationResult),
-    ) -> tuple[str, ...]:
-        
-        feedback: list[str] = []
-        
-        for requirement in (
-            semantic_result
-            .missing_requirements
-        ):
-            feedback.append(
-                "Missing requirement: "
-                f"{requirement}"
+    def _status_text(
+        value,
+    ) -> str:
+
+        if value is None:
+            return "not_run"
+
+        enum_value = getattr(
+            value,
+            "value",
+            None,
+        )
+
+        if enum_value is not None:
+            return str(
+                enum_value
             )
 
-        for issue in semantic_result.issues:
-            feedback.append(
-                f"Semantic issue: {issue}"
-            )
+        return str(value)
 
-        if not feedback:
-            feedback.append(
-                "The previous SQL did not fully "
-                "satisfy the original question. "
-                "Re-evaluate the complete request "
-                "and generate a corrected SQL."
-            )
+    @classmethod
+    def _optional_status_text(
+        cls,
+        value,
+    ) -> str | None:
 
-        return tuple(feedback)
+        if value is None:
+            return None
+
+        return cls._status_text(
+            value
+        )

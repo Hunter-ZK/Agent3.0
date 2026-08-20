@@ -11,7 +11,9 @@ from sql_pilot_engine.context.mandatory_rules import (
 
 @dataclass(frozen=True)
 class QueryContext:
-    question: str
+    # question: str
+
+    semantic_context: str = ""
 
     business_knowledge: tuple[
         RetrievedDocument,
@@ -22,6 +24,11 @@ class QueryContext:
         RetrievedDocument,
         ...
     ]
+
+    mandatory_rules: tuple[
+        str,
+        ...
+    ] = ()
 
     session_context: tuple[str, ...] = ()
 
@@ -38,14 +45,23 @@ class QueryContextBuilder:
     def build(
         self,
         *,
-        question: str,
+        semantic_context: str = "",
         business_knowledge: list[
-            RetrievedDocument
-        ],
+            ContextDocument,
+            ...
+        ] = (),
         verified_sql: list[
-            RetrievedDocument
-        ],
-        session_context: tuple[str, ...] = (),
+            ContextDocument,
+            ...
+        ] = (),
+        mandatory_rules: tuple[
+            str,
+            ...
+        ] = (),
+        session_context: tuple[
+            str,
+            ...
+        ] = (),
     ) -> QueryContext:
 
         mandatory_rules = (
@@ -54,28 +70,30 @@ class QueryContextBuilder:
             )
         )
         
-        merged_business_knowledge = (
-            self._merge_business_knowledge(
-                mandatory = mandatory_rules,
-                retrieved=tuple(
-                    business_knowledge
-                ),
-            )
-        )
 
         return QueryContext(
-            question=question,
-            business_knowledge=(
-                merged_business_knowledge
+            semantic_context=(
+                semantic_context
             ),
-            verified_sql=tuple(
+
+            business_knowledge=(
+                business_knowledge
+            ),
+
+            verified_sql=(
                 verified_sql
             ),
+
+            mandatory_rules=(
+                mandatory_rules
+            ),
+
             session_context=(
                 session_context
             ),
         )
-        
+
+
     def _match_mandatory_rules(
         self,
         question: str,

@@ -15,17 +15,43 @@ from sql_pilot_engine.metadata.models import (
     TableMetadata,
 )
 
+from sql_pilot_engine.metadata.schema import (
+    METADATA_SCHEMA_VERSION,
+)
+
+
+def _fts_phrase(
+    value: str,
+) -> str:
+    """
+    将用户输入作为完整 FTS phrase，
+    避免 AND / OR / NOT 等字符串
+    被解释成 FTS 查询语法。
+    """
+
+    escaped = value.replace(
+        '"',
+        '""',
+    )
+
+    return f'"{escaped}"'
+
 
 class SQLiteMetadataRepository:
     """
-    Metadata Runtime查询实现。
+    Metadata Runtime 只读 Repository。
 
-    只负责读取已经持久化好的SQLite Metadata DB。
+    同时实现：
+
+    - MetadataProvider
+    - MetadataCatalog
 
     不负责：
-    - 初始化数据库
-    - 读取Excel
-    - 导入数据
+
+    - Schema Init
+    - Excel Import
+    - Database Rebuild
+    - Standards Import
     """
 
     def __init__(
@@ -41,18 +67,24 @@ class SQLiteMetadataRepository:
         self,
     ) -> sqlite3.Connection:
         """
-        以只读方式连接数据库。
+        Runtime 必须以只读方式打开事实库。
 
-        如果数据库不存在，直接报错，
-        不允许Runtime偷偷创建一个空DB。
+        如果：
+        - DB 不存在；
+        - DB 未完成 Build；
+        - Schema Version 不一致；
+
+        直接报错。
+
+        Runtime 不进行 Migration。
         """
 
         uri = (
-            f"file:"
+            "file:"
             f"{self._database_path.resolve()}"
             "?mode=ro"
         )
-        print(f"{self._database_path.resolve()}")
+
         connection = sqlite3.connect(
             uri,
             uri=True,
@@ -62,29 +94,48 @@ class SQLiteMetadataRepository:
             sqlite3.Row
         )
 
-        return connection
+        try:
+            row = connection.execute(
+                """
+                SELECT schema_version
+                FROM metadata_build_info
+                WHERE id = 1
+                """
+            ).fetchone()
 
-    @staticmethod
-    def _active_batch_id(
-        connection: sqlite3.Connection,
-    ) -> int | None:
+            if row is None:
+                raise RuntimeError(
+                    "metadata.db has no "
+                    "completed build info. "
+                    "Run full metadata rebuild."
+                )
 
-        row = connection.execute(
-            """
-            SELECT id
-            FROM metadata_batch
-            WHERE is_active = 1
-            ORDER BY id DESC
-            LIMIT 1
-            """
-        ).fetchone()
+            actual_version = int(
+                row["schema_version"]
+            )
 
-        if row is None:
-            return None
+            if (
+                actual_version
+                != METADATA_SCHEMA_VERSION
+            ):
+                raise RuntimeError(
+                    "Unsupported metadata.db "
+                    "schema version: "
+                    f"{actual_version}; "
+                    "expected "
+                    f"{METADATA_SCHEMA_VERSION}. "
+                    "Run full metadata rebuild."
+                )
 
-        return int(
-            row["id"]
-        )
+            return connection
+
+        except Exception:
+            connection.close()
+            raise
+
+    # ======================================================
+    # MetadataProvider
+    # ======================================================
 
     def get_table(
         self,
@@ -97,34 +148,38 @@ class SQLiteMetadataRepository:
             .lower()
         )
 
-        names = [normalized]
+        if not normalized:
+            return (
+                TableLookupResult
+                .not_found()
+            )
 
-        # SQL中可能有：
-        # odps_project.table_name
+        names = [
+            normalized
+        ]
+
+        # SQL 可能出现：
+        # project.table_name
         #
-        # 当前Metadata只存table_name。
+        # 当前 Metadata Source
+        # 可能只保存 table_name。
         if "." in normalized:
-            names.append(
-                normalized.rsplit(
+
+            base_name = (
+                normalized
+                .rsplit(
                     ".",
                     1,
                 )[-1]
             )
 
-        try:
-            with self._connect() as connection:
-
-                batch_id = (
-                    self._active_batch_id(
-                        connection
-                    )
+            if base_name not in names:
+                names.append(
+                    base_name
                 )
 
-                if batch_id is None:
-                    return (
-                        TableLookupResult
-                        .not_found()
-                    )
+        try:
+            with self._connect() as connection:
 
                 table_row = None
 
@@ -136,15 +191,15 @@ class SQLiteMetadataRepository:
                             SELECT
                                 id,
                                 full_name,
-                                description
+                                description,
+                                layer,
+                                row_count,
+                                size_bytes
                             FROM metadata_table
-                            WHERE
-                                batch_id = ?
-                                AND full_name = ?
+                            WHERE full_name = ?
                             LIMIT 1
                             """,
                             (
-                                batch_id,
                                 name,
                             ),
                         )
@@ -155,6 +210,7 @@ class SQLiteMetadataRepository:
                         break
 
                 if table_row is None:
+
                     return (
                         TableLookupResult
                         .not_found()
@@ -168,7 +224,9 @@ class SQLiteMetadataRepository:
                             description,
                             data_type,
                             nullable,
-                            is_partition
+                            ordinal_position,
+                            is_partition,
+                            distinct_count
                         FROM metadata_column
                         WHERE table_id = ?
                         ORDER BY
@@ -185,7 +243,9 @@ class SQLiteMetadataRepository:
                 columns = {
                     row["name"]:
                         ColumnMetadata(
-                            name=row["name"],
+                            name=(
+                                row["name"]
+                            ),
 
                             description=(
                                 row["description"]
@@ -198,26 +258,37 @@ class SQLiteMetadataRepository:
                             ),
 
                             nullable=(
-                                True
+                                None
                                 if row["nullable"]
                                 is None
                                 else bool(
-                                    row["nullable"]
+                                    row[
+                                        "nullable"
+                                    ]
                                 )
+                            ),
+
+                            distinct_count=(
+                                row[
+                                    "distinct_count"
+                                ]
                             ),
                         )
 
-                    for row
-                    in column_rows
+                    for row in column_rows
                 }
 
                 partition_fields = tuple(
                     row["name"]
-                    for row
-                    in column_rows
-                    if row[
-                        "is_partition"
-                    ] == 1
+
+                    for row in column_rows
+
+                    if (
+                        row[
+                            "is_partition"
+                        ]
+                        == 1
+                    )
                 )
 
                 return (
@@ -235,6 +306,25 @@ class SQLiteMetadataRepository:
                                     "description"
                                 ]
                                 or ""
+                            ),
+
+                            layer=(
+                                table_row[
+                                    "layer"
+                                ]
+                                or ""
+                            ),
+
+                            row_count=(
+                                table_row[
+                                    "row_count"
+                                ]
+                            ),
+
+                            size_bytes=(
+                                table_row[
+                                    "size_bytes"
+                                ]
                             ),
 
                             columns=columns,
@@ -255,6 +345,10 @@ class SQLiteMetadataRepository:
                 )
             )
 
+    # ======================================================
+    # MetadataCatalog
+    # ======================================================
+
     def find_tables(
         self,
         keyword: str,
@@ -265,66 +359,193 @@ class SQLiteMetadataRepository:
         ...
     ]:
 
-        query = keyword.strip()
+        query = (
+            keyword
+            .strip()
+            .lower()
+        )
 
-        if not query:
+        if (
+            not query
+            or limit <= 0
+        ):
             return ()
 
         with self._connect() as connection:
 
-            batch_id = (
-                self._active_batch_id(
-                    connection
+            results: list[
+                TableSearchResult
+            ] = []
+
+            seen: set[str] = set()
+
+            # ------------------------------------------------
+            # 1. Exact Identifier 优先
+            # ------------------------------------------------
+
+            exact_rows = (
+                connection.execute(
+                    """
+                    SELECT
+                        full_name,
+                        description,
+                        layer
+                    FROM metadata_table
+                    WHERE full_name = ?
+                    """,
+                    (
+                        query,
+                    ),
                 )
+                .fetchall()
             )
 
-            if batch_id is None:
-                return ()
+            for row in exact_rows:
 
-            value = f"%{query}%"
+                name = row[
+                    "full_name"
+                ]
 
-            rows = connection.execute(
-                """
-                SELECT
-                    full_name,
-                    description,
-                    layer
-                FROM metadata_table
-                WHERE
-                    batch_id = ?
-                    AND (
-                        full_name LIKE ?
-                        OR description LIKE ?
+                seen.add(name)
+
+                results.append(
+                    TableSearchResult(
+                        full_name=name,
+
+                        description=(
+                            row[
+                                "description"
+                            ]
+                            or ""
+                        ),
+
+                        layer=(
+                            row[
+                                "layer"
+                            ]
+                            or ""
+                        ),
                     )
-                ORDER BY full_name
-                LIMIT ?
-                """,
-                (
-                    batch_id,
-                    value.lower(),
-                    value,
-                    limit,
-                ),
-            ).fetchall()
-
-            return tuple(
-                TableSearchResult(
-                    full_name=(
-                        row["full_name"]
-                    ),
-
-                    description=(
-                        row["description"]
-                        or ""
-                    ),
-
-                    layer=(
-                        row["layer"]
-                        or ""
-                    ),
                 )
-                for row in rows
+
+            remaining = (
+                limit
+                - len(results)
             )
+
+            if remaining <= 0:
+                return tuple(
+                    results[:limit]
+                )
+
+            # ------------------------------------------------
+            # 2. <3 字符：LIKE fallback
+            # ------------------------------------------------
+
+            if len(query) < 3:
+
+                value = (
+                    f"%{query}%"
+                )
+
+                rows = (
+                    connection.execute(
+                        """
+                        SELECT
+                            full_name,
+                            description,
+                            layer
+                        FROM metadata_table
+                        WHERE
+                            full_name LIKE ?
+                            OR description LIKE ?
+                        ORDER BY full_name
+                        LIMIT ?
+                        """,
+                        (
+                            value,
+                            value,
+                            remaining * 2,
+                        ),
+                    )
+                    .fetchall()
+                )
+
+            # ------------------------------------------------
+            # 3. >=3 字符：FTS5 trigram
+            # ------------------------------------------------
+
+            else:
+
+                rows = (
+                    connection.execute(
+                        """
+                        SELECT
+                            t.full_name,
+                            t.description,
+                            t.layer
+                        FROM metadata_table_fts
+                        JOIN metadata_table t
+                            ON t.id =
+                               metadata_table_fts.rowid
+                        WHERE
+                            metadata_table_fts
+                            MATCH ?
+                        ORDER BY
+                            bm25(
+                                metadata_table_fts
+                            ),
+                            t.full_name
+                        LIMIT ?
+                        """,
+                        (
+                            _fts_phrase(
+                                query
+                            ),
+                            remaining * 2,
+                        ),
+                    )
+                    .fetchall()
+                )
+
+            for row in rows:
+
+                name = (
+                    row["full_name"]
+                )
+
+                if name in seen:
+                    continue
+
+                seen.add(name)
+
+                results.append(
+                    TableSearchResult(
+                        full_name=name,
+
+                        description=(
+                            row[
+                                "description"
+                            ]
+                            or ""
+                        ),
+
+                        layer=(
+                            row[
+                                "layer"
+                            ]
+                            or ""
+                        ),
+                    )
+                )
+
+                if (
+                    len(results)
+                    >= limit
+                ):
+                    break
+
+            return tuple(results)
 
     def find_columns(
         self,
@@ -336,104 +557,240 @@ class SQLiteMetadataRepository:
         ...
     ]:
 
-        query = keyword.strip()
+        query = (
+            keyword
+            .strip()
+            .lower()
+        )
 
-        if not query:
+        if (
+            not query
+            or limit <= 0
+        ):
             return ()
 
         with self._connect() as connection:
 
-            batch_id = (
-                self._active_batch_id(
-                    connection
+            results: list[
+                ColumnSearchResult
+            ] = []
+
+            seen: set[
+                tuple[str, str]
+            ] = set()
+
+            # ------------------------------------------------
+            # 1. Exact column identifier
+            # ------------------------------------------------
+
+            exact_rows = (
+                connection.execute(
+                    """
+                    SELECT
+                        t.full_name,
+
+                        t.description
+                            AS table_description,
+
+                        c.name,
+
+                        c.description
+                            AS column_description,
+
+                        c.data_type
+
+                    FROM metadata_column c
+
+                    JOIN metadata_table t
+                        ON t.id = c.table_id
+
+                    WHERE c.name = ?
+
+                    ORDER BY
+                        t.full_name,
+                        c.name
+
+                    LIMIT ?
+                    """,
+                    (
+                        query,
+                        limit,
+                    ),
                 )
+                .fetchall()
             )
 
-            if batch_id is None:
-                return ()
+            for row in exact_rows:
 
-            value = f"%{query}%"
+                key = (
+                    row[
+                        "full_name"
+                    ],
+                    row["name"],
+                )
 
-            rows = connection.execute(
-                """
-                SELECT
-                    t.full_name,
-                    t.description
-                        AS table_description,
+                seen.add(key)
 
-                    c.name,
-                    c.description
-                        AS column_description,
-
-                    c.data_type
-
-                FROM metadata_column c
-
-                JOIN metadata_table t
-                    ON t.id = c.table_id
-
-                WHERE
-                    t.batch_id = ?
-                    AND (
-                        c.name LIKE ?
-                        OR c.description LIKE ?
+                results.append(
+                    self._column_result(
+                        row
                     )
-
-                ORDER BY
-                    t.full_name,
-                    c.name
-
-                LIMIT ?
-                """,
-                (
-                    batch_id,
-                    value.lower(),
-                    value,
-                    limit,
-                ),
-            ).fetchall()
-
-            return tuple(
-                ColumnSearchResult(
-                    table_full_name=(
-                        row["full_name"]
-                    ),
-
-                    table_description=(
-                        row[
-                            "table_description"
-                        ]
-                        or ""
-                    ),
-
-                    column_name=(
-                        row["name"]
-                    ),
-
-                    column_description=(
-                        row[
-                            "column_description"
-                        ]
-                        or ""
-                    ),
-
-                    data_type=(
-                        row["data_type"]
-                        or ""
-                    ),
                 )
-                for row in rows
+
+            remaining = (
+                limit
+                - len(results)
             )
+
+            if remaining <= 0:
+
+                return tuple(
+                    results[:limit]
+                )
+
+            # ------------------------------------------------
+            # 2. Short query fallback
+            # ------------------------------------------------
+
+            if len(query) < 3:
+
+                value = (
+                    f"%{query}%"
+                )
+
+                rows = (
+                    connection.execute(
+                        """
+                        SELECT
+                            t.full_name,
+
+                            t.description
+                                AS table_description,
+
+                            c.name,
+
+                            c.description
+                                AS column_description,
+
+                            c.data_type
+
+                        FROM metadata_column c
+
+                        JOIN metadata_table t
+                            ON t.id = c.table_id
+
+                        WHERE
+                            c.name LIKE ?
+                            OR c.description LIKE ?
+
+                        ORDER BY
+                            t.full_name,
+                            c.name
+
+                        LIMIT ?
+                        """,
+                        (
+                            value,
+                            value,
+                            remaining * 2,
+                        ),
+                    )
+                    .fetchall()
+                )
+
+            else:
+
+                rows = (
+                    connection.execute(
+                        """
+                        SELECT
+                            t.full_name,
+
+                            t.description
+                                AS table_description,
+
+                            c.name,
+
+                            c.description
+                                AS column_description,
+
+                            c.data_type
+
+                        FROM metadata_column_fts
+
+                        JOIN metadata_column c
+                            ON c.id =
+                               metadata_column_fts.rowid
+
+                        JOIN metadata_table t
+                            ON t.id =
+                               c.table_id
+
+                        WHERE
+                            metadata_column_fts
+                            MATCH ?
+
+                        ORDER BY
+                            bm25(
+                                metadata_column_fts
+                            ),
+                            t.full_name,
+                            c.name
+
+                        LIMIT ?
+                        """,
+                        (
+                            _fts_phrase(
+                                query
+                            ),
+
+                            remaining * 2,
+                        ),
+                    )
+                    .fetchall()
+                )
+
+            for row in rows:
+
+                key = (
+                    row[
+                        "full_name"
+                    ],
+                    row["name"],
+                )
+
+                if key in seen:
+                    continue
+
+                seen.add(key)
+
+                results.append(
+                    self._column_result(
+                        row
+                    )
+                )
+
+                if (
+                    len(results)
+                    >= limit
+                ):
+                    break
+
+            return tuple(results)
 
     def find_column_usages(
         self,
         column_name: str,
-        *,
-        limit: int = 100,
     ) -> tuple[
         ColumnSearchResult,
         ...
     ]:
+        """
+        Exact Fact Query。
+
+        不使用 limit，
+        必须返回所有物理使用位置。
+        """
 
         normalized = (
             column_name
@@ -446,76 +803,81 @@ class SQLiteMetadataRepository:
 
         with self._connect() as connection:
 
-            batch_id = (
-                self._active_batch_id(
-                    connection
+            rows = (
+                connection.execute(
+                    """
+                    SELECT
+                        t.full_name,
+
+                        t.description
+                            AS table_description,
+
+                        c.name,
+
+                        c.description
+                            AS column_description,
+
+                        c.data_type
+
+                    FROM metadata_column c
+
+                    JOIN metadata_table t
+                        ON t.id = c.table_id
+
+                    WHERE c.name = ?
+
+                    ORDER BY
+                        t.full_name
+                    """,
+                    (
+                        normalized,
+                    ),
                 )
+                .fetchall()
             )
-
-            if batch_id is None:
-                return ()
-
-            rows = connection.execute(
-                """
-                SELECT
-                    t.full_name,
-                    t.description
-                        AS table_description,
-
-                    c.name,
-                    c.description
-                        AS column_description,
-
-                    c.data_type
-
-                FROM metadata_column c
-
-                JOIN metadata_table t
-                    ON t.id = c.table_id
-
-                WHERE
-                    t.batch_id = ?
-                    AND c.name = ?
-
-                ORDER BY t.full_name
-
-                LIMIT ?
-                """,
-                (
-                    batch_id,
-                    normalized,
-                    limit,
-                ),
-            ).fetchall()
 
             return tuple(
-                ColumnSearchResult(
-                    table_full_name=(
-                        row["full_name"]
-                    ),
-
-                    table_description=(
-                        row[
-                            "table_description"
-                        ]
-                        or ""
-                    ),
-
-                    column_name=(
-                        row["name"]
-                    ),
-
-                    column_description=(
-                        row[
-                            "column_description"
-                        ]
-                        or ""
-                    ),
-
-                    data_type=(
-                        row["data_type"]
-                        or ""
-                    ),
+                self._column_result(
+                    row
                 )
+
                 for row in rows
             )
+
+    @staticmethod
+    def _column_result(
+        row: sqlite3.Row,
+    ) -> ColumnSearchResult:
+
+        return ColumnSearchResult(
+            table_full_name=(
+                row[
+                    "full_name"
+                ]
+            ),
+
+            table_description=(
+                row[
+                    "table_description"
+                ]
+                or ""
+            ),
+
+            column_name=(
+                row["name"]
+            ),
+
+            column_description=(
+                row[
+                    "column_description"
+                ]
+                or ""
+            ),
+
+            data_type=(
+                row[
+                    "data_type"
+                ]
+                or ""
+            ),
+        )

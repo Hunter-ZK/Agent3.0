@@ -98,67 +98,79 @@ class FakeSQLModel:
 # 2. 构建Text-to-SQL产品能力
 # ============================================================
 
+    def build_demo_service(
+        use_real_llm: bool,
+    ) -> TextToSQLService:
 
-def build_demo_service(use_real_llm: bool) -> TextToSQLService:
-    """构建Demo使用的Text-to-SQL服务。
+        project_root = (
+            Path(__file__)
+            .resolve()
+            .parents[1]
+        )
 
-    Demo只决定：
-    - 使用真实LLM还是Fake LLM；
-    - 使用贷款Mini Domain。
+        semantic_model_path = (
+            project_root
+            / "sql_pilot_engine"
+            / "context"
+            / "semantic"
+            / "loan_model.json"
+        )
 
-    具体组件组装交给正式Factory。
-    """
-    
-    project_root = (
-        Path(__file__).resolve().parents[1]
-    )
-    
-    semantic_model_path = (
-        project_root
-        / "sql_pilot_engine"
-        / "context"
-        / "semantic"
-        / "loan_model.json"
-    )
-    
-    if use_real_llm:
-        model = (
-            DeepSeekLLMClient.from_env()
+        if use_real_llm:
+
+            model = (
+                DeepSeekLLMClient
+                .from_env()
+            )
+
+            planner_model = model
+            sql_model = model
+
+            semantic_validator_model = (
+                model
+            )
+
+        else:
+
+            planner_model = (
+                FakePlannerModel()
+            )
+
+            sql_model = (
+                FakeSQLModel()
+            )
+
+            semantic_validator_model = None
+
+        return build_text_to_sql_service(
+            semantic_model_path=(
+                semantic_model_path
+            ),
+
+            context_documents=(
+                LOAN_DOMAIN_CONTEXT_DOCUMENTS
+            ),
+
+            planner_model=(
+                planner_model
+            ),
+
+            sql_model=(
+                sql_model
+            ),
+
+            semantic_validator_model=(
+                semantic_validator_model
+            ),
+
+            collection_name=(
+                "text_to_sql_demo"
+            ),
+
+            max_sql_retries=0,
+
+            max_semantic_retries=1,
         )
-        
-        planner_model = model
-        sql_model = model 
-        semantic_validator_model = (
-            model
-        )
-    else:
-        planner_model = (
-            FakePlannerModel()
-        )
-        
-        sql_model = (
-            FakeSQLModel()
-        )
-        semantic_validator_model = None
-        
-    return build_text_to_sql_service(
-        semantic_model_path=(
-            semantic_model_path
-        ),
-        context_documents=(
-            LOAN_DOMAIN_CONTEXT_DOCUMENTS
-        ),
-        planner_model=planner_model,
-        sql_model=sql_model,
-        semantic_validator_model=(
-            semantic_validator_model
-        ),
-        collection_name=(
-            "text_to_sql_demo"
-        ),
-        max_sql_retries=0,
-        max_semantic_retries=1,
-    )
 
 def parse_args() -> argparse.Namespace:
 
@@ -245,78 +257,62 @@ def main() -> None:
 
     session_context: list[str] = []
     
-    clarification_round = 0
-    max_clarification_rounds = 3
 
-    while True:
-        response = service.generate(
-            TextToSQLRequest(
-                question=args.question,
-                dialect=args.dialect,
-                session_context=tuple(
-                    session_context
-                ),
-            )
+    response = service.generate(
+        TextToSQLRequest(
+            question=args.question,
+            dialect=args.dialect,
+        )
+    )
+
+    while isinstance(
+        response,
+        TextToSQLClarification,
+    ):
+
+        print()
+        print(
+            "[Agent needs clarification]"
         )
 
-        if isinstance(
-            response,
-            TextToSQLClarification,
-        ):
-            
-            clarification_round += 1
-            
-            if (
-                clarification_round > max_clarification_rounds
-            ):
-                print()
-                print(
-                    "Agent连续多次无法获得足够上下文，"
-                    "当前任务停止。"
-                )
-                return
-            
-            print()
+        print(
+            response.clarification_question
+        )
+
+        if response.reason:
             print(
-                "[Agent needs clarification]"
+                "Reason:",
+                response.reason,
             )
 
+        answer = input(
+            "\nYour clarification > "
+        ).strip()
+
+        if not answer:
             print(
-                response.clarification_question
+                "No clarification supplied. "
+                "Task stopped."
             )
 
-            if response.reason:
-                print(
-                    "Reason:",
-                    response.reason,
-                )
+            return
 
-            answer = input(
-                "\nYour clarification > "
-            ).strip()
-
-            if not answer:
-                print(
-                    "No clarification supplied. "
-                    "Task stopped."
-                )
-                return
-
-            session_context.append(
-                "User clarification: "
-                f"{answer}"
+        if not response.thread_id:
+            raise RuntimeError(
+                "Clarification response "
+                "has no thread_id."
             )
 
-            print()
-            print(
-                "Clarification added "
-                "to session context."
-            )
+        response = service.resume(
+            thread_id=(
+                response.thread_id
+            ),
 
-            continue
+            answer=answer,
+        )
 
-        result = response
-        break
+
+    result = response
     
 
     print("=" * 70)

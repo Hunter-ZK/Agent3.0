@@ -31,67 +31,65 @@ class MetadataLookupStatus(str, Enum):
 
 @dataclass(frozen=True)
 class ColumnMetadata:
-    """字段元数据。"""
+    """字段物理元数据。"""
 
     name: str
     data_type: str
-    
-    nullable: bool = True
+
+    # None = Metadata Source 未提供该事实。
+    nullable: bool | None = None
+
     description: str = ""
-    # comment: str = ""
+
+    # 后续由 DataWorks / Metadata API 提供。
+    # 当前 Excel 没有该数据，因此保持 None。
+    distinct_count: int | None = None
+
 
 
 @dataclass(frozen=True)
 class TableMetadata:
-    """表元数据。"""
+    """表物理元数据。"""
 
     full_name: str
     columns: Mapping[str, ColumnMetadata]
-    
-    # table_name: str
-    # layer: str
-    # is_partitioned: bool
+
     partition_fields: tuple[str, ...] = ()
+
     description: str = ""
-    # comment: str = ""
+
+    layer: str = ""
+
+    # Physical Stats。
+    # 当前 Excel 不提供时统一保持 None。
+    row_count: int | None = None
+
+    size_bytes: int | None = None
 
     def __post_init__(self) -> None:
-        """在dataclass完成初始化后执行标准化。
-
-        为什么要转成小写：
-        SQL中可能出现USER_ID、user_id、User_Id，
-        但通常都应匹配同一个字段。
-
-        为什么使用MappingProxyType：
-        它把字典包装成只读映射，防止规则运行时
-        意外修改共享元数据。
-
-        为什么使用object.__setattr__：
-        frozen=True禁止普通属性赋值，
-        但__post_init__仍需完成标准化，因此通过
-        object.__setattr__执行一次受控赋值。
-        """
-        
         normalized_columns = {
-            name.lower(): column 
+            name.lower(): column
             for name, column in self.columns.items()
         }
-        
+
         normalized_partition_fields = tuple(
             field_name.lower()
-            for field_name in self.partition_fields
+            for field_name
+            in self.partition_fields
         )
-        
+
         object.__setattr__(
             self,
             "full_name",
-            self.full_name.lower()
+            self.full_name.lower(),
         )
-        
+
         object.__setattr__(
             self,
             "columns",
-            MappingProxyType(normalized_columns),
+            MappingProxyType(
+                normalized_columns
+            ),
         )
 
         object.__setattr__(
@@ -99,24 +97,29 @@ class TableMetadata:
             "partition_fields",
             normalized_partition_fields,
         )
-    
+
     def get_column(
         self,
         column_name: str,
-    ) -> ColumnMetadata | None: 
+    ) -> ColumnMetadata | None:
         return self.columns.get(
             column_name.lower()
         )
-        
 
-    def column_names(self) -> set[str]:
+    def column_names(
+        self,
+    ) -> set[str]:
         return set(self.columns)
-    
-    
-    @property
-    def is_partitioned(self) -> bool:
-        return bool(self.partition_fields)
 
+    @property
+    def is_partitioned(
+        self,
+    ) -> bool:
+        return bool(
+            self.partition_fields
+        )
+
+    
 
 @dataclass(frozen=True)
 class TableLookupResult:
