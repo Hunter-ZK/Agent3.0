@@ -1,5 +1,4 @@
 from __future__ import annotations
-from enum import Enum
 
 from typing_extensions import (
     NotRequired,
@@ -22,19 +21,9 @@ from sql_pilot_engine.workflow.sql_agent_workflow import (
     SQLAgentWorkflowResult,
 )
 
-
-
-
-class AgentEventType(str, Enum):
-    USER_MESSAGE = "user_message"
-    PLAN = "plan"
-    TOOL_CALL = "tool_call"
-    TOOL_RESULT = "tool_result"
-    VALIDATION = "validation"
-    APPROVAL = "approval"
-    RESULT = "result"
-    
-    
+from sql_pilot_engine.runtime.event import (
+    RuntimeEventType,
+)
     
 
 class QueryAgentState(TypedDict):
@@ -64,17 +53,18 @@ class QueryAgentState(TypedDict):
         tuple[str, ...]
     ]
 
-    thread_id: str | None
-    turn_id: str | None
-    event_type: AgentEventType | None
+    thread_id: str
+    turn_id: str
+
+    event_type: RuntimeEventType | None
 
     # ========================================================
     # Context Intelligence
     # ========================================================
     
-    semantic_context: NotRequired[str]
+    semantic_context: NotRequired[str | None]
     query_context: NotRequired[
-        QueryContext
+        QueryContext | None
     ]
 
     # ========================================================
@@ -82,7 +72,7 @@ class QueryAgentState(TypedDict):
     # ========================================================
     
     query_plan: NotRequired[
-        QueryPlan
+        QueryPlan | None
     ]
 
     # Planner要求用户补充时填写。
@@ -111,7 +101,7 @@ class QueryAgentState(TypedDict):
     # ========================================================
     
     generated_sql: NotRequired[
-        str
+        str | None
     ]
 
     revision_feedback: NotRequired[
@@ -127,7 +117,7 @@ class QueryAgentState(TypedDict):
     # ========================================================
     
     validation_result: NotRequired[
-        SQLAgentWorkflowResult
+        SQLAgentWorkflowResult | None
     ]
     
     candidate_sql: NotRequired[

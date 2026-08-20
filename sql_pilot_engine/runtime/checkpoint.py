@@ -1,24 +1,34 @@
-"""
-Checkpoint factory.
-
-Runtime only depends on checkpointer contract.
-Storage implementation is selected outside workflow.
-"""
-
 from __future__ import annotations
 
-from typing import Protocol
+from typing import (
+    Protocol,
+    runtime_checkable,
+)
 
-def CheckpointStore(Protocol):
-    """
-    Agent Runtime checkpoint contract.
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+)
 
-    Runtime 只依赖这个协议，
-    不关心底层使用 Memory / SQLite / PostgreSQL。
+
+@runtime_checkable
+class CheckpointStore(Protocol):
     """
-    
-    def get_backend(self):
+    Shared Agent Runtime 的 Checkpoint 存储契约。
+
+    Runtime 只依赖这个协议，不感知底层具体实现。
+
+    当前实现：
+    - MemoryCheckpointStore
+    - SQLiteCheckpointStore
+
+    未来即使替换为 PostgreSQL，
+    QueryAgentGraph 也不应该因此修改。
+    """
+
+    def get_backend(
+        self,
+    ) -> BaseCheckpointSaver:
         """
-        返回 LangGraph 可接受的 checkpointer 实例。
+        返回 LangGraph 可接受的 Checkpointer。
         """
         ...

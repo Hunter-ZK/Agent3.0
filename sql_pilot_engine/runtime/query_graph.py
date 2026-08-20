@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from langgraph.graph import (
     END,
     START,
@@ -640,6 +642,74 @@ class QueryAgentGraph:
     # Helpers
     # ========================================================
 
+    def _build_initial_state(
+        self,
+        *,
+        thread_id: str,
+        question: str,
+        dialect: str,
+        session_context: tuple[str, ...],
+    ) -> QueryAgentState:
+        """
+        为一个新的 Turn 构建干净 State。
+
+        同一个 thread_id 可以包含多个 Turn，
+        因此 start() 必须显式清除上一 Turn
+        留下的所有 request-scoped 中间状态。
+        """
+
+        return {
+            # Runtime Identity
+            "thread_id": thread_id,
+            "turn_id": str(uuid4()),
+            "event_type": None,
+
+            # Input
+            "question": question,
+            "dialect": dialect,
+            "session_context": (
+                session_context
+            ),
+
+            # Context
+            "semantic_context": None,
+            "query_context": None,
+
+            # Planning
+            "query_plan": None,
+            "clarification_question": None,
+            "missing_context": (),
+            "clarification_reason": "",
+
+            # HITL
+            "clarification_round": 0,
+            "max_clarification_rounds": (
+                self.max_clarification_rounds
+            ),
+
+            # Generation
+            "generated_sql": None,
+            "revision_feedback": (),
+            "generation_attempt": 0,
+            "max_semantic_retries": (
+                self.max_semantic_retries
+            ),
+
+            # Deterministic Validation
+            "validation_result": None,
+            "candidate_sql": None,
+            "validation_status": None,
+
+            # Semantic Validation
+            "semantic_result": None,
+            "semantic_validation_status": None,
+
+            # Final
+            "trusted_sql": None,
+            "success": False,
+            "error_message": None,
+        }
+
     @staticmethod
     def _resolve_candidate_sql(
         *,
@@ -875,47 +945,51 @@ class QueryAgentGraph:
             tuple[str, ...]
         ) = (),
     ) -> dict:
-        
-        if not thread_id.strip():
+
+        normalized_thread_id = (
+            thread_id.strip()
+        )
+
+        normalized_question = (
+            question.strip()
+        )
+
+        if not normalized_thread_id:
             raise ValueError(
                 "thread_id cannot be empty"
             )
 
-        if not question.strip():
+        if not normalized_question:
             raise ValueError(
                 "question cannot be empty"
             )
-            
+
         config = {
             "configurable": {
-                "thread_id": thread_id
+                "thread_id": (
+                    normalized_thread_id
+                )
             }
         }
-        
-        return self.graph.invoke(
-            {
-                "question": question,
 
-                "dialect": dialect,
-
-                "session_context": (
+        initial_state = (
+            self._build_initial_state(
+                thread_id=(
+                    normalized_thread_id
+                ),
+                question=(
+                    normalized_question
+                ),
+                dialect=dialect,
+                session_context=(
                     session_context
                 ),
+            )
+        )
 
-                "generation_attempt": 0,
-
-                "max_semantic_retries": (
-                    self.max_semantic_retries
-                ),
-
-                "clarification_round": 0,
-
-                "max_clarification_rounds": (
-                    self
-                    .max_clarification_rounds
-                ),
-            },
-            config = config,
+        return self.graph.invoke(
+            initial_state,
+            config=config,
         )
         
     def resume(
