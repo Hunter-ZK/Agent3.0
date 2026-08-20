@@ -51,7 +51,9 @@ from sql_pilot_engine.services.semantic_validation_service import (
 from sql_pilot_engine.services.text_to_sql_service import (
     TextToSQLService,
 )
-
+from sql_pilot_engine.runtime.checkpoint import (
+    create_checkpointer
+)
 
 def build_runtimes():
     """
@@ -202,6 +204,7 @@ def build_runtimes():
         validation_workflow=(
             graph_workflow
         ),
+        checkpointer=create_checkpointer(),
         semantic_validator=(
             semantic_validator
         ),

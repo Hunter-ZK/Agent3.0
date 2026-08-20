@@ -44,6 +44,9 @@ from sql_pilot_engine.context.mandatory_rules import (
     MandatoryBusinessRule,
     MandatoryRuleMatcher,
 )
+from sql_pilot_engine.runtime.checkpoint import (
+    create_checkpointer,
+)
 
 def build_text_to_sql_service(
     *,

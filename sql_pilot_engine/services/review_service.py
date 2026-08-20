@@ -14,7 +14,7 @@ from sql_pilot_engine.core.execution_context import ReviewExecutionContext
 
 from sql_pilot_engine.analysis.sql_analysis import SQLAnalysisAdapter
 
-from sql_pilot_engine.metadata.validator import MetadataValidator
+from sql_pilot_engine.validation.metadata_validator import MetadataValidator
 
 
 class ReviewService:

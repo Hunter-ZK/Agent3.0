@@ -35,4 +35,10 @@ class WorkflowSQLValidationAdapter:
                 final_sql=final_sql,
                 status=workflow_result.final_status,
             )
-        
+
+        return TrustedSQLResult(
+            accepted=False,
+            original_sql=sql,
+            final_sql=None,
+            status=workflow_result.final_status,
+        )

@@ -10,7 +10,7 @@ from sql_pilot_engine.metadata.models import (
 from sql_pilot_engine.metadata.provider import (
     MetadataProvider,
 )
-from sql_pilot_engine.metadata.validator import (
+from sql_pilot_engine.validation.metadata_validator import (
     MetadataValidator,
 )
 

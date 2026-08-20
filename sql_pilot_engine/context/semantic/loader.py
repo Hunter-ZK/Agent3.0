@@ -40,7 +40,7 @@ class SemanticModelLoader:
                     for column in table["columns"]
                 ),
                 synonyms=tuple(
-                    table.get("synonms",[],)
+                    table.get("synonyms",[],)
                 ),
                 grain=table.get("grain","",),
             )

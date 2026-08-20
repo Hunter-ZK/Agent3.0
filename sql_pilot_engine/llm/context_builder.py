@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sql_pilot_engine.analysis.analyzer import analyze_sql
+from sql_pilot_engine.analysis.sql_analysis import SQLAnalysisAdapter
 from sql_pilot_engine.metadata.models import (
     MetadataLookupStatus,
 )

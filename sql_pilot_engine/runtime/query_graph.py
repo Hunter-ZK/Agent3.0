@@ -48,13 +48,13 @@ from sql_pilot_engine.workflow.sql_agent_workflow import (
     SQLAgentWorkflowResult,
 )
 
-from langgraph.checkpoint.memory import (
-    InMemorySaver,
-)
-
 from langgraph.types import (
     Command,
     interrupt,
+)
+
+from sql_pilot_engine.runtime.checkpoint import (
+    CheckpointStore,
 )
 
 class QueryAgentGraph:
@@ -86,6 +86,7 @@ class QueryAgentGraph:
         validation_workflow: (
             SQLAgentWorkflow
         ),
+        checkpoint_store: CheckpointStore,
         semantic_validator: (
             SemanticSQLValidator | None
         ) = None,
@@ -138,7 +139,7 @@ class QueryAgentGraph:
         )
         
         self.checkpointer = (
-            InMemorySaver()
+            checkpoint_store.get_backend()
         )
 
         self.semantic_renderer = (

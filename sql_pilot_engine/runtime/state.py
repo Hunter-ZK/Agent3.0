@@ -1,4 +1,5 @@
 from __future__ import annotations
+from enum import Enum
 
 from typing_extensions import (
     NotRequired,
@@ -21,6 +22,20 @@ from sql_pilot_engine.workflow.sql_agent_workflow import (
     SQLAgentWorkflowResult,
 )
 
+
+
+
+class AgentEventType(str, Enum):
+    USER_MESSAGE = "user_message"
+    PLAN = "plan"
+    TOOL_CALL = "tool_call"
+    TOOL_RESULT = "tool_result"
+    VALIDATION = "validation"
+    APPROVAL = "approval"
+    RESULT = "result"
+    
+    
+    
 
 class QueryAgentState(TypedDict):
     """LangGraph Text-to-SQL Runtime State.
@@ -48,7 +63,10 @@ class QueryAgentState(TypedDict):
     session_context: NotRequired[
         tuple[str, ...]
     ]
-    
+
+    thread_id: str | None
+    turn_id: str | None
+    event_type: AgentEventType | None
 
     # ========================================================
     # Context Intelligence
@@ -145,3 +163,6 @@ class QueryAgentState(TypedDict):
     error_message: NotRequired[
         str | None
     ]
+    
+
+    
