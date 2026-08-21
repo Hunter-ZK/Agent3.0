@@ -163,10 +163,11 @@ def rebuild_metadata_database(
         # 4. FTS + Build Provenance
         # --------------------------------------------------
 
-        with sqlite3.connect(
+        connection = sqlite3.connect(
             building
-        ) as connection:
+        )
 
+        try:
             connection.execute(
                 "PRAGMA foreign_keys = ON"
             )
@@ -202,10 +203,6 @@ def rebuild_metadata_database(
                 ),
             )
 
-            # ----------------------------------------------
-            # Foreign Key Check
-            # ----------------------------------------------
-
             fk_errors = (
                 connection.execute(
                     "PRAGMA foreign_key_check"
@@ -220,10 +217,6 @@ def rebuild_metadata_database(
                     f"{fk_errors!r}"
                 )
 
-            # ----------------------------------------------
-            # SQLite Integrity Check
-            # ----------------------------------------------
-
             integrity_result = (
                 connection.execute(
                     "PRAGMA integrity_check"
@@ -233,20 +226,19 @@ def rebuild_metadata_database(
 
             if (
                 integrity_result is None
-                or integrity_result[0]
-                != "ok"
+                or integrity_result[0] != "ok"
             ):
                 raise RuntimeError(
                     "Metadata rebuild aborted: "
-                    "SQLite integrity_check "
-                    "failed."
+                    "SQLite integrity_check failed."
                 )
 
             connection.commit()
 
-        # --------------------------------------------------
-        # 5. 原子替换
-        # --------------------------------------------------
+        finally:
+            # Windows 下必须确保真正释放文件句柄。
+            connection.close()
+
 
         os.replace(
             building,

@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from sql_pilot_engine.analysis.parser import (
-    extract_insert_target_table,
-    has_partition_clause,
-)
+
 from sql_pilot_engine.core.context import (
     ReviewContext,
 )
@@ -18,9 +15,14 @@ from sql_pilot_engine.utils.sql_text import (
     normalize_sql,
 )
 
+from sql_pilot_engine.analysis.facts import (
+    SQLFacts,
+)
+
 
 def check_insert_without_partition(
-    sql: str,
+    sql:str,
+    facts: SQLFacts,
     context: ReviewContext,
 ) -> list[Issue]:
     """检查分区表INSERT是否显式声明PARTITION。
@@ -36,12 +38,10 @@ def check_insert_without_partition(
     if "insert " not in normalized_sql:
         return []
 
-    if has_partition_clause(sql):
+    if facts.has_partition_clause:
         return []
 
-    target_table = extract_insert_target_table(
-        sql
-    )
+    target_table = facts.insert_target_table
 
     if target_table is None:
         return []

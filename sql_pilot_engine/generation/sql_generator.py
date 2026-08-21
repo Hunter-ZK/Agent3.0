@@ -34,7 +34,6 @@ class SQLGenerator:
     def generate(
         self,
         *,
-        question: str,
         plan: QueryPlan,
         query_context: QueryContext,
         dialect: str="maxcompute",
@@ -42,9 +41,7 @@ class SQLGenerator:
     ) -> GeneratedSQL:
         
         prompt = build_sql_prompt(
-            question=question,
             plan=plan,
-            semantic_context=query_context.semantic_context,
             query_context=query_context,
             dialect=dialect,
             revision_feedback=revision_feedback,

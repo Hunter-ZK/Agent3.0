@@ -46,6 +46,8 @@ class SQLFacts:
     
     source_tables: tuple[str, ...]
     target_tables: tuple[str, ...]
+    insert_target_table: str | None
+    referenced_tables: tuple[str, ...]
     cte_names: tuple[str, ...]
     
     table_references: tuple[TableReference, ...]
@@ -56,7 +58,7 @@ class SQLFacts:
     has_drop: bool
     has_truncate: bool
     has_write_operation: bool
-    
+    has_partition_clause: bool
 
 class SQLFactsExtractor:
     """将SQLGlot AST转换成项目内部的SQLFacts。
@@ -135,6 +137,12 @@ class SQLFactsExtractor:
                 )
             )
             
+            insert_target_table, has_partition_clause = (
+                self._extract_insert_facts(
+                    statement
+                )
+            )
+                        
             table_references.update(current_table_references)
             
             column_references.update(self._extract_column_references(statement))
@@ -153,6 +161,9 @@ class SQLFactsExtractor:
             statement_types=tuple(statement_types),
             source_tables=tuple(sorted(source_tables)),
             target_tables=tuple(sorted(target_tables)),
+            insert_target_table=(
+                insert_target_table
+            ),
             cte_names=tuple(sorted(cte_names)),
             table_references=tuple(
                 sorted(
@@ -184,6 +195,10 @@ class SQLFactsExtractor:
             has_write_operation=bool(
                 statement_type_set
                 & self.WRITE_OPERATION_TYPES
+            ),
+
+            has_partition_clause=(
+                has_partition_clause
             ),
             
         )
@@ -395,4 +410,111 @@ class SQLFactsExtractor:
             part.lower()
             for part in parts
             if part
+        )
+            
+    @staticmethod
+    def _extract_insert_facts(
+        expression: exp.Expression,
+    ) -> tuple[
+        str | None,
+        bool,
+    ]:
+        """
+        从已经解析完成的 SQLGlot AST 中
+        提取 INSERT 相关事实。
+
+        返回：
+            (
+                insert_target_table,
+                has_partition_clause,
+            )
+
+        注意：
+        这里绝不重新 parse SQL。
+        """
+
+        insert = (
+            expression
+            if isinstance(
+                expression,
+                exp.Insert,
+            )
+            else expression.find(
+                exp.Insert
+            )
+        )
+
+        if insert is None:
+            return (
+                None,
+                False,
+            )
+
+        # ==========================================
+        # PARTITION
+        # ==========================================
+
+        # SQLGlot 的 Insert Expression
+        # 正式包含 partition arg。
+        #
+        # 只判断语法中是否存在 PARTITION，
+        # 不在 Analysis Layer 判断 partition
+        # 业务是否合法。
+        has_partition_clause = (
+            insert.args.get(
+                "partition"
+            )
+            is not None
+        )
+
+        # ==========================================
+        # TARGET TABLE
+        # ==========================================
+
+        target = insert.this
+
+        # INSERT 的 target 在包含列声明等情况下
+        # 可能是 Schema(Table(...), ...)
+        if isinstance(
+            target,
+            exp.Schema,
+        ):
+            target = target.this
+
+        if not isinstance(
+            target,
+            exp.Table,
+        ):
+            return (
+                None,
+                has_partition_clause,
+            )
+
+        # SQLGlot Table 分别保存
+        # catalog / db / table。
+        #
+        # 不使用 target.sql()，
+        # 避免引号、Dialect Formatting
+        # 混进 Domain Fact。
+        parts = tuple(
+            part
+            for part in (
+                target.catalog,
+                target.db,
+                target.name,
+            )
+            if part
+        )
+
+        if not parts:
+            target_table = None
+
+        else:
+            target_table = ".".join(
+                parts
+            )
+
+        return (
+            target_table,
+            has_partition_clause,
         )

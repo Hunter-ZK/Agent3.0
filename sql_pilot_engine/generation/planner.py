@@ -39,13 +39,10 @@ class QueryPlanner:
     def plan(
         self,
         *,
-        question: str,
         query_context: QueryContext,
     ) -> QueryPlanningOutcome:
         
         prompt = build_planner_prompt(
-            question=question,
-            semantic_context=query_context.semantic_context,
             query_context=query_context,
         )
         

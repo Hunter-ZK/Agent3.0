@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import re
 
-from sql_pilot_engine.analysis.parser import (
-    extract_insert_target_table,
-)
+
 from sql_pilot_engine.core.models import (
     FixedSqlResult,
     Issue,

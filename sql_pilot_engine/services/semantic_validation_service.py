@@ -62,18 +62,14 @@ class SemanticSQLValidator:
     def validate(
         self,
         *,
-        question: str,
         sql: str,
         plan: QueryPlan,
-        semantic_context: str,
         query_context: QueryContext,
     ) -> SemanticValidationResult:
         
         prompt = self._build_prompt(
-            question=question,
             sql=sql,
             plan=plan,
-            semantic_context=semantic_context,
             query_context=query_context,
         )
         
@@ -112,10 +108,8 @@ class SemanticSQLValidator:
     @staticmethod
     def _build_prompt(
         *,
-        question: str,
         sql: str,
         plan: QueryPlan,
-        semantic_context: str,
         query_context: QueryContext,
     ) -> str:
         
@@ -136,7 +130,7 @@ answers the original user question according to
 the available business context.
 
 Original question:
-{question}
+{query_context.question}
 
 Query plan:
 tables={plan.tables}
@@ -147,7 +141,7 @@ group_by={plan.group_by}
 requirements={plan.requirements}
 
 Semantic model:
-{semantic_context}
+{query_context.semantic_context}
 
 Retrieved business context:
 {retrieved_context}

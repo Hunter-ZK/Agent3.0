@@ -66,10 +66,10 @@ class MetadataCatalog(Protocol):
         ColumnSearchResult,
         ...
     ]:
-    """
-    查询一个精确字段名在全部物理表中的使用情况。
+        """
+        查询一个精确字段名在全部物理表中的使用情况。
 
-    这是 Complete Fact Query，
-    不允许使用隐式 Top-N limit。
-    """
-    ...
+        这是 Complete Fact Query，
+        不允许使用隐式 Top-N limit。
+        """
+        ...

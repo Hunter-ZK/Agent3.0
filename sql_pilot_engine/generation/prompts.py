@@ -52,8 +52,6 @@ def render_query_context(
 
 def build_planner_prompt(
     *,
-    question: str,
-    semantic_context: str,
     query_context: QueryContext,
 ) -> str:
     
@@ -69,10 +67,10 @@ the supplied context is sufficient to plan a
 reliable SQL query.
 
 User question:
-{question}
+{query_context.question}
 
 Semantic model:
-{semantic_context}
+{query_context.semantic_context}
 
 Retrieved context:
 {rag_context}
@@ -204,9 +202,7 @@ If context is insufficient:
 
 def build_sql_prompt(
     *,
-    question: str,
     plan: QueryPlan,
-    semantic_context: str,
     query_context: QueryContext,
     dialect: str,
     revision_feedback: tuple[str, ...] = (),
@@ -242,7 +238,7 @@ Dialect:
 {dialect}
 
 Question:
-{question}
+{query_context.question}
 
 Query Plan:
 tables={plan.tables}
@@ -253,7 +249,7 @@ group_by={plan.group_by}
 requirements={plan.requirements}
 
 Semantic model:
-{semantic_context}
+{query_context.semantic_context}
 
 Retrieved context:
 {rag_context}

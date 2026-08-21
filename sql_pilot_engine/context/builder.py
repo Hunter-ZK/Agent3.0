@@ -16,34 +16,16 @@ from sql_pilot_engine.context.retriever import (
 )
 class QueryContext:
     """
-    Text-to-SQL 当前任务的完整 Context Snapshot。
+    Text-to-SQL 当前 Turn 的完整任务上下文。
 
-    它是 request-scoped projection，
+    注意：
+    QueryContext 是 request-scoped projection，
     不是长期 Knowledge Source。
-
-    长期知识源：
-        Semantic Model
-        Business Knowledge
-        Verified SQL
-
-    当前任务：
-        ↓ projection
-        QueryContext
     """
 
-    # 保留 question。
-    #
-    # Runtime State 中的 question 是任务输入；
-    # QueryContext 中的 question 是构建 Context 时
-    # 使用的任务快照。
-    #
-    # 当前阶段故意允许这层轻微重复，
-    # 避免为了形式纯洁继续扩大迁移范围。
     question: str
 
-    # Semantic Model 针对当前问题生成的投影。
-    #
-    # 不保存整个 SemanticModel。
+    # SemanticModel 针对当前问题渲染出的任务级投影。
     semantic_context: str
 
     business_knowledge: tuple[
@@ -66,16 +48,16 @@ class QueryContextBuilder:
     """
     Text-to-SQL Context Assembly。
 
-    Builder 负责：
-        已获取 Context Components
+    负责：
+        已取得的 Context Components
         → QueryContext
 
-    Builder 不负责：
-        VectorStore 创建
-        SemanticModel 加载
-        Query Planning
-        SQL Generation
-        Runtime Routing
+    不负责：
+        - 创建 VectorStore
+        - 加载 SemanticModel
+        - Query Planning
+        - SQL Generation
+        - Runtime Routing
     """
 
     def __init__(
@@ -84,7 +66,6 @@ class QueryContextBuilder:
             MandatoryRuleMatcher | None
         ) = None,
     ) -> None:
-
         self._mandatory_rule_matcher = (
             mandatory_rule_matcher
         )
@@ -93,7 +74,6 @@ class QueryContextBuilder:
         self,
         *,
         question: str,
-
         semantic_context: str,
 
         business_knowledge: list[
@@ -125,19 +105,14 @@ class QueryContextBuilder:
                 mandatory_rules=(
                     mandatory_rules
                 ),
-
-                retrieved_documents=(
-                    tuple(
-                        business_knowledge
-                    )
+                retrieved_documents=tuple(
+                    business_knowledge
                 ),
             )
         )
 
         return QueryContext(
-            question=(
-                normalized_question
-            ),
+            question=normalized_question,
 
             semantic_context=(
                 semantic_context
@@ -172,9 +147,7 @@ class QueryContextBuilder:
 
         return (
             self._mandatory_rule_matcher
-            .match(
-                question
-            )
+            .match(question)
         )
 
     @staticmethod
@@ -212,14 +185,8 @@ class QueryContextBuilder:
             if document_id in seen:
                 continue
 
-            seen.add(
-                document_id
-            )
+            seen.add(document_id)
 
-            merged.append(
-                document
-            )
+            merged.append(document)
 
-        return tuple(
-            merged
-        )
+        return tuple(merged)

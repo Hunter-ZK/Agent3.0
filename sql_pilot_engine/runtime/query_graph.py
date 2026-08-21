@@ -301,6 +301,7 @@ class QueryAgentGraph:
         query_context = (
             self.context_builder.build(
                 question=question,
+                semantic_context=semantic_context,
                 business_knowledge=(
                     business_knowledge
                 ),
@@ -316,18 +317,9 @@ class QueryAgentGraph:
             )
         )
 
-        semantic_context = (
-            self.semantic_renderer.render(
-                self.semantic_model
-            )
-        )
-
         return {
             "query_context":(
                 query_context
-            ),
-            "semantic_context":(
-                semantic_context
             ),
         }
 
@@ -351,7 +343,6 @@ class QueryAgentGraph:
             )
         
         outcome = self.planner.plan(
-            question = state["question"],
             query_context=(
                 query_context
             ),
@@ -426,7 +417,6 @@ class QueryAgentGraph:
  
         result = (
             self.sql_generator.generate(
-                question=(state["question"]),
                 plan=plan,
                 query_context=(state["query_context"]),
                 dialect=state.get("dialect","maxcompute"),
@@ -495,10 +485,8 @@ class QueryAgentGraph:
             
         result = (
             self.semantic_validator.validate(
-                question=state["question"],
                 sql=state["candidate_sql"],
                 plan=state["query_plan"],
-                semantic_context=state["semantic_context"],
                 query_context=state["query_context"],
             )
         )

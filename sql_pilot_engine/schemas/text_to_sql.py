@@ -57,7 +57,7 @@ class TextToSQLClarification:
     question: str
     clarification_question: str
 
-    thread_is: str | None = None
+    thread_id: str | None = None
 
     missing_context: tuple[str, ...] = ()
 

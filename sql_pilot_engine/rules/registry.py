@@ -7,6 +7,7 @@ from sql_pilot_engine.rules.basic import BASIC_RULES
 from sql_pilot_engine.rules.maxcompute import MAXCOMPUTE_RULES
 from sql_pilot_engine.rules.metadata import METADATA_RULES
 
+from sql_pilot_engine.analysis.facts import SQLFacts
 
 class RuleRegistry:
     """规则注册表。"""
@@ -27,7 +28,12 @@ class RuleRegistry:
     def list_rules(self) -> list[Rule]:
         return list(self.rules.values())
 
-    def run(self, sql: str, context: ReviewContext, categories: set[str] | None = None) -> list[Issue]:
+    def run(
+        self, 
+        sql: str, 
+        facts: SQLFacts,
+        context: ReviewContext, 
+        categories: set[str] | None = None) -> list[Issue]:
         issues: list[Issue] = []
 
         for rule in self.list_rules():
