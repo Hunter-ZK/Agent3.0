@@ -27,6 +27,9 @@ from sql_pilot_engine.services.text_to_sql_service import (
 from sql_pilot_engine.app.text_to_sql_factory import (
     build_text_to_sql_service,
 )
+from sql_pilot_engine.metadata.sqlite_repository import (
+    SQLiteMetadataRepository,
+)
 
 # ============================================================
 # 1. Demo专用Fake模型
@@ -94,83 +97,107 @@ class FakeSQLModel:
         """
 
 
+
 # ============================================================
 # 2. 构建Text-to-SQL产品能力
 # ============================================================
 
-    def build_demo_service(
-        use_real_llm: bool,
-    ) -> TextToSQLService:
+def build_demo_service(
+    use_real_llm: bool,
+) -> TextToSQLService:
 
-        project_root = (
-            Path(__file__)
-            .resolve()
-            .parents[1]
+    project_root = (
+        Path(__file__)
+        .resolve()
+        .parents[1]
+    )
+
+    metadata_db_path = (
+        project_root
+        / "data"
+        / "metadata"
+        / "agent_metadata.db"
+    )
+
+    def build_metadata_provider():
+        return SQLiteMetadataRepository(
+            metadata_db_path
         )
 
-        semantic_model_path = (
-            project_root
-            / "sql_pilot_engine"
-            / "context"
-            / "semantic"
-            / "loan_model.json"
+
+    if not metadata_db_path.is_file():
+        raise FileNotFoundError(
+            "Metadata database not found: "
+            f"{metadata_db_path}"
         )
 
-        if use_real_llm:
+    semantic_model_path = (
+        project_root
+        / "sql_pilot_engine"
+        / "context"
+        / "semantic"
+        / "loan_model.json"
+    )
 
-            model = (
-                DeepSeekLLMClient
-                .from_env()
-            )
+    if use_real_llm:
 
-            planner_model = model
-            sql_model = model
-
-            semantic_validator_model = (
-                model
-            )
-
-        else:
-
-            planner_model = (
-                FakePlannerModel()
-            )
-
-            sql_model = (
-                FakeSQLModel()
-            )
-
-            semantic_validator_model = None
-
-        return build_text_to_sql_service(
-            semantic_model_path=(
-                semantic_model_path
-            ),
-
-            context_documents=(
-                LOAN_DOMAIN_CONTEXT_DOCUMENTS
-            ),
-
-            planner_model=(
-                planner_model
-            ),
-
-            sql_model=(
-                sql_model
-            ),
-
-            semantic_validator_model=(
-                semantic_validator_model
-            ),
-
-            collection_name=(
-                "text_to_sql_demo"
-            ),
-
-            max_sql_retries=0,
-
-            max_semantic_retries=1,
+        model = (
+            DeepSeekLLMClient
+            .from_env()
         )
+
+        planner_model = model
+        sql_model = model
+
+        semantic_validator_model = (
+            model
+        )
+
+    else:
+
+        planner_model = (
+            FakePlannerModel()
+        )
+
+        sql_model = (
+            FakeSQLModel()
+        )
+
+        semantic_validator_model = None
+
+    return build_text_to_sql_service(
+        semantic_model_path=(
+            semantic_model_path
+        ),
+
+        context_documents=(
+            LOAN_DOMAIN_CONTEXT_DOCUMENTS
+        ),
+
+        metadata_provider_factory=(
+            build_metadata_provider
+        ),
+
+        planner_model=(
+            planner_model
+        ),
+
+        sql_model=(
+            sql_model
+        ),
+
+        semantic_validator_model=(
+            semantic_validator_model
+        ),
+
+        collection_name=(
+            "text_to_sql_demo"
+        ),
+
+        max_sql_retries=0,
+
+        max_semantic_retries=1,
+    )
 
 def parse_args() -> argparse.Namespace:
 

@@ -132,8 +132,8 @@ class ReviewService:
 
         rule_issues = self.rule_registry.run(sql=sql, context=context, categories=categories)
 
-        analysis_context_text = build_analysis_context_text(sql=sql, dialect=dialect)
-        metadata_context_text = build_metadata_context_text(sql=sql, metadata_provider=metadata_provider)
+        analysis_context_text = build_analysis_context_text(facts=sql_facts, dialect=dialect)
+        metadata_context_text = build_metadata_context_text(facts=sql_facts, metadata_provider=metadata_provider)
 
         metadata_issues: list[Issue] = []
         

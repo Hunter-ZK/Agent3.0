@@ -21,6 +21,7 @@ from sql_pilot_engine.rules.basic import (
 
 
 def check_insert_without_partition(
+    str: str,
     context: ReviewContext,
 ) -> list[Issue]:
     """

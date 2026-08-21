@@ -32,7 +32,23 @@ class SQLPilotEngine:
     ) -> None:
         self.review_service = (review_service or ReviewService())
         self.fix_service = (fix_service or FixService(review_service=self.review_service))
-        self.metadata_provider_factory = metadata_provider_factory or MockMetadataProvider
+        if (
+            metadata_provider_factory
+            is not None
+            and not callable(
+                metadata_provider_factory
+            )
+        ):
+            raise TypeError(
+                "metadata_provider_factory "
+                "must be callable or None, "
+                f"got "
+                f"{type(metadata_provider_factory).__name__}"
+            )
+
+        self.metadata_provider_factory = (
+            metadata_provider_factory
+        )
         self.explain_agent = explain_agent
         self.critic_service = critic_service or CriticService()
 

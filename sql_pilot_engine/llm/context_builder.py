@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sql_pilot_engine.analysis.sql_analysis import SQLAnalysisAdapter
+from sql_pilot_engine.analysis.facts import (
+    SQLFacts,
+)
 from sql_pilot_engine.metadata.models import (
     MetadataLookupStatus,
 )
@@ -10,166 +12,302 @@ from sql_pilot_engine.metadata.provider import (
 
 
 def build_analysis_context_text(
-    sql: str,
+    *,
+    facts: SQLFacts,
     dialect: str = "maxcompute",
 ) -> str:
-    """将SQL结构分析结果转换为LLM可读取的文本。"""
+    """
+    将已经提取完成的 SQLFacts
+    转换为 LLM 可读取的结构分析文本。
 
-    analysis = analyze_sql(
-        sql,
-        dialect=dialect,
-    )
+    重要：
+
+    本函数不重新解析 SQL。
+
+    SQL 的唯一分析入口是：
+
+        SQLParser
+        → SQLAnalysisAdapter
+        → SQLFacts
+
+    LLM Context Builder 只消费 Facts。
+    """
 
     lines: list[str] = []
 
-    lines.append("【SQL 结构分析】")
-    lines.append(f"- Dialect: {analysis.dialect}")
+    # ========================================================
+    # Basic
+    # ========================================================
+
     lines.append(
-        f"- Statement Count: "
-        f"{len(analysis.statements)}"
+        "【SQL 结构分析】"
     )
+
     lines.append(
-        f"- CTE Count: {len(analysis.ctes)}"
+        f"- Dialect: {dialect}"
     )
+
+    lines.append(
+        "- Statement Count: "
+        f"{facts.statement_count}"
+    )
+
+    lines.append(
+        "- Statement Types: "
+        + (
+            ", ".join(
+                facts.statement_types
+            )
+            or "UNKNOWN"
+        )
+    )
+
     lines.append("")
 
-    if analysis.warnings:
-        lines.append("【文本级风险】")
+    # ========================================================
+    # CTE
+    # ========================================================
 
-        for warning in analysis.warnings:
-            lines.append(f"- {warning}")
+    lines.append(
+        "【CTE 摘要】"
+    )
 
-        lines.append("")
+    if not facts.cte_names:
+        lines.append(
+            "- 无 CTE"
+        )
 
-    lines.append("【文件级特征】")
-
-    for key, value in analysis.file_features.items():
-        lines.append(f"- {key}: {value}")
-
-    lines.append("")
-
-    lines.append("【CTE 摘要】")
-
-    if not analysis.ctes:
-        lines.append("- 无 CTE")
     else:
-        for cte_name, cte in analysis.ctes.items():
-            lines.append(f"- CTE: {cte_name}")
-            lines.append(
-                "  Output Columns: "
-                f"{', '.join(cte.output_columns) or 'UNKNOWN'}"
+        lines.append(
+            "- CTEs: "
+            + ", ".join(
+                facts.cte_names
             )
-
-            references = ", ".join(
-                (
-                    f"{item.relation_name}"
-                    f"({item.relation_type})"
-                )
-                for item in cte.referenced_relations
-            )
-
-            lines.append(
-                "  Referenced Relations: "
-                f"{references or 'NONE'}"
-            )
+        )
 
     lines.append("")
 
-    lines.append("【SQL 语句摘要】")
+    # ========================================================
+    # Tables
+    # ========================================================
 
-    for index, statement in enumerate(
-        analysis.statements,
-        start=1,
-    ):
-        lines.append(f"- Statement {index}")
-        lines.append(
-            f"  Type: {statement.statement_type}"
-        )
-        lines.append(
-            "  Target Table: "
-            f"{statement.target_table or 'None'}"
-        )
+    lines.append(
+        "【表引用】"
+    )
 
-        references = ", ".join(
-            (
-                f"{item.relation_name}"
-                f"({item.relation_type})"
+    if facts.target_tables:
+        lines.append(
+            "- Target Tables: "
+            + ", ".join(
+                facts.target_tables
             )
-            for item in statement.source_relations
+        )
+
+    else:
+        lines.append(
+            "- Target Tables: None"
+        )
+
+    if facts.source_tables:
+        lines.append(
+            "- Source Tables: "
+            + ", ".join(
+                facts.source_tables
+            )
+        )
+
+    else:
+        lines.append(
+            "- Source Tables: None"
+        )
+
+    lines.append("")
+
+    # ========================================================
+    # Table References
+    # ========================================================
+
+    lines.append(
+        "【表引用明细】"
+    )
+
+    if not facts.table_references:
+        lines.append(
+            "- None"
+        )
+
+    else:
+        for reference in (
+            facts.table_references
+        ):
+            if reference.alias:
+                lines.append(
+                    "- "
+                    f"{reference.physical_name} "
+                    f"AS {reference.alias}"
+                )
+
+            else:
+                lines.append(
+                    "- "
+                    f"{reference.physical_name}"
+                )
+
+    lines.append("")
+
+    # ========================================================
+    # Columns
+    # ========================================================
+
+    lines.append(
+        "【字段引用】"
+    )
+
+    if not facts.column_references:
+        lines.append(
+            "- None"
+        )
+
+    else:
+        for reference in (
+            facts.column_references
+        ):
+            if reference.qualifier:
+                lines.append(
+                    "- "
+                    f"{reference.qualifier}."
+                    f"{reference.name}"
+                )
+
+            else:
+                lines.append(
+                    f"- {reference.name}"
+                )
+
+    lines.append("")
+
+    # ========================================================
+    # Select Aliases
+    # ========================================================
+
+    lines.append(
+        "【SELECT 别名】"
+    )
+
+    if facts.select_aliases:
+        lines.append(
+            "- "
+            + ", ".join(
+                facts.select_aliases
+            )
+        )
+
+    else:
+        lines.append(
+            "- None"
+        )
+
+    lines.append("")
+
+    # ========================================================
+    # Structural Facts
+    # ========================================================
+
+    lines.append(
+        "【SQL 特征】"
+    )
+
+    lines.append(
+        "- Has SELECT *: "
+        f"{facts.has_select_star}"
+    )
+
+    lines.append(
+        "- Has DROP: "
+        f"{facts.has_drop}"
+    )
+
+    lines.append(
+        "- Has TRUNCATE: "
+        f"{facts.has_truncate}"
+    )
+
+    lines.append(
+        "- Has Write Operation: "
+        f"{facts.has_write_operation}"
+    )
+
+    # 下面两个字段是你此次
+    # parser → SQLFacts 迁移新增的 INSERT Facts。
+    #
+    # 如果已经存在，就直接输出。
+    insert_target_table = facts.insert_target_table
+
+    has_partition_clause = facts.has_partition_clause
+
+    if insert_target_table is not None:
+        lines.append(
+            "- Insert Target Table: "
+            f"{insert_target_table}"
         )
 
         lines.append(
-            "  Source Relations: "
-            f"{references or 'NONE'}"
+            "- Has Partition Clause: "
+            f"{has_partition_clause}"
         )
 
-        feature_text = ", ".join(
-            f"{key}={value}"
-            for key, value
-            in statement.features.items()
-            if value
-        )
-
-        lines.append(
-            f"  Features: {feature_text or 'None'}"
-        )
-
-    return "\n".join(lines)
+    return "\n".join(
+        lines
+    )
 
 
 def build_metadata_context_text(
-    sql: str,
-    metadata_provider: MetadataProvider | None,
+    *,
+    facts: SQLFacts,
+    metadata_provider: (
+        MetadataProvider | None
+    ),
 ) -> str:
-    """将SQL涉及的元数据转换为LLM上下文。
+    """
+    将 SQLFacts 中涉及的物理表
+    转换为 LLM 可读取的元数据上下文。
 
-    Provider始终返回TableLookupResult，因此这里必须分别处理：
-
-    FOUND：
-        查询成功，并且找到表。
-
-    NOT_FOUND：
-        查询成功，但目标表不存在。
-
-    ERROR：
-        查询过程失败，不能误报为表不存在。
+    本函数同样禁止重新解析 SQL。
     """
 
     if metadata_provider is None:
         return "未启用元数据。"
 
-    analysis = analyze_sql(sql)
+    # ========================================================
+    # Physical Tables
+    # ========================================================
 
-    table_names: list[str] = []
-
-    for statement in analysis.statements:
-        if statement.target_table:
-            table_names.append(
-                statement.target_table
-            )
-
-        for relation in statement.source_relations:
-            if (
-                relation.relation_type
-                == "physical_table"
-            ):
-                table_names.append(
-                    relation.relation_name
-                )
-
-    # 字典Key不能重复，并且会保留插入顺序。
     table_names = list(
-        dict.fromkeys(table_names)
+        dict.fromkeys(
+            (
+                *facts.target_tables,
+                *facts.source_tables,
+            )
+        )
     )
 
     if not table_names:
         return "未解析到相关物理表。"
 
-    lines: list[str] = ["【相关元数据】"]
+    # ========================================================
+    # Metadata Rendering
+    # ========================================================
+
+    lines: list[str] = [
+        "【相关元数据】"
+    ]
 
     for table_name in table_names:
-        lookup = metadata_provider.get_table(
-            table_name
+
+        lookup = (
+            metadata_provider.get_table(
+                table_name
+            )
         )
 
         if (
@@ -179,13 +317,16 @@ def build_metadata_context_text(
             lines.append(
                 f"- Table: {table_name}"
             )
+
             lines.append(
                 "  Metadata: ERROR"
             )
+
             lines.append(
                 "  Error: "
                 f"{lookup.error_message or 'unknown error'}"
             )
+
             continue
 
         if (
@@ -195,21 +336,24 @@ def build_metadata_context_text(
             lines.append(
                 f"- Table: {table_name}"
             )
+
             lines.append(
                 "  Metadata: NOT_FOUND"
             )
+
             continue
 
-        # FOUND状态按契约应当携带TableMetadata。
-        # 这里仍然进行防御性检查，避免错误Provider
-        # 让上下文构造过程直接崩溃。
+        # FOUND 状态按契约
+        # 应当携带 TableMetadata。
         if lookup.table is None:
             lines.append(
                 f"- Table: {table_name}"
             )
+
             lines.append(
                 "  Metadata: INVALID_RESULT"
             )
+
             continue
 
         table = lookup.table
@@ -217,26 +361,41 @@ def build_metadata_context_text(
         lines.append(
             f"- Table: {table.full_name}"
         )
+
         lines.append(
-            f"  Description: {table.description}"
+            "  Description: "
+            f"{table.description}"
         )
+
         lines.append(
-            f"  Is Partitioned: "
+            "  Is Partitioned: "
             f"{table.is_partitioned}"
         )
+
         lines.append(
             "  Partition Fields: "
-            f"{', '.join(table.partition_fields) or 'None'}"
+            + (
+                ", ".join(
+                    table.partition_fields
+                )
+                or "None"
+            )
         )
-        lines.append("  Columns:")
 
-        # table.columns是字段名到ColumnMetadata的映射。
-        # 遍历values()才能得到字段元数据对象。
-        for column in table.columns.values():
+        lines.append(
+            "  Columns:"
+        )
+
+        for column in (
+            table.columns.values()
+        ):
             lines.append(
-                f"    - {column.name} "
+                "    - "
+                f"{column.name} "
                 f"({column.data_type}): "
                 f"{column.description}"
             )
 
-    return "\n".join(lines)
+    return "\n".join(
+        lines
+    )

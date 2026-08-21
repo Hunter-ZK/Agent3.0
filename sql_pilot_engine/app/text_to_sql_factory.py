@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import (
+    Iterable,
+    Callable,
+)
 from pathlib import Path
 
 from sql_pilot_engine.app.factory import (
@@ -64,6 +67,9 @@ from sql_pilot_engine.services.text_to_sql_service import (
     TextToSQLService,
 )
 
+from sql_pilot_engine.metadata.provider import (
+    MetadataProvider,
+)
 
 def build_text_to_sql_service(
     *,
@@ -72,6 +78,13 @@ def build_text_to_sql_service(
     context_documents: Iterable[
         ContextDocument
     ],
+
+    metadata_provider_factory: (
+        Callable[
+            [],
+            MetadataProvider,
+        ] | None
+    ) = None,
 
     planner_model: TextGenerationModel,
 
@@ -227,6 +240,12 @@ def build_text_to_sql_service(
         build_workflow(
             max_retries=(
                 max_sql_retries
+            ),
+            metadata_provider_factory=(
+                metadata_provider_factory
+            ),
+            default_enable_metadata=(
+                metadata_provider_factory is not None,
             )
         )
     )

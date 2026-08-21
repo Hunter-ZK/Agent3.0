@@ -1,7 +1,7 @@
 {
   "tables": [
     {
-      "name": "dwd_hd_101_cldwdk",
+      "name": "ods_hd_100_cldkxx",
       "description": "科技贷款明细宽表，记录科技贷款的存量情况",
       "grain": "每个数据日期下，一条记录代表一笔贷款借据的存量情况",
       "synonyms": [
@@ -29,7 +29,7 @@
           ]
         },
         {
-          "name": "is_high_tech_ent_loan_code",
+          "name": "is_high_tech_mfg_loan_code",
           "description": "该笔贷款是否属于高新技术企业贷款",
           "data_type": "STRING",
           "synonyms": [
@@ -142,7 +142,7 @@
     },
 
     {
-      "name": "dwd_hd_201_cldwdk",
+      "name": "ods_hd_200_cldkxx",
       "description": "绿色单位贷款明细宽表，记录绿色贷款的存量情况",
       "grain": "每个数据日期下，一条记录代表一笔绿色单位贷款借据的存量情况",
       "synonyms": [
@@ -278,7 +278,7 @@
       "name": "tech_loan_balance",
       "description": "科技贷款存量贷款余额",
       "expression": "SUM(loan_bal_rmb)",
-      "table": "dwd_hd_101_cldwdk",
+      "table": "ods_hd_100_cldkxx",
       "synonyms": [
         "科技贷款余额",
         "科技贷款存量余额",
@@ -291,7 +291,7 @@
       "name": "tech_loan_enterprise_count",
       "description": "获得科技贷款的去重企业数量",
       "expression": "COUNT(DISTINCT ent_code)",
-      "table": "dwd_hd_101_cldwdk",
+      "table": "ods_hd_100_cldkxx",
       "synonyms": [
         "科技贷款获贷企业数",
         "获贷企业数",
@@ -303,7 +303,7 @@
       "name": "tech_loan_weighted_rate",
       "description": "按贷款余额加权计算的科技贷款存量利率",
       "expression": "SUM(loan_bal_rmb * rate) / SUM(loan_bal_rmb)",
-      "table": "dwd_hd_101_cldwdk",
+      "table": "ods_hd_100_cldkxx",
       "synonyms": [
         "科技贷款利率",
         "科技贷款加权利率",
@@ -317,7 +317,7 @@
       "name": "green_loan_balance",
       "description": "绿色贷款存量贷款余额",
       "expression": "SUM(loan_bal_rmb)",
-      "table": "dwd_hd_201_cldwdk",
+      "table": "ods_hd_200_cldkxx",
       "synonyms": [
         "绿色贷款余额",
         "绿色贷款存量余额",
@@ -330,7 +330,7 @@
       "name": "green_loan_enterprise_count",
       "description": "获得绿色贷款的去重企业数量",
       "expression": "COUNT(DISTINCT ent_code)",
-      "table": "dwd_hd_201_cldwdk",
+      "table": "ods_hd_200_cldkxx",
       "synonyms": [
         "绿色贷款获贷企业数",
         "获贷企业数",
@@ -342,7 +342,7 @@
       "name": "green_loan_weighted_rate",
       "description": "按贷款余额加权计算的绿色贷款存量利率",
       "expression": "SUM(loan_bal_rmb * rate) / SUM(loan_bal_rmb)",
-      "table": "dwd_hd_201_cldwdk",
+      "table": "ods_hd_200_cldkxx",
       "synonyms": [
         "绿色贷款利率",
         "绿色贷款加权利率",

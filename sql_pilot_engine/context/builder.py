@@ -179,7 +179,7 @@ class QueryContextBuilder:
         ):
 
             document_id = (
-                document.document_id
+                document.document.document_id
             )
 
             if document_id in seen:

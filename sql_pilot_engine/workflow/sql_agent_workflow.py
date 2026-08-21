@@ -25,6 +25,7 @@ class SQLAgentWorkflowResult:
     trace_id: str
     final_status: str
 
+
     explain_response: (
         SQLExplainResponse | None
     ) = None
@@ -57,6 +58,7 @@ class SQLAgentWorkflow:
         self,
         engine: SQLPilotEngine,
         max_retries: int = 1,
+        default_enable_metadata: bool = False,
     ) -> None:
         if max_retries < 0:
             raise ValueError(
@@ -66,23 +68,45 @@ class SQLAgentWorkflow:
         self.engine = engine
         self.max_retries = max_retries
 
+        self.default_enable_metadata = (
+            default_enable_metadata
+        )
+
     def run(
         self,
         sql: str,
         file_path: str = "",
         *,
         categories: set[str] | None = None,
-        enable_metadata: bool = False,
+        enable_metadata: bool | None = None,
         enable_llm: bool = False,
         llm_provider: str = "mock",
         fix_provider: str = "auto",
     ) -> SQLAgentWorkflowResult:
-        
+
+
+
         trace_id = str(uuid4())
         route_history: list[str] = []
         
         explain_response = None
-        
+
+        enable_metadata = (
+            self.default_enable_metadata
+            if enable_metadata is None
+            else enable_metadata
+        )
+
+        print(
+            "[DEBUG] default_enable_metadata =",
+            self.default_enable_metadata,
+        )
+
+        print(
+            "[DEBUG] effective_enable_metadata =",
+            enable_metadata,
+        )
+
         if self.engine.explain_available:
             
 

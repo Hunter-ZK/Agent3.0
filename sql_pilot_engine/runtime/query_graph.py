@@ -446,6 +446,40 @@ class QueryAgentGraph:
 
         validation = self.validation_workflow.run(state["generated_sql"])
 
+        print()
+        print(
+            "[DEBUG Validation Result]"
+        )
+
+        print(
+            validation
+        )
+
+        if (
+            validation.review_response
+            is not None
+        ):
+            print(
+                "[DEBUG Review Issues]"
+            )
+
+            for issue in (
+                validation.review_response.issues
+            ):
+                print(
+                    issue
+                )
+
+            print(
+                "[DEBUG Review Error]"
+            )
+
+            print(
+                validation
+                .review_response
+                .error_message
+            )
+
         candidate_sql = (
             self._resolve_candidate_sql(
                 generated_sql=(

@@ -881,3 +881,36 @@ class SQLiteMetadataRepository:
                 or ""
             ),
         )
+
+    @staticmethod
+    def _normalize_table_lookup_name(
+        table_name: str,
+    ) -> str:
+        """
+        将 Runtime SQL 中的物理表标识
+        转换为当前 Metadata V1 的表名口径。
+
+        当前 Metadata DB 以裸物理表名作为身份：
+
+            odps_prd_dwd.ods_hd_100_cldkxx
+            -> ods_hd_100_cldkxx
+
+        同时兼容反引号等 SQL 标识符包装。
+        """
+
+        normalized = (
+            table_name
+            .strip()
+            .replace("`", "")
+            .replace('"', "")
+        )
+
+        if not normalized:
+            return ""
+
+        return (
+            normalized
+            .split(".")[-1]
+            .strip()
+            .lower()
+        )

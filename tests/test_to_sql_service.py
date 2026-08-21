@@ -1,236 +1,157 @@
-class FakePlannerModel:
+from __future__ import annotations
 
-    def generate(
-        self,
-        prompt: str,
-    ) -> str:
-
-        return """
-        {
-          "tables": [
-            "dwd_order_detail"
-          ],
-          "dimensions": [
-            "user_id"
-          ],
-          "metrics": [
-            "total_order_amount"
-          ],
-          "filters": [],
-          "group_by": [
-            "user_id"
-          ]
-        }
-        """
-
-
-class FakeSQLModel:
-
-    def generate(
-        self,
-        prompt: str,
-    ) -> str:
-
-        return """
-        SELECT
-            user_id,
-            SUM(order_amount)
-                AS total_order_amount
-        FROM dwd_order_detail
-        GROUP BY user_id
-        """
-        
-        
 from pathlib import Path
 
-from sql_pilot_engine.app.factory import (
-    build_workflow,
-)
-from sql_pilot_engine.context.builder import (
-    QueryContextBuilder,
-)
-from sql_pilot_engine.context.embedding import (
-    TokenHashEmbeddingProvider,
+from sql_pilot_engine.app.text_to_sql_factory import (
+    build_text_to_sql_service,
 )
 from sql_pilot_engine.context.models import (
     ContextDocument,
     ContextDocumentKind,
 )
-from sql_pilot_engine.context.qdrant_store import (
-    QdrantVectorStore,
-)
-from sql_pilot_engine.context.retriever import (
-    KnowledgeRetriever,
-    VerifiedSQLRetriever,
-)
-from sql_pilot_engine.context.semantic.loader import (
-    SemanticModelLoader,
-)
-from sql_pilot_engine.generation.planner import (
-    QueryPlanner,
-)
-from sql_pilot_engine.generation.sql_generator import (
-    SQLGenerator,
-)
 from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLRequest,
 )
-from sql_pilot_engine.services.text_to_sql_service import (
-    TextToSQLService,
-)
 
 
-def build_service() -> TextToSQLService:
+class FakePlannerModel:
+    def generate(self, prompt: str) -> str:
+        return """
+        {
+          "tables": ["dwd_order_detail"],
+          "dimensions": ["user_id"],
+          "metrics": ["total_order_amount"],
+          "filters": [],
+          "group_by": ["user_id"]
+        }
+        """
 
-    embedding = TokenHashEmbeddingProvider(
-        dimensions=128
+
+class FakeSQLModel:
+    def generate(self, prompt: str) -> str:
+        return """
+        SELECT
+            user_id,
+            SUM(order_amount) AS total_order_amount
+        FROM dwd_order_detail
+        GROUP BY user_id
+        """
+
+
+class DangerousSQLModel:
+    def generate(self, prompt: str) -> str:
+        return "DROP TABLE dwd_order_detail"
+
+
+def build_service(
+    *,
+    sql_model=None,
+):
+    project_root = (
+        Path(__file__)
+        .resolve()
+        .parents[1]
     )
 
-    vector_store = QdrantVectorStore(
-        embedding_provider=embedding,
-        collection_name="text_to_sql_test",
+    semantic_model_path = (
+        project_root
+        / "sql_pilot_engine"
+        / "context"
+        / "semantic"
+        / "sample_model.json"
     )
 
-    vector_store.add(
-        [
-            ContextDocument(
-                document_id="knowledge_order_amount",
-                kind=(
-                    ContextDocumentKind
-                    .BUSINESS_KNOWLEDGE
-                ),
-                text=(
-                    "订单金额对应字段 "
-                    "dwd_order_detail.order_amount。"
-                ),
-                metadata={
-                    "domain": "order"
-                },
+    documents = (
+        ContextDocument(
+            document_id="knowledge_order_amount",
+            kind=ContextDocumentKind.BUSINESS_KNOWLEDGE,
+            text=(
+                "订单金额对应字段 "
+                "dwd_order_detail.order_amount。"
             ),
-
-            ContextDocument(
-                document_id="verified_user_amount",
-                kind=(
-                    ContextDocumentKind
-                    .VERIFIED_SQL
-                ),
-                text=(
-                    "问题：统计每个用户订单总金额。"
-                    "SQL：SELECT user_id, "
-                    "SUM(order_amount) "
-                    "FROM dwd_order_detail "
-                    "GROUP BY user_id"
-                ),
-                metadata={
-                    "domain": "order"
-                },
+            metadata={"domain": "order"},
+        ),
+        ContextDocument(
+            document_id="verified_user_amount",
+            kind=ContextDocumentKind.VERIFIED_SQL,
+            text=(
+                "问题：统计每个用户订单总金额。"
+                "SQL：SELECT user_id, "
+                "SUM(order_amount) "
+                "FROM dwd_order_detail "
+                "GROUP BY user_id"
             ),
-        ]
-    )
-
-    semantic_model = (
-        SemanticModelLoader()
-        .load(
-            "sql_pilot_engine/"
-            "context/semantic/"
-            "sample_model.json"
-        )
-    )
-
-    return TextToSQLService(
-        semantic_model=semantic_model,
-
-        knowledge_retriever=(
-            KnowledgeRetriever(
-                vector_store
-            )
-        ),
-
-        verified_sql_retriever=(
-            VerifiedSQLRetriever(
-                vector_store
-            )
-        ),
-
-        context_builder=(
-            QueryContextBuilder()
-        ),
-
-        planner=QueryPlanner(
-            model=FakePlannerModel()
-        ),
-
-        sql_generator=SQLGenerator(
-            model=FakeSQLModel()
-        ),
-
-        validation_workflow=(
-            build_workflow(
-                max_retries=0
-            )
+            metadata={"domain": "order"},
         ),
     )
-    
-    
+
+    return build_text_to_sql_service(
+        semantic_model_path=semantic_model_path,
+        context_documents=documents,
+        planner_model=FakePlannerModel(),
+        sql_model=sql_model or FakeSQLModel(),
+        semantic_validator_model=None,
+        collection_name="text_to_sql_service_test",
+        max_sql_retries=0,
+        max_semantic_retries=1,
+    )
+
+
 def test_text_to_sql_pipeline_returns_trusted_sql():
-
     service = build_service()
 
     result = service.generate(
         TextToSQLRequest(
-            question=(
-                "统计每个用户订单总金额"
-            )
+            question="统计每个用户订单总金额"
         )
+    )
+
+    print()
+    print(
+        "generated_sql:",
+        result.generated_sql,
+    )
+
+    print(
+        "trusted_sql:",
+        result.trusted_sql,
+    )
+
+    print(
+        "success:",
+        result.success,
+    )
+
+    print(
+        "validation_status:",
+        result.validation_status,
+    )
+
+    print(
+        "semantic_validation_status:",
+        result.semantic_validation_status,
+    )
+
+    print(
+        "semantic_issues:",
+        result.semantic_issues,
     )
 
     assert result.success is True
-
-    assert (
-        result.validation_status
-        == "no_issue"
+    assert result.validation_status == "no_issue"
+    assert result.query_plan.tables == (
+        "dwd_order_detail",
     )
-
-    assert (
-        result.query_plan.tables
-        == ("dwd_order_detail",)
+    assert result.query_plan.group_by == (
+        "user_id",
     )
-
-    assert (
-        result.query_plan.group_by
-        == ("user_id",)
-    )
-
     assert result.trusted_sql is not None
+    assert "DWD_ORDER_DETAIL" in result.trusted_sql.upper()
 
-    assert (
-        "DWD_ORDER_DETAIL"
-        in result.trusted_sql.upper()
-    )
-    
-    
-class DangerousSQLModel:
 
-    def generate(
-        self,
-        prompt: str,
-    ) -> str:
-
-        return (
-            "DROP TABLE "
-            "dwd_order_detail"
-        )
-        
-        
-        
 def test_text_to_sql_pipeline_blocks_dangerous_sql():
-
-    service = build_service()
-
-    service.sql_generator = (
-        SQLGenerator(
-            model=DangerousSQLModel()
-        )
+    service = build_service(
+        sql_model=DangerousSQLModel(),
     )
 
     result = service.generate(
@@ -240,10 +161,5 @@ def test_text_to_sql_pipeline_blocks_dangerous_sql():
     )
 
     assert result.success is False
-
-    assert (
-        result.validation_status
-        == "blocked"
-    )
-
+    assert result.validation_status == "blocked"
     assert result.trusted_sql is None

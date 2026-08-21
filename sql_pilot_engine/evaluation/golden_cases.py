@@ -26,7 +26,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_101_cldwdk",
+            "ods_hd_100_cldkxx",
         ),
 
         expected_dimensions=(
@@ -38,7 +38,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_filters=(
-            "is_high_tech_ent_loan_code = '1'",
+            "is_high_tech_mfg_loan_code = '1'",
             "dt = '${p_month_yyyymm}'",
         ),
 
@@ -64,7 +64,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_101_cldwdk",
+            "ods_hd_100_cldkxx",
         ),
 
         expected_dimensions=(
@@ -99,7 +99,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_201_cldwdk",
+            "ods_hd_200_cldkxx",
         ),
 
         expected_dimensions=(
@@ -135,7 +135,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_201_cldwdk",
+            "ods_hd_200_cldkxx",
         ),
 
         expected_dimensions=(
@@ -170,7 +170,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_101_cldwdk",
+            "ods_hd_100_cldkxx",
         ),
 
         expected_dimensions=(
@@ -210,7 +210,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_201_cldwdk",
+            "ods_hd_200_cldkxx",
         ),
 
         expected_dimensions=(
@@ -285,7 +285,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_201_cldwdk",
+            "ods_hd_200_cldkxx",
         ),
 
         expected_metrics=(
@@ -313,7 +313,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_201_cldwdk",
+            "ods_hd_200_cldkxx",
         ),
 
         expected_metrics=(
@@ -342,7 +342,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_201_cldwdk",
+            "ods_hd_200_cldkxx",
         ),
 
         expected_dimensions=(
@@ -381,7 +381,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_101_cldwdk",
+            "ods_hd_100_cldkxx",
         ),
 
         expected_dimensions=(
@@ -420,7 +420,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_101_cldwdk",
+            "ods_hd_100_cldkxx",
         ),
 
         expected_metrics=(
@@ -448,7 +448,7 @@ TEXT_TO_SQL_GOLDEN_V0_1 = (
         ),
 
         expected_tables=(
-            "dwd_hd_201_cldwdk",
+            "ods_hd_200_cldkxx",
         ),
 
         expected_metrics=(

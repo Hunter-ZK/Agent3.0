@@ -1,5 +1,11 @@
 import os
 
+from collections.abc import Callable
+
+from sql_pilot_engine.metadata.provider import (
+    MetadataProvider,
+)
+
 from sql_pilot_engine.agents.sql_explain_agent import (
     SQLExplainAgent,
 )
@@ -53,6 +59,12 @@ def build_explain_agent():
 def build_sql_pilot_engine(
     enable_llm: bool = False,
     llm_provider: str = "mock",
+    metadata_provider_factory: (
+        Callable[
+            [],
+            MetadataProvider,
+        ] | None
+    ) = None,
 ) -> SQLPilotEngine:
     llm_client = (
         create_llm_client(llm_provider)
@@ -74,6 +86,7 @@ def build_sql_pilot_engine(
         review_service=review_service,
         fix_service=fix_service,
         metadata_provider_factory=(
+            metadata_provider_factory or
             MockMetadataProvider
         ),
         explain_agent=build_explain_agent(),
@@ -94,10 +107,23 @@ def build_sql_review_engine(
 
 def build_workflow(
     max_retries: int = 1,
+    *,
+    metadata_provider_factory: (
+        Callable[
+            [],
+            MetadataProvider,
+        ] | None
+    ) = None,
+    default_enable_metadata:bool,
 ) -> SQLAgentWorkflow:
     return SQLAgentWorkflow(
-        engine=build_sql_pilot_engine(),
+        engine=build_sql_pilot_engine(
+            metadata_provider_factory=(
+                metadata_provider_factory
+            )
+        ),
         max_retries=max_retries,
+        default_enable_metadata=default_enable_metadata,
     )
 
 

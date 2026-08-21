@@ -62,9 +62,9 @@ LOAN_DOMAIN_CONTEXT_DOCUMENTS = (
         kind=ContextDocumentKind.BUSINESS_KNOWLEDGE,
         text=(
             "科技贷款业务使用表 "
-            "dwd_hd_101_cldwdk。"
+            "ods_hd_100_cldkxx"
             "高新技术企业贷款条件为 "
-            "is_high_tech_ent_loan_code = '1'；"
+            "is_high_tech_mfg_loan_code = '1'；"
             "科技中小企业贷款条件为 "
             "is_sci_medium_ent_loan_code = '1'。"
         ),
@@ -79,7 +79,7 @@ LOAN_DOMAIN_CONTEXT_DOCUMENTS = (
         kind=ContextDocumentKind.BUSINESS_KNOWLEDGE,
         text=(
             "绿色贷款或绿色单位贷款业务使用表 "
-            "dwd_hd_201_cldwdk。"
+            "ods_hd_200_cldkxx"
             "如用户指定绿色贷款类型，"
             "应使用 green_loan_type_code 增加过滤条件。"
         ),
@@ -101,8 +101,8 @@ LOAN_DOMAIN_CONTEXT_DOCUMENTS = (
             "问题：统计下本期高新技术企业的贷款余额。\n"
             "SQL："
             "SELECT SUM(loan_bal_rmb) AS loan_bal_rmb, dt "
-            "FROM odps_prd_dwd.dwd_hd_101_cldwdk "
-            "WHERE is_high_tech_ent_loan_code = '1' "
+            "FROM odps_prd_dwd.ods_hd_100_cldkxx "
+            "WHERE is_high_tech_mfg_loan_code = '1' "
             "AND dt = '${p_month_yyyymm}' "
             "GROUP BY dt"
         ),
@@ -119,7 +119,7 @@ LOAN_DOMAIN_CONTEXT_DOCUMENTS = (
             "问题：统计下本期科技中小企业的获贷企业数。\n"
             "SQL："
             "SELECT COUNT(DISTINCT ent_code) AS ent_num, dt "
-            "FROM odps_prd_dwd.dwd_hd_101_cldwdk "
+            "FROM odps_prd_dwd.ods_hd_100_cldkxx "
             "WHERE is_sci_medium_ent_loan_code = '1' "
             "AND dt = '${p_month_yyyymm}' "
             "GROUP BY dt"
