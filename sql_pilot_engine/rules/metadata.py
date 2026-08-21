@@ -1,52 +1,56 @@
 from __future__ import annotations
 
-
 from sql_pilot_engine.core.context import (
     ReviewContext,
 )
-from sql_pilot_engine.core.enums import Severity
-from sql_pilot_engine.core.models import Issue
+from sql_pilot_engine.core.enums import (
+    Severity,
+)
+from sql_pilot_engine.core.models import (
+    Issue,
+)
 from sql_pilot_engine.metadata.models import (
     MetadataLookupStatus,
 )
-from sql_pilot_engine.rules.base import Rule
-from sql_pilot_engine.rules.basic import make_issue
-from sql_pilot_engine.utils.sql_text import (
-    normalize_sql,
+from sql_pilot_engine.rules.base import (
+    Rule,
 )
-
-from sql_pilot_engine.analysis.facts import (
-    SQLFacts,
+from sql_pilot_engine.rules.basic import (
+    make_issue,
 )
 
 
 def check_insert_without_partition(
-    sql:str,
-    facts: SQLFacts,
     context: ReviewContext,
 ) -> list[Issue]:
-    """检查分区表INSERT是否显式声明PARTITION。
+    """
+    检查分区表 INSERT 是否显式声明 PARTITION。
 
-    这个规则只负责“是否缺少PARTITION”。
+    SQL AST 事实统一读取 ReviewContext.sql_facts。
 
-    表不存在、字段不存在、元数据查询失败，
-    统一交给MetadataValidator处理。
+    本 Rule 不重新 Parse SQL。
     """
 
-    normalized_sql = normalize_sql(sql)
+    facts = context.sql_facts
 
-    if "insert " not in normalized_sql:
+    if facts is None:
         return []
 
-    if facts.has_partition_clause:
-        return []
+    target_table = (
+        facts.insert_target_table
+    )
 
-    target_table = facts.insert_target_table
-
+    # 不是可安全识别的单目标 INSERT。
     if target_table is None:
         return []
 
-    metadata_provider = context.metadata_provider
+    # SQL 已显式声明 PARTITION。
+    if facts.has_partition_clause:
+        return []
+
+    metadata_provider = (
+        context.metadata_provider
+    )
 
     if metadata_provider is None:
         return [
@@ -76,12 +80,14 @@ def check_insert_without_partition(
             )
         ]
 
-    lookup = metadata_provider.get_table(
-        target_table
+    lookup = (
+        metadata_provider.get_table(
+            target_table
+        )
     )
 
-    # NOT_FOUND和ERROR由MetadataValidator
-    # 生成统一Issue，避免这里重复告警。
+    # NOT_FOUND / ERROR
+    # 由 MetadataValidator 统一处理。
     if (
         lookup.status
         != MetadataLookupStatus.FOUND
@@ -96,11 +102,16 @@ def check_insert_without_partition(
 
     return [
         make_issue(
-            rule_id="INSERT_WITHOUT_PARTITION",
-            title="分区表INSERT缺少PARTITION",
+            rule_id=(
+                "INSERT_WITHOUT_PARTITION"
+            ),
+            title=(
+                "分区表INSERT缺少PARTITION"
+            ),
             severity=Severity.HIGH,
             message=(
-                f"目标表 {target_table} 是分区表，"
+                f"目标表 {target_table} "
+                "是分区表，"
                 "但INSERT语句未声明PARTITION。"
             ),
             suggestion=(
@@ -116,14 +127,20 @@ def check_insert_without_partition(
 
 METADATA_RULES = [
     Rule(
-        rule_id="INSERT_WITHOUT_PARTITION",
-        name="Insert without partition",
+        rule_id=(
+            "INSERT_WITHOUT_PARTITION"
+        ),
+        name=(
+            "Insert without partition"
+        ),
         severity=Severity.HIGH,
         category="metadata",
         description=(
             "分区表INSERT需要声明PARTITION。"
         ),
-        check=check_insert_without_partition,
+        check=(
+            check_insert_without_partition
+        ),
         modes={
             "debug",
             "prod",

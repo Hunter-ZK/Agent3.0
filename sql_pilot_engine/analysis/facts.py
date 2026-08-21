@@ -108,6 +108,9 @@ class SQLFactsExtractor:
         
         has_select_star = False
         
+        insert_targets: list[str] = []
+        insert_partition_flags: list[bool] = []
+        
         for statement in parse_result.statements:
             # print(statement)
             statement_type = statement.key.lower()
@@ -137,11 +140,21 @@ class SQLFactsExtractor:
                 )
             )
             
-            insert_target_table, has_partition_clause = (
-                self._extract_insert_facts(
-                    statement
-                )
+            (
+                current_insert_target,
+                current_has_partition,
+            ) = self._extract_insert_facts(
+                statement
             )
+
+            if current_insert_target is not None:
+                insert_targets.append(
+                    current_insert_target
+                )
+
+                insert_partition_flags.append(
+                    current_has_partition
+                )
                         
             table_references.update(current_table_references)
             
@@ -153,7 +166,36 @@ class SQLFactsExtractor:
                 has_select_star = True
                 
         statement_type_set = set(statement_types)
-        
+
+        referenced_tables = tuple(
+            sorted(
+                source_tables
+                | target_tables
+            )
+        )
+
+        # 当前 SQLFacts 的 insert_target_table
+        # 是单值 Contract。
+        #
+        # 因此只有 SQL 中存在唯一 INSERT Target 时，
+        # 才能安全暴露该 Fact。
+        #
+        # 多 INSERT 不能随便取第一张或最后一张表，
+        # 否则 Metadata Rule 可能校验错误的目标表。
+        if len(insert_targets) == 1:
+            insert_target_table = (
+                insert_targets[0]
+            )
+
+            has_partition_clause = (
+                insert_partition_flags[0]
+            )
+
+        else:
+            insert_target_table = None
+            has_partition_clause = False
+
+
         return SQLFacts(
             statement_count=(
                 parse_result.statement_count
@@ -161,6 +203,7 @@ class SQLFactsExtractor:
             statement_types=tuple(statement_types),
             source_tables=tuple(sorted(source_tables)),
             target_tables=tuple(sorted(target_tables)),
+            referenced_tables=tuple(sorted(referenced_tables)),
             insert_target_table=(
                 insert_target_table
             ),
@@ -224,24 +267,48 @@ class SQLFactsExtractor:
         self,
         statement: exp.Expression,
     ) -> set[str]:
-        """提取INSERT语句的目标表。
 
-        statement.this表示当前语句的主体对象。
-        对Insert而言，this通常是写入的目标Table。
-        """
-        
-        targets: set[str] = set()
-        
-        if isinstance(statement, exp.Insert):
-            target = statement.this
-            
-            if isinstance(target, exp.Table):
-                targets.add(
-                    self._qualified_table_name(target)
-                )
-                
-        return targets
-    
+        if not isinstance(
+            statement,
+            exp.Insert,
+        ):
+            return set()
+
+        target_table = (
+            self._extract_insert_target_table(
+                statement
+            )
+        )
+
+        if target_table is None:
+            return set()
+
+        return {
+            target_table
+        }
+
+    def _extract_insert_target_table(
+        self,
+        insert: exp.Insert,
+    ) -> str | None:
+
+        target = insert.this
+
+        if isinstance(
+            target,
+            exp.Schema,
+        ):
+            target = target.this
+
+        if not isinstance(
+            target,
+            exp.Table,
+        ):
+            return None
+
+        return self._qualified_table_name(
+            target
+        )
     
     def _extract_sources(
         self,
@@ -412,26 +479,13 @@ class SQLFactsExtractor:
             if part
         )
             
-    @staticmethod
     def _extract_insert_facts(
+        self,
         expression: exp.Expression,
     ) -> tuple[
         str | None,
         bool,
     ]:
-        """
-        从已经解析完成的 SQLGlot AST 中
-        提取 INSERT 相关事实。
-
-        返回：
-            (
-                insert_target_table,
-                has_partition_clause,
-            )
-
-        注意：
-        这里绝不重新 parse SQL。
-        """
 
         insert = (
             expression
@@ -450,16 +504,6 @@ class SQLFactsExtractor:
                 False,
             )
 
-        # ==========================================
-        # PARTITION
-        # ==========================================
-
-        # SQLGlot 的 Insert Expression
-        # 正式包含 partition arg。
-        #
-        # 只判断语法中是否存在 PARTITION，
-        # 不在 Analysis Layer 判断 partition
-        # 业务是否合法。
         has_partition_clause = (
             insert.args.get(
                 "partition"
@@ -467,52 +511,11 @@ class SQLFactsExtractor:
             is not None
         )
 
-        # ==========================================
-        # TARGET TABLE
-        # ==========================================
-
-        target = insert.this
-
-        # INSERT 的 target 在包含列声明等情况下
-        # 可能是 Schema(Table(...), ...)
-        if isinstance(
-            target,
-            exp.Schema,
-        ):
-            target = target.this
-
-        if not isinstance(
-            target,
-            exp.Table,
-        ):
-            return (
-                None,
-                has_partition_clause,
+        target_table = (
+            self._extract_insert_target_table(
+                insert
             )
-
-        # SQLGlot Table 分别保存
-        # catalog / db / table。
-        #
-        # 不使用 target.sql()，
-        # 避免引号、Dialect Formatting
-        # 混进 Domain Fact。
-        parts = tuple(
-            part
-            for part in (
-                target.catalog,
-                target.db,
-                target.name,
-            )
-            if part
         )
-
-        if not parts:
-            target_table = None
-
-        else:
-            target_table = ".".join(
-                parts
-            )
 
         return (
             target_table,

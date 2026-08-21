@@ -283,6 +283,12 @@ class QueryAgentGraph:
     ) -> dict:
 
         question = state["question"]
+        
+        semantic_context = (
+            self.semantic_renderer.render(
+                self.semantic_model
+            )
+        )
 
         business_knowledge = (
             self.knowledge_retriever.retrieve(
