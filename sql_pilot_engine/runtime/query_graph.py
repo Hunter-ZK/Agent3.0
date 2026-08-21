@@ -341,11 +341,19 @@ class QueryAgentGraph:
         state: QueryAgentState,
     ) -> dict:
 
+
+        query_context = state.get("query_context")
+
+        if query_context is None:
+            raise RuntimeError(
+                "QueryContext is missing"
+                "before planning."
+            )
+        
         outcome = self.planner.plan(
             question = state["question"],
-            semantic_context=(state["semantic_context"]),
             query_context=(
-                state["query_context"]
+                query_context
             ),
         )
         
@@ -395,12 +403,31 @@ class QueryAgentGraph:
             )
             + 1
         )
-        
+
+        query_context = state.get(
+            "query_context"
+        )
+
+        plan = state.get(
+            "query_plan"
+        )
+
+        if query_context is None:
+            raise RuntimeError(
+                "QueryContext is missing "
+                "before SQL generation."
+            )
+
+        if plan is None:
+            raise RuntimeError(
+                "QueryPlan is missing "
+                "before SQL generation."
+            )
+ 
         result = (
             self.sql_generator.generate(
                 question=(state["question"]),
-                plan=(state["query_plan"]),
-                semantic_context=(state["semantic_context"]),
+                plan=plan,
                 query_context=(state["query_context"]),
                 dialect=state.get("dialect","maxcompute"),
                 revision_feedback=state.get("revision_feedback",(),),

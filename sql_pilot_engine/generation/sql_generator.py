@@ -36,7 +36,6 @@ class SQLGenerator:
         *,
         question: str,
         plan: QueryPlan,
-        semantic_context: str,
         query_context: QueryContext,
         dialect: str="maxcompute",
         revision_feedback: tuple[str, ...] = (),
@@ -45,7 +44,7 @@ class SQLGenerator:
         prompt = build_sql_prompt(
             question=question,
             plan=plan,
-            semantic_context=semantic_context,
+            semantic_context=query_context.semantic_context,
             query_context=query_context,
             dialect=dialect,
             revision_feedback=revision_feedback,
