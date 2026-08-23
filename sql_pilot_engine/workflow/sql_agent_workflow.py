@@ -12,12 +12,12 @@ from sql_pilot_engine.schemas.responses import (
     SQLExplainResponse,
     SQLFixResponse,
     SQLReviewResponse,
+    SQLOptimizeResponse,
 )
 from sql_pilot_engine.workflow.review_routing import (
     ReviewRoute,
     decide_review_route,
 )
-
 
 @dataclass
 class SQLAgentWorkflowResult:
@@ -50,6 +50,20 @@ class SQLAgentWorkflowResult:
 
     error_message: str | None = None
 
+
+    optimize_response: (
+        SQLOptimizeResponse | None
+    ) = None
+
+    optimized_review_response: (
+        SQLReviewResponse | None
+    ) = None
+
+    trusted_sql: str | None = None
+
+    final_sql: str | None = None
+
+    optimization_applied: bool = False
 
 class SQLAgentWorkflow:
     """SQL Agent模式的端到端流程。"""
@@ -97,15 +111,6 @@ class SQLAgentWorkflow:
             else enable_metadata
         )
 
-        print(
-            "[DEBUG] default_enable_metadata =",
-            self.default_enable_metadata,
-        )
-
-        print(
-            "[DEBUG] effective_enable_metadata =",
-            enable_metadata,
-        )
 
         if self.engine.explain_available:
             

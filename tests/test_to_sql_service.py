@@ -106,36 +106,6 @@ def test_text_to_sql_pipeline_returns_trusted_sql():
         )
     )
 
-    print()
-    print(
-        "generated_sql:",
-        result.generated_sql,
-    )
-
-    print(
-        "trusted_sql:",
-        result.trusted_sql,
-    )
-
-    print(
-        "success:",
-        result.success,
-    )
-
-    print(
-        "validation_status:",
-        result.validation_status,
-    )
-
-    print(
-        "semantic_validation_status:",
-        result.semantic_validation_status,
-    )
-
-    print(
-        "semantic_issues:",
-        result.semantic_issues,
-    )
 
     assert result.success is True
     assert result.validation_status == "no_issue"

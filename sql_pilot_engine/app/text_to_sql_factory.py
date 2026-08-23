@@ -245,7 +245,7 @@ def build_text_to_sql_service(
                 metadata_provider_factory
             ),
             default_enable_metadata=(
-                metadata_provider_factory is not None,
+                metadata_provider_factory is not None
             )
         )
     )

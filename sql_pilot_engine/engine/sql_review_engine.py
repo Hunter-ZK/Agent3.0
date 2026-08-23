@@ -5,13 +5,16 @@ from typing import Any
 
 from sql_pilot_engine.metadata import MetadataProvider, MockMetadataProvider
 from sql_pilot_engine.schemas.requests import SQLExplainRequest, SQLFixRequest, SQLOptimizeRequest, SQLReviewRequest
-from sql_pilot_engine.schemas.responses import SQLFixResponse, SQLReviewResponse, SQLExplainResponse, SQLCriticResponse
+from sql_pilot_engine.schemas.responses import SQLFixResponse, SQLReviewResponse, SQLExplainResponse, SQLCriticResponse, SQLOptimizeResponse
 from sql_pilot_engine.services.review_service import ReviewService
+from sql_pilot_engine.services.optimize_service import OptimizeService
 from sql_pilot_engine.core.execution_context import ReviewExecutionContext
 from sql_pilot_engine.core.models import ReviewResult
 from sql_pilot_engine.agents.sql_explain_agent import SQLExplainAgent
+from sql_pilot_engine.agents.sql_optimize_agent import SQLOptimizeAgent
 from sql_pilot_engine.services.critic_service import CriticService
 from sql_pilot_engine.services.fix_service import FixService
+
 
 
 
@@ -28,10 +31,12 @@ class SQLPilotEngine:
         fix_service: FixService | None = None,
         metadata_provider_factory: Callable[[], MetadataProvider] | None = None,
         explain_agent: SQLExplainAgent | None = None,
+        optimize_service: OptimizeService | None = None,
         critic_service: CriticService | None = None,
     ) -> None:
         self.review_service = (review_service or ReviewService())
         self.fix_service = (fix_service or FixService(review_service=self.review_service))
+        self.optimize_service = optimize_service
         if (
             metadata_provider_factory
             is not None
@@ -50,12 +55,17 @@ class SQLPilotEngine:
             metadata_provider_factory
         )
         self.explain_agent = explain_agent
+
         self.critic_service = critic_service or CriticService()
 
     @property
     def explain_available(self) -> bool:
         """当前Engine是否配置了Explain Agent。"""
         return self.explain_agent is not None
+
+    @property
+    def optimize_available(self) -> bool:
+        return self.optimize_service is not None
 
     @staticmethod
     def _extract_prior_review_result(
@@ -158,13 +168,88 @@ class SQLPilotEngine:
             trace_id=trace_id,
         )
 
-    def optimize(self, request: SQLOptimizeRequest) -> SQLReviewResponse:
-        """Optimize 占位：C/D 阶段接入 LLM 与 RAG 后实现。"""
-        return SQLReviewResponse.failed(
-            task_type="optimize",
-            file_path=request.file_path,
-            error_message="SQLOptimizeRequest is not implemented in Phase B.",
+    def optimize(
+        self,
+        request: SQLOptimizeRequest,
+        *,
+        explain_response: (
+            SQLExplainResponse | None
+        ) = None,
+    ) -> SQLOptimizeResponse:
+        """
+        SQL Optimization Engine Facade。
+
+        Engine 只负责：
+        Request → ExecutionContext
+        Metadata Provider
+        Service 调用
+        Result → Response
+        Exception Boundary
+        """
+
+        context = (
+            ReviewExecutionContext
+            .from_review_request(
+                request
+            )
         )
+
+        context.metadata_provider = (
+            self._resolve_metadata_provider(
+                context
+            )
+        )
+
+        if self.optimize_service is None:
+            return (
+                SQLOptimizeResponse.failed(
+                    file_path=request.file_path,
+                    trace_id=context.trace_id,
+                    error_message=(
+                        "Optimize service "
+                        "is not configured."
+                    ),
+                )
+            )
+
+        try:
+            result = (
+                self.optimize_service
+                .optimize(
+                    context,
+                    optimization_goals=(
+                        request
+                        .optimization_goals
+                    ),
+                    explain_response=(
+                        explain_response
+                    ),
+                )
+            )
+
+            return (
+                SQLOptimizeResponse
+                .from_optimization_result(
+                    result=result,
+                    file_path=(
+                        request.file_path
+                    ),
+                    trace_id=(
+                        context.trace_id
+                    ),
+                )
+            )
+
+        except Exception as error:
+            return (
+                SQLOptimizeResponse.failed(
+                    file_path=request.file_path,
+                    trace_id=context.trace_id,
+                    error_message=str(
+                        error
+                    ),
+                )
+            )
 
     def _resolve_metadata_provider(self, context: ReviewExecutionContext):
         if context.metadata_provider is not None:

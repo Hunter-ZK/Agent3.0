@@ -32,9 +32,21 @@ from sql_pilot_engine.services.review_service import (
 from sql_pilot_engine.services.critic_service import (
     CriticService,
 )
+from sql_pilot_engine.services.optimize_service import (
+    OptimizeService,
+)
+
 from sql_pilot_engine.workflow.sql_agent_workflow import (
     SQLAgentWorkflow,
 )
+
+from sql_pilot_engine.analysis.sql_analysis import (
+    SQLAnalysisAdapter,
+)
+from sql_pilot_engine.optimization.context import (
+    OptimizationContext,
+)
+
 
 
 def build_explain_agent():
@@ -82,6 +94,14 @@ def build_sql_pilot_engine(
         llm_client=llm_client,
     )
 
+    optimize_service = (
+        OptimizeService(
+            llm_client=llm_client
+        )
+        if llm_client is not None
+        else None
+    )
+
     return SQLPilotEngine(
         review_service=review_service,
         fix_service=fix_service,
@@ -90,6 +110,7 @@ def build_sql_pilot_engine(
             MockMetadataProvider
         ),
         explain_agent=build_explain_agent(),
+        optimize_service=optimize_service,
         critic_service=CriticService(),
     )
 
@@ -114,14 +135,42 @@ def build_workflow(
             MetadataProvider,
         ] | None
     ) = None,
-    default_enable_metadata:bool,
+    default_enable_metadata:bool = False,
 ) -> SQLAgentWorkflow:
+
+    optimization_metadata_provider = (
+        metadata_provider_factory()
+        if metadata_provider_factory
+        is not None
+        else None
+    )
+
+    optimizer = StaticSQLOptimizer(
+        analysis_adapter=(
+            SQLAnalysisAdapter()
+        ),
+        rule_registry=(
+            build_default_optimization_registry()
+        ),
+        rewriter=(
+            SafeSQLRewriter()
+        ),
+        context=(
+            OptimizationContext(
+                metadata_provider=(
+                    optimization_metadata_provider
+                )
+            )
+        ),
+    )
+    
     return SQLAgentWorkflow(
         engine=build_sql_pilot_engine(
             metadata_provider_factory=(
                 metadata_provider_factory
             )
         ),
+        optimizer=optimizer,
         max_retries=max_retries,
         default_enable_metadata=default_enable_metadata,
     )

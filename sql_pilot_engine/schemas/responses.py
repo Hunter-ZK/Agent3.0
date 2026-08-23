@@ -4,7 +4,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sql_pilot_engine.core.models import ReviewResult
-
+from sql_pilot_engine.optimization.models import (
+    OptimizationResult,
+)
 
 
 def default_explain_route_signals() -> dict[str, Any]:
@@ -267,8 +269,125 @@ class SQLExplainResponse:
         }
         return data
     
+@dataclass
+class SQLOptimizeResponse:
+    """
+    Engine Optimize 的外部响应。
 
+    candidate_sql 仍是候选，
+    不是最终 Workflow SQL。
+    """
 
+    success: bool
+
+    task_type: str = "optimize"
+
+    file_path: str = "<memory>"
+
+    trace_id: str | None = None
+
+    status: str = "unknown"
+
+    summary: str = ""
+
+    suggestions: list[
+        dict[str, Any]
+    ] = field(
+        default_factory=list
+    )
+
+    candidate_sql: str | None = None
+
+    rewrite_reason: str | None = None
+
+    assumptions: list[str] = field(
+        default_factory=list
+    )
+
+    confidence: float = 0.0
+
+    error_message: str | None = None
+
+    raw_output: Any | None = None
+
+    @classmethod
+    def from_optimization_result(
+        cls,
+        *,
+        result: OptimizationResult,
+        file_path: str,
+        trace_id: str | None,
+    ) -> "SQLOptimizeResponse":
+
+        if result.candidate_sql:
+            status = (
+                "candidate_generated"
+            )
+
+        elif result.suggestions:
+            status = "suggestions"
+
+        else:
+            status = "no_optimization"
+
+        return cls(
+            success=True,
+            file_path=file_path,
+            trace_id=trace_id,
+            status=status,
+            summary=result.summary,
+            suggestions=[
+                {
+                    "category": item.category,
+                    "priority": item.priority,
+                    "description": (
+                        item.description
+                    ),
+                    "reason": item.reason,
+                    "expected_benefit": (
+                        item
+                        .expected_benefit
+                    ),
+                    "risk": item.risk,
+                    "requires_execution_validation": (
+                        item
+                        .requires_execution_validation
+                    ),
+                }
+                for item
+                in result.suggestions
+            ],
+            candidate_sql=(
+                result.candidate_sql
+            ),
+            rewrite_reason=(
+                result.rewrite_reason
+            ),
+            assumptions=list(
+                result.assumptions
+            ),
+            confidence=result.confidence,
+            raw_output=result.raw_output,
+        )
+
+    @classmethod
+    def failed(
+        cls,
+        *,
+        file_path: str,
+        error_message: str,
+        trace_id: str | None = None,
+    ) -> "SQLOptimizeResponse":
+
+        return cls(
+            success=False,
+            file_path=file_path,
+            trace_id=trace_id,
+            status="optimize_failed",
+            error_message=(
+                error_message
+            ),
+        )
 
 @dataclass
 class SQLCriticResponse:
@@ -334,4 +453,5 @@ class SQLCriticResponse:
             retry_instructions=payload.get("retry_instructions", []),
             raw_output=raw_output,
         )
+
 

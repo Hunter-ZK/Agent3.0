@@ -110,7 +110,6 @@ class SQLFactsExtractor:
         
         insert_targets: list[str] = []
         insert_partition_flags: list[bool] = []
-        
         for statement in parse_result.statements:
             # print(statement)
             statement_type = statement.key.lower()
@@ -243,7 +242,6 @@ class SQLFactsExtractor:
             has_partition_clause=(
                 has_partition_clause
             ),
-            
         )
         
     def _extract_cte_names(
