@@ -33,7 +33,7 @@ class DeepSeekTextGenerationModel:
     timeout: float = 60.0
 
     @classmethod
-    def from_env(cls) -> "DeepSeekLLMClient":
+    def from_env(cls) -> "DeepSeekTextGenerationModel":
         api_key = os.getenv("DEEPSEEK_API_KEY")
         base_url = os.getenv("DEEPSEEK_BASE_URL")
         model = os.getenv("DEEPSEEK_MODEL","deepseek-chat")
@@ -118,9 +118,4 @@ class DeepSeekTextGenerationModel:
 
 
         return content.strip()
-    
-     
-    def complete(self, prompt: str) -> str:
-        
-        return self.generate(prompt)
     

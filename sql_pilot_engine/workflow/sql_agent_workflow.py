@@ -112,7 +112,7 @@ class SQLAgentWorkflow:
         )
 
 
-        if self.engine.explain_available:
+        if enable_llm and self.engine.explain_available:
             
 
             explain_response = self.engine.explain(

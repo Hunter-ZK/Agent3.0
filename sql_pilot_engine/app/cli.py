@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-from sql_pilot_engine.app.factory import build_sql_review_engine
+from sql_pilot_engine.app.sql_core_factory import build_sql_pilot_engine
 from sql_pilot_engine.schemas import SQLFixRequest, SQLReviewRequest
 from sql_pilot_engine.reporting.renderers import render_json, render_markdown, render_text
 
@@ -53,7 +53,7 @@ def main() -> None:
     categories = set(args.category) if args.category else None
 
     need_llm_client = args.enable_llm or (args.fix_sql and args.fix_provider == "llm")
-    engine = build_sql_review_engine(enable_llm=need_llm_client, llm_provider=args.llm_provider)
+    engine = build_sql_pilot_engine(enable_llm=need_llm_client, llm_provider=args.llm_provider)
 
     if args.fix_sql:
         request = SQLFixRequest(

@@ -69,26 +69,27 @@ def build_fix_user_prompt(
     return f"""
 请基于以下材料生成完整 fixed SQL。
 
-【规则已发现问题】
+## 规则已发现问题
+
 {rule_issues_text}
 
-【SQL 结构分析上下文】
+## SQL 结构分析上下文
+
 {analysis_context_text}
 
-【元数据上下文】
+## 元数据上下文
+
 {metadata_context_text}
 
-【原始 SQL】
+## 原始 SQL
+
 ```sql
 {original_sql}
-```
 
-【规则自动修复后的 SQL】
+## 规则自动修复后的 SQL
 ```sql
 {auto_fixed_sql}
-```
 """.strip()
-
 
 def build_fix_repair_prompt(raw_result: dict[str, Any], error_message: str) -> str:
     return f"""

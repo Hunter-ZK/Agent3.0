@@ -4,8 +4,8 @@ from collections.abc import (
     Callable,
 )
 
-from sql_pilot_engine.app.factory import (
-    build_workflow,
+from sql_pilot_engine.app.sql_core_factory import (
+    build_sql_agent_workflow,
 )
 from sql_pilot_engine.metadata.provider import (
     MetadataProvider,
@@ -38,7 +38,7 @@ def build_sql_review_service(
     所有依赖统一在 app 层装配。
     """
 
-    workflow = build_workflow(
+    workflow = build_sql_agent_workflow(
         max_retries=(
             max_sql_retries
         ),

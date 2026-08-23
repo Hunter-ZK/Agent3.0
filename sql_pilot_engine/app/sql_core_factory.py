@@ -32,9 +32,6 @@ from sql_pilot_engine.services.critic_service import (
 from sql_pilot_engine.services.optimize_service import (
     OptimizeService,
 )
-from sql_pilot_engine.llm.explainer import (
-    LLMExplainer
-)
 from sql_pilot_engine.workflow.sql_agent_workflow import (
     SQLAgentWorkflow,
 )
@@ -70,12 +67,8 @@ def build_sql_pilot_engine(
 
     explain_service = (
         ExplainService(
-            explainer=(
-                LLMExplainer(
-                    client=llm_client
-                )
+                llm_client=llm_clien
             )
-        )
         if llm_client is not None
         else None
     )

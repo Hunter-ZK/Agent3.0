@@ -1,14 +1,13 @@
-from sql_pilot_engine.agents.sql_optimize_agent import (
-    SQLOptimizeAgent,
-)
+from __future__ import annotations
+
 from sql_pilot_engine.engine import (
     SQLPilotEngine,
 )
-from sql_pilot_engine.llm.clients import (
-    MockLLMClient,
-)
 from sql_pilot_engine.schemas.requests import (
     SQLOptimizeRequest,
+)
+from sql_pilot_engine.services.optimize_service import (
+    OptimizeService,
 )
 from sql_pilot_engine.services.review_service import (
     ReviewService,
@@ -24,18 +23,26 @@ class FakeOptimizeLLM:
         json_schema: dict,
     ) -> dict:
 
-        _ = system_prompt
-        _ = user_prompt
+        assert "Optimization" in (
+            system_prompt
+        )
+
+        assert "SELECT" in (
+            user_prompt
+        )
+
         _ = json_schema
 
         return {
-            "summary": "存在优化机会。",
+            "summary": (
+                "存在一个可维护性优化机会。"
+            ),
             "suggestions": [],
             "candidate_sql": (
                 "SELECT id FROM t"
             ),
             "rewrite_reason": (
-                "简化 SQL。"
+                "保持语义不变并简化 SQL。"
             ),
             "assumptions": [],
             "confidence": 0.9,
@@ -46,8 +53,8 @@ def test_engine_optimize_returns_candidate():
 
     engine = SQLPilotEngine(
         review_service=ReviewService(),
-        optimize_agent=(
-            SQLOptimizeAgent(
+        optimize_service=(
+            OptimizeService(
                 llm_client=(
                     FakeOptimizeLLM()
                 )
@@ -77,8 +84,13 @@ def test_engine_optimize_returns_candidate():
         == "SELECT id FROM t"
     )
 
+    assert (
+        response.confidence
+        == 0.9
+    )
 
-def test_engine_optimize_without_agent_fails_cleanly():
+
+def test_engine_optimize_without_service_fails_cleanly():
 
     engine = SQLPilotEngine(
         review_service=ReviewService(),
@@ -86,7 +98,7 @@ def test_engine_optimize_without_agent_fails_cleanly():
 
     response = engine.optimize(
         SQLOptimizeRequest(
-            sql="SELECT id FROM t"
+            sql="SELECT id FROM t",
         )
     )
 

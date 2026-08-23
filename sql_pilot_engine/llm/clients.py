@@ -33,11 +33,104 @@ class BaseLLMClient(ABC):
 class MockLLMClient(BaseLLMClient):
     """用于测试和离线开发的 Mock LLM。"""
 
-    def generate_json(self, system_prompt: str, user_prompt: str, json_schema: dict[str, Any]) -> dict[str, Any]:
-        lower_system_prompt = system_prompt.lower()
-        if "fixed_sql" in lower_system_prompt and "manual_notes" in lower_system_prompt:
-            return self._generate_mock_fix_result(user_prompt)
-        return self._generate_mock_review_result(user_prompt)
+    def generate_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        json_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+
+        _ = system_prompt
+
+        schema = json_schema.get(
+            "schema",
+            json_schema,
+        )
+
+        required = set(
+            schema.get(
+                "required",
+                [],
+            )
+        )
+
+        if {
+            "fixed_sql",
+            "applied_fixes",
+            "manual_notes",
+        } <= required:
+            return (
+                self._generate_mock_fix_result(
+                    user_prompt
+                )
+            )
+
+        if {
+            "summary",
+            "suggestions",
+            "candidate_sql",
+            "rewrite_reason",
+            "assumptions",
+            "confidence",
+        } <= required:
+            return (
+                self._generate_mock_optimize_result()
+            )
+
+        if {
+            "sql_summary",
+            "main_tables",
+            "output_columns",
+        } <= required:
+            return (
+                self._generate_mock_explain_result()
+            )
+
+        return self._generate_mock_review_result(
+            user_prompt
+        )
+
+@staticmethod
+def _generate_mock_explain_result(
+) -> dict[str, Any]:
+
+    return {
+        "sql_summary": (
+            "Mock SQL explain result."
+        ),
+        "business_purpose": None,
+        "main_tables": [],
+        "output_columns": [],
+        "cte_steps": [],
+        "cte_dependencies": [],
+        "suspicious_points": [],
+        "uncertainties": [],
+        "route_signals": {
+            "need_metadata": False,
+            "need_rag": False,
+            "need_review": True,
+            "need_human_confirm": False,
+            "can_auto_fix": False,
+            "next_node": "review",
+        },
+    }
+
+
+    @staticmethod
+    def _generate_mock_optimize_result(
+    ) -> dict[str, Any]:
+
+        return {
+            "summary": (
+                "Mock optimizer 未发现需要"
+                "自动改写的优化机会。"
+            ),
+            "suggestions": [],
+            "candidate_sql": None,
+            "rewrite_reason": None,
+            "assumptions": [],
+            "confidence": 1.0,
+        }
 
     def _generate_mock_review_result(self, user_prompt: str) -> dict[str, Any]:
         issues: list[dict[str, Any]] = []

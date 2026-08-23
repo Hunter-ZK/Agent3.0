@@ -6,8 +6,8 @@ from collections.abc import (
 )
 from pathlib import Path
 
-from sql_pilot_engine.app.factory import (
-    build_workflow,
+from sql_pilot_engine.app.sql_core_factory import (
+    build_sql_agent_workflow,
 )
 
 from sql_pilot_engine.context.builder import (
@@ -237,7 +237,7 @@ def build_text_to_sql_service(
         )
 
     validation_workflow = (
-        build_workflow(
+        build_sql_agent_workflow(
             max_retries=(
                 max_sql_retries
             ),

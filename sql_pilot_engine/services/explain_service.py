@@ -3,21 +3,23 @@ from __future__ import annotations
 from sql_pilot_engine.core.execution_context import (
     SQLExecutionContext,
 )
-from sql_pilot_engine.llm.explainer import (
-    LLMExplainer,
+from sql_pilot_engine.llm.clients import (
+    BaseLLMClient,
 )
 from sql_pilot_engine.schemas.responses import (
     SQLExplainResponse,
 )
-
+from sql_pilot_engine.llm.explainer import (
+    LLMExplainer,
+)
 
 class ExplainService:
 
     def __init__(
         self,
-        explainer: LLMExplainer,
+        llm_client: BaseLLMClient,
     ) -> None:
-        self.explainer = explainer
+        self._explainer = LLMExplainer(client=llm_client)
 
     def explain(
         self,
