@@ -1,4 +1,4 @@
-from sql_pilot_engine.core.execution_context import ReviewExecutionContext
+from sql_pilot_engine.core.execution_context import SQLExecutionContext
 
 
-__all__ = ["ReviewExecutionContext"]
+__all__ = ["SQLExecutionContext"]

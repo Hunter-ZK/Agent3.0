@@ -40,7 +40,7 @@ def build_analysis_context_text(
     # ========================================================
 
     lines.append(
-        "【SQL 结构分析】"
+        "## SQL 结构分析"
     )
 
     lines.append(
@@ -69,7 +69,7 @@ def build_analysis_context_text(
     # ========================================================
 
     lines.append(
-        "【CTE 摘要】"
+        "## CTE 摘要"
     )
 
     if not facts.cte_names:
@@ -92,7 +92,7 @@ def build_analysis_context_text(
     # ========================================================
 
     lines.append(
-        "【表引用】"
+        "## 表引用"
     )
 
     if facts.target_tables:
@@ -128,7 +128,7 @@ def build_analysis_context_text(
     # ========================================================
 
     lines.append(
-        "【表引用明细】"
+        "## 表引用明细"
     )
 
     if not facts.table_references:
@@ -160,7 +160,7 @@ def build_analysis_context_text(
     # ========================================================
 
     lines.append(
-        "【字段引用】"
+        "## 字段引用"
     )
 
     if not facts.column_references:
@@ -191,7 +191,7 @@ def build_analysis_context_text(
     # ========================================================
 
     lines.append(
-        "【SELECT 别名】"
+        "## SELECT 别名"
     )
 
     if facts.select_aliases:
@@ -214,7 +214,7 @@ def build_analysis_context_text(
     # ========================================================
 
     lines.append(
-        "【SQL 特征】"
+        "## SQL 特征"
     )
 
     lines.append(
@@ -299,7 +299,7 @@ def build_metadata_context_text(
     # ========================================================
 
     lines: list[str] = [
-        "【相关元数据】"
+        "## 相关元数据"
     ]
 
     for table_name in table_names:

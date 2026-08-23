@@ -8,8 +8,8 @@ import os
 
 
 
-from sql_pilot_engine.llm.deepseek_client import (
-    DeepSeekLLMClient,
+from sql_pilot_engine.generation.deepseek_model import (
+    DeepSeekTextGenerationModel,
 )
 from sql_pilot_engine.observability.logging import (
     configure_logging,
@@ -142,7 +142,7 @@ def build_demo_service(
     if use_real_llm:
 
         model = (
-            DeepSeekLLMClient
+            DeepSeekTextGenerationModel
             .from_env()
         )
 

@@ -2,16 +2,16 @@
 
 from collections.abc import Callable
 from typing import Any
+from uuid import uuid4
 
 from sql_pilot_engine.metadata import MetadataProvider, MockMetadataProvider
 from sql_pilot_engine.schemas.requests import SQLExplainRequest, SQLFixRequest, SQLOptimizeRequest, SQLReviewRequest
 from sql_pilot_engine.schemas.responses import SQLFixResponse, SQLReviewResponse, SQLExplainResponse, SQLCriticResponse, SQLOptimizeResponse
 from sql_pilot_engine.services.review_service import ReviewService
 from sql_pilot_engine.services.optimize_service import OptimizeService
-from sql_pilot_engine.core.execution_context import ReviewExecutionContext
+from sql_pilot_engine.core.execution_context import SQLExecutionContext
 from sql_pilot_engine.core.models import ReviewResult
-from sql_pilot_engine.agents.sql_explain_agent import SQLExplainAgent
-from sql_pilot_engine.agents.sql_optimize_agent import SQLOptimizeAgent
+from sql_pilot_engine.services.explain_service import ExplainService
 from sql_pilot_engine.services.critic_service import CriticService
 from sql_pilot_engine.services.fix_service import FixService
 
@@ -30,12 +30,14 @@ class SQLPilotEngine:
         review_service: ReviewService,
         fix_service: FixService | None = None,
         metadata_provider_factory: Callable[[], MetadataProvider] | None = None,
-        explain_agent: SQLExplainAgent | None = None,
+        explain_service: ExplainService | None = None,
         optimize_service: OptimizeService | None = None,
         critic_service: CriticService | None = None,
     ) -> None:
+        self.explain_service = explain_service
         self.review_service = (review_service or ReviewService())
         self.fix_service = (fix_service or FixService(review_service=self.review_service))
+        self.critic_service = critic_service or CriticService()
         self.optimize_service = optimize_service
         if (
             metadata_provider_factory
@@ -54,14 +56,12 @@ class SQLPilotEngine:
         self.metadata_provider_factory = (
             metadata_provider_factory
         )
-        self.explain_agent = explain_agent
 
-        self.critic_service = critic_service or CriticService()
 
     @property
     def explain_available(self) -> bool:
         """当前Engine是否配置了Explain Agent。"""
-        return self.explain_agent is not None
+        return self.explain_service is not None
 
     @property
     def optimize_available(self) -> bool:
@@ -99,7 +99,7 @@ class SQLPilotEngine:
 
     def review(self, request: SQLReviewRequest) -> SQLReviewResponse:
         """执行 SQL 审查。"""
-        context = ReviewExecutionContext.from_review_request(request)
+        context = self._build_execution_context(request)
         context.metadata_provider = self._resolve_metadata_provider(context)
         try:
             result = self.review_service.review(context)
@@ -119,7 +119,13 @@ class SQLPilotEngine:
         prior_review: SQLReviewResponse | None = None,
     ) -> SQLFixResponse:
         """先审查 SQL，再生成完整修复 SQL。"""
-        context = ReviewExecutionContext.from_fix_request(request)
+        context = self._build_execution_context(
+            request,
+            fix_sql=True,
+            fix_provider=request.fix_provider,
+            critic_feedback=request.critic_feedback,
+            retry_count=request.retry_count,
+        )
         context.metadata_provider = self._resolve_metadata_provider(context)
         try:
             review_result = self._extract_prior_review_result(prior_review=prior_review, sql=request.sql,)
@@ -133,19 +139,31 @@ class SQLPilotEngine:
                 trace_id=context.trace_id,
             )
 
-    def explain(self, request: SQLExplainRequest) -> SQLExplainResponse:
-        """Explain 占位：C 阶段接入 LLM-first 单 Agent 后实现。"""
+    def explain(
+        self,
+        request: SQLExplainRequest,
+    ) -> SQLExplainResponse:
 
-        context = ReviewExecutionContext.from_review_request(request)
+        context = (
+            self._build_execution_context(
+                request
+            )
+        )
 
-        if self.explain_agent is None:
+        if self.explain_service is None:
             return SQLExplainResponse.failed(
                 file_path=request.file_path,
-                error_message="Explain agent is not configured",
                 trace_id=context.trace_id,
+                error_message=(
+                    "Explain service "
+                    "is not configured."
+                ),
             )
-        return self.explain_agent.explain(request, trace_id = context.trace_id)
-    
+
+        return (
+            self.explain_service
+            .explain(context)
+        )
 
     def critique(
         self,
@@ -187,12 +205,7 @@ class SQLPilotEngine:
         Exception Boundary
         """
 
-        context = (
-            ReviewExecutionContext
-            .from_review_request(
-                request
-            )
-        )
+        context = self._build_execution_context(request)
 
         context.metadata_provider = (
             self._resolve_metadata_provider(
@@ -251,10 +264,50 @@ class SQLPilotEngine:
                 )
             )
 
-    def _resolve_metadata_provider(self, context: ReviewExecutionContext):
+    def _resolve_metadata_provider(self, context: SQLExecutionContext):
         if context.metadata_provider is not None:
             return context.metadata_provider
         if not context.enable_metadata:
             return None
         return self.metadata_provider_factory()
 
+    @staticmethod
+    def _build_execution_context(
+        request: SQLReviewRequest,
+        *,
+        fix_sql: bool = False,
+        fix_provider: str = "auto",
+        critic_feedback: list[str] | None = None,
+        retry_count: int = 0,
+    ) -> SQLExecutionContext:
+
+        return SQLExecutionContext(
+            sql=request.sql,
+            file_path=request.file_path,
+            mode=request.mode,
+            dialect=request.dialect,
+            categories=request.categories,
+            enable_metadata=(
+                request.enable_metadata
+            ),
+            metadata_provider=(
+                request.metadata_provider
+            ),
+            enable_llm=request.enable_llm,
+            llm_provider=(
+                request.llm_provider
+            ),
+            fix_sql=fix_sql,
+            fix_provider=fix_provider,
+            trace_id=(
+                request.trace_id
+                or str(uuid4())
+            ),
+            critic_feedback=(
+                list(
+                    critic_feedback
+                    or []
+                )
+            ),
+            retry_count=retry_count,
+        )

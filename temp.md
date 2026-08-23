@@ -4176,6 +4176,5 @@ data_type
    - GitHub 项目对接说明（结合仓库代码的注意事项与核心关注点） 
    - 其余你觉得需要加入的内容 非常感谢你这段时间对我的帮助，还有什么需要对我说的吗
 
-1. 为什么除了review，其他在agent里传的都是service；
-2. 你的factory里为什么还残留review_factory以及text_to_sql_factory；
-3. 
+
+1. llmexplainer这个有点奇怪，其他功能接口都没有，这是正常的吗

@@ -9,7 +9,7 @@ from sql_pilot_engine.llm.errors import LLMAPIError, LLMError, LLMResponseParseE
 from sql_pilot_engine.llm.prompts import build_rule_issues_text
 from sql_pilot_engine.llm.reviewer import LLMReviewer
 from sql_pilot_engine.rules.registry import RuleRegistry
-from sql_pilot_engine.core.execution_context import ReviewExecutionContext
+from sql_pilot_engine.core.execution_context import SQLExecutionContext
 
 
 from sql_pilot_engine.analysis.sql_analysis import SQLAnalysisAdapter
@@ -36,7 +36,7 @@ class ReviewService:
         
         
 
-    def review(self, context: ReviewExecutionContext) -> ReviewResult:
+    def review(self, context: SQLExecutionContext) -> ReviewResult:
         """基于内部执行上下文执行 SQL Review/Fix。
 
         这是新的内部主入口。旧的 review_sql(...) 暂时保留，避免破坏旧调用方和旧测试。

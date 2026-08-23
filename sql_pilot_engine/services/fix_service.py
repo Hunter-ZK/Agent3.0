@@ -1,7 +1,7 @@
 from dataclasses import replace
 
 from sql_pilot_engine.core.execution_context import (
-    ReviewExecutionContext,
+    SQLExecutionContext,
 )
 from sql_pilot_engine.core.models import (
     FixedSqlResult,
@@ -22,7 +22,9 @@ from sql_pilot_engine.llm.prompts import (
 from sql_pilot_engine.services.review_service import (
     ReviewService,
 )
-
+from sql_pilot_engine.analysis.sql_analysis import (
+    SQLAnalysisAdapter,
+)
 
 class FixService:
     """SQL修复服务。
@@ -38,13 +40,15 @@ class FixService:
         self,
         review_service: ReviewService,
         llm_client: BaseLLMClient | None = None,
+        analysis_adapater: SQLAnalysisAdapter | None = None,
     ) -> None:
         self.review_service = review_service
         self.llm_client = llm_client
+        self.analysis_adapater = analysis_adapater or SQLAnalysisAdapter()
 
     def fix(
         self,
-        context: ReviewExecutionContext,
+        context: SQLExecutionContext,
         *,
         review_result: ReviewResult | None = None,
     ) -> ReviewResult:
@@ -71,21 +75,37 @@ class FixService:
                 "belong to the SQL being fixed."
             )
 
-        analysis_context_text = (
-            build_analysis_context_text(
+        analysis = (
+            self.analysis_adapater.analyze(
                 sql=context.sql,
                 dialect=context.dialect,
             )
         )
-
-        metadata_context_text = (
-            build_metadata_context_text(
-                sql=context.sql,
-                metadata_provider=(
-                    context.metadata_provider
-                ),
+        if analysis.parse_result.success and analysis.facts is not None:
+            analysis_context_text = (
+                build_analysis_context_text(
+                    facts=analysis.facts,
+                    dialect=context.dialect,
+                )
             )
-        )
+
+            metadata_context_text = (
+                build_metadata_context_text(
+                    facts=analysis.facts,
+                    metadata_provider=(
+                        context.metadata_provider
+                    ),
+                )
+            )
+        else:
+            analysis_context_text = (
+                "SQL 结构分析不可用。"
+            )
+
+            metadata_context_text = (
+                "SQL 结构分析失败，"
+                "因此未构建元数据上下文。"
+            )
 
         fixed_sql_result = self._generate_fixed_sql(
             context=context,
@@ -115,7 +135,7 @@ class FixService:
     def _generate_fixed_sql(
         self,
         *,
-        context: ReviewExecutionContext,
+        context: SQLExecutionContext,
         review_result: ReviewResult,
         analysis_context_text: str,
         metadata_context_text: str,

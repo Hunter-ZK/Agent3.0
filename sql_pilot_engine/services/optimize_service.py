@@ -6,7 +6,7 @@ from sql_pilot_engine.analysis.sql_analysis import (
     SQLAnalysisAdapter,
 )
 from sql_pilot_engine.core.execution_context import (
-    ReviewExecutionContext,
+    SQLExecutionContext,
 )
 from sql_pilot_engine.llm.clients import (
     BaseLLMClient,
@@ -58,7 +58,7 @@ class OptimizeService:
 
     def optimize(
         self,
-        context: ReviewExecutionContext,
+        context: SQLExecutionContext,
         *,
         optimization_goals: list[str],
         explain_response: (

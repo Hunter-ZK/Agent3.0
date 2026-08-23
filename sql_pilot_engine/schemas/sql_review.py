@@ -7,7 +7,7 @@ from dataclasses import dataclass
     frozen=True,
     slots=True,
 )
-class SQLReviewRequest:
+class SQLReviewInput:
     """
     SQL Review Capability 的公共输入 Contract。
 

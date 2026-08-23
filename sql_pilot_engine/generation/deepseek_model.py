@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class DeepSeekLLMClient:
+class DeepSeekTextGenerationModel:
     """DeepSeek OpenAI-compatible LLM Client.
 
     只负责一件事：

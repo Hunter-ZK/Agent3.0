@@ -5,9 +5,9 @@ from collections.abc import (
 )
 from typing import Any
 
-from sql_pilot_engine.services.sql_review_contracts import (
+from sql_pilot_engine.schemas.sql_review import (
     SQLReviewIssue,
-    SQLReviewRequest,
+    SQLReviewInput,
     SQLReviewResult,
 )
 from sql_pilot_engine.workflow.sql_agent_workflow import (
@@ -40,7 +40,7 @@ class SQLReviewService:
 
     def review(
         self,
-        request: SQLReviewRequest,
+        request: SQLReviewInput,
     ) -> SQLReviewResult:
         """
         对用户提交的 SQL 进行可信审查。

@@ -9,8 +9,8 @@ from sql_pilot_engine.app.sql_review_factory import (
 from sql_pilot_engine.metadata.sqlite_repository import (
     SQLiteMetadataRepository,
 )
-from sql_pilot_engine.services.sql_review_contracts import (
-    SQLReviewRequest,
+from sql_pilot_engine.schemas.sql_review import (
+    SQLReviewInput,
 )
 
 
@@ -99,7 +99,7 @@ def main() -> None:
     )
 
     result = service.review(
-        SQLReviewRequest(
+        SQLReviewInput(
             sql=sql,
         )
     )
