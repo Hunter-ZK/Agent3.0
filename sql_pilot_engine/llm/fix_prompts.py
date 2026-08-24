@@ -18,26 +18,39 @@ FIX_JSON_SCHEMA = {
 }
 
 FIX_SYSTEM_PROMPT = """
-你是一个资深 MaxCompute / DataWorks SQL 修复助手。
+你是资深 MaxCompute / DataWorks SQL 修复模型。
 
-你必须只输出 json，不允许输出 Markdown、解释文字、代码块或多余字段。
+你的职责不是机械执行少量写死规则，
+而是综合：
 
-你输出的 json 必须严格符合以下结构：
-{
-  "fixed_sql": "完整修复后的 SQL",
-  "applied_fixes": ["修复说明1"],
-  "manual_notes": ["人工确认事项1"]
-}
+- 原始 SQL
+- Rule Issues
+- SQLFacts / SQL Analysis
+- Metadata
+- Deterministic Pre-fix
+- Critic Feedback
 
-强制要求：
-1. 根对象必须只有 fixed_sql、applied_fixes、manual_notes 三个字段。
-2. fixed_sql 必须是一份完整 SQL，不允许只输出片段。
-3. 不要删除原 SQL 的业务逻辑。
-4. 对明确语法问题可以直接修复。
-5. 对字段名、表名、业务口径不确定的问题，不要强行改名。
-6. 不确定的问题必须以 SQL 注释形式保留：-- AI_REVIEW_TODO: ...
-7. applied_fixes 记录已经明确应用的修改。
-8. manual_notes 记录需要人工确认的事项。
+生成更可靠的完整 Candidate SQL。
+
+你可以对 SQL 做超出确定性 Rule 的修改，
+只要存在足够证据证明修改必要且不会无依据改变业务语义。
+
+禁止：
+
+1. 编造不存在的表名或字段名。
+2. 编造业务指标定义。
+3. 编造 JOIN 关系。
+4. 编造日期参数、分区值或业务口径。
+5. 因“看起来更合理”而改变原 SQL 的业务含义。
+
+如果某个问题确实需要修改，但现有 Context 不足：
+
+- 不要猜；
+- 保留相关原逻辑；
+- 在 manual_notes 中明确指出缺少什么信息。
+
+确定性预修复 SQL 只是参考输入，不是权威答案。
+你可以保留、修改或推翻其中的修改，但必须有依据。
 """.strip()
 
 FIX_REPAIR_SYSTEM_PROMPT = """
@@ -66,18 +79,19 @@ def build_fix_user_prompt(
     analysis_context_text: str,
     metadata_context_text: str,
 ) -> str:
-    return f"""
-请基于以下材料生成完整 fixed SQL。
 
-## 规则已发现问题
+    return f"""
+请根据以下完整 Context 生成 Candidate SQL。
+
+## Review Issues
 
 {rule_issues_text}
 
-## SQL 结构分析上下文
+## SQL Analysis
 
 {analysis_context_text}
 
-## 元数据上下文
+## Metadata Context
 
 {metadata_context_text}
 
@@ -86,9 +100,13 @@ def build_fix_user_prompt(
 ```sql
 {original_sql}
 
-## 规则自动修复后的 SQL
+## 确定性预修复 SQL
 ```sql
 {auto_fixed_sql}
+
+请输出完整 fixed_sql。
+不要只输出修改片段。
+不要无依据创造业务规则。
 """.strip()
 
 def build_fix_repair_prompt(raw_result: dict[str, Any], error_message: str) -> str:

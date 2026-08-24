@@ -446,16 +446,6 @@ class QueryAgentGraph:
 
         validation = self.validation_workflow.run(state["generated_sql"])
 
-
-        candidate_sql = (
-            self._resolve_candidate_sql(
-                generated_sql=(
-                    state["generated_sql"]
-                ),
-                validation=validation,
-            )
-        )
-
         return {
             "validation_result":(
                 validation
@@ -464,7 +454,7 @@ class QueryAgentGraph:
                 validation.final_status
             ),
             "candidate_sql": (
-                candidate_sql
+                validation.final_sql
             ),
             "trusted_sql": None,
             "success": False,
@@ -731,30 +721,6 @@ class QueryAgentGraph:
             "error_message": None,
         }
 
-    @staticmethod
-    def _resolve_candidate_sql(
-        *,
-        generated_sql: str,
-        validation: (
-            SQLAgentWorkflowResult
-        ),
-    ) -> str | None:
-
-        if not validation.success:
-            return None
-
-        if (
-            validation.fix_response
-            is not None
-            and validation
-            .fix_response.fixed_sql
-        ):
-            return (
-                validation
-                .fix_response.fixed_sql
-            )
-
-        return generated_sql
 
     @staticmethod
     def _build_revision_feedback(

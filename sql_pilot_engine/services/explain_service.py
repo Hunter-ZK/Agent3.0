@@ -28,7 +28,7 @@ class ExplainService:
 
         try:
             payload = (
-                self.explainer.explain(
+                self._explainer.explain(
                     sql=context.sql
                 )
             )

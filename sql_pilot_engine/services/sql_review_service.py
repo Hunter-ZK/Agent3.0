@@ -92,34 +92,18 @@ class SQLReviewService:
             )
         )
 
-        trusted_sql = None
+        trusted_sql = (
+            workflow_result.trusted_sql
+        )
 
-        if workflow_result.success:
-            # Re-review 成功时，它审查的 SQL
-            # 就是修复后的最终候选。
-            trusted_sql = (
-                self._extract_reviewed_sql(
-                    workflow_result
-                    .re_review_response
-                )
+        if (
+            workflow_result.success
+            and not trusted_sql
+        ):
+            raise RuntimeError(
+                "Successful SQLAgentWorkflow "
+                "must provide trusted_sql."
             )
-
-            # 某些 Fix Response 可能直接携带
-            # fixed_sql。
-            if trusted_sql is None:
-                trusted_sql = (
-                    self._extract_fixed_sql(
-                        workflow_result
-                        .fix_response
-                    )
-                )
-
-            # 无 Fix 的普通 PASS。
-            if trusted_sql is None:
-                trusted_sql = (
-                    reviewed_sql
-                    or request.sql
-                )
 
         review_status = (
             self._map_status(

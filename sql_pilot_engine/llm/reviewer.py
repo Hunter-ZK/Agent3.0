@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sql_pilot_engine.core.enums import IssueSource, Severity
+from sql_pilot_engine.core.enums import IssueSource, Severity, IssueAction
 from sql_pilot_engine.core.models import Issue
 from sql_pilot_engine.llm.clients import BaseLLMClient
 from sql_pilot_engine.llm.errors import LLMResponseValidationError
@@ -15,9 +15,17 @@ from sql_pilot_engine.llm.prompts import (
 )
 
 REQUIRED_ISSUE_FIELDS = {
-    "rule_id", "title", "severity", "message", "suggestion", "evidence", "category", "confidence"
+    "rule_id",
+    "title",
+    "severity",
+    "message",
+    "suggestion",
+    "evidence",
+    "category",
+    "confidence",
+    "action",
+    "auto_fixable",
 }
-
 
 class LLMReviewer:
     """LLM Review 执行器。"""
@@ -86,22 +94,87 @@ class LLMReviewer:
             raise LLMResponseValidationError("LLM rule_id 必须以 LLM_ 开头。")
 
         try:
-            severity = Severity(str(item["severity"]).lower())
+            severity = Severity(
+                str(
+                    item["severity"]
+                ).lower()
+            )
         except ValueError as error:
-            raise LLMResponseValidationError("severity 必须是 low、medium 或 high。") from error
+            raise LLMResponseValidationError(
+                "severity 必须是 low、medium 或 high。"
+            ) from error
 
-        confidence = float(item["confidence"])
-        if confidence < 0 or confidence > 1:
-            raise LLMResponseValidationError("confidence 必须在 0 到 1 之间。")
+
+        confidence = float(
+            item["confidence"]
+        )
+
+        if (
+            confidence < 0
+            or confidence > 1
+        ):
+            raise LLMResponseValidationError(
+                "confidence 必须在 0 到 1 之间。"
+            )
+
+
+        allowed_actions = {
+            IssueAction.ADVISORY,
+            IssueAction.AUTO_FIX,
+            IssueAction.CONTEXT_REQUIRED,
+            IssueAction.HUMAN_REVIEW,
+        }
+
+        try:
+            action = IssueAction(
+                str(
+                    item["action"]
+                ).lower()
+            )
+        except ValueError as error:
+            raise LLMResponseValidationError(
+                "LLM issue action 非法。"
+            ) from error
+
+
+        if action not in allowed_actions:
+            raise LLMResponseValidationError(
+                "LLM 不允许直接生成 BLOCK / IGNORE action。"
+            )
+
+
+        auto_fixable = bool(
+            item["auto_fixable"]
+        )
+
+        if (
+            action
+            is IssueAction.AUTO_FIX
+            and not auto_fixable
+        ):
+            raise LLMResponseValidationError(
+                "action=auto_fix 时 "
+                "auto_fixable 必须为 true。"
+            )
+
 
         return Issue(
             rule_id=rule_id,
             title=str(item["title"]),
             severity=severity,
             message=str(item["message"]),
-            suggestion=str(item["suggestion"]),
-            evidence=str(item["evidence"]),
-            category=str(item["category"]),
+            suggestion=str(
+                item["suggestion"]
+            ),
+            evidence=str(
+                item["evidence"]
+            ),
+            category=str(
+                item["category"]
+            ),
             source=IssueSource.LLM,
             confidence=confidence,
+            action=action,
+            auto_fixable=auto_fixable,
         )
+

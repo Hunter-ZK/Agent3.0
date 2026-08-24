@@ -3,7 +3,10 @@ from typing import Any
 
 from sql_pilot_engine.schemas.responses import SQLFixResponse, SQLReviewResponse,SQLCriticResponse
 
-
+from sql_pilot_engine.workflow.review_routing import (
+    ReviewRoute,
+    decide_review_route,
+)
 
 class CriticService:
 
@@ -135,34 +138,63 @@ class CriticService:
                 }
             )
 
-            if re_review_response.issue_count > 0:
+            re_review_decision = (
+                decide_review_route(
+                    re_review_response
+                )
+            )
+
+            if (
+                re_review_decision.route
+                != ReviewRoute.COMPLETE
+            ):
                 return SQLCriticResponse(
                     success=True,
                     passed=False,
                     trace_id=trace_id,
                     status="issues_remaining",
                     reason=(
-                        "Fixed SQL still has "
-                        f"{re_review_response.issue_count} "
-                        "issue(s)."
+                        "Fixed SQL still contains "
+                        "trust-gating issues: "
+                        f"{re_review_decision.reason}"
                     ),
-                    need_retry=True,
-                    need_human_confirm=False,
-                    checked_items=checked_items + [
-                        {
-                            "name": "remaining_issue_count",
-                            "passed": False,
-                            "detail": (
-                                "Original issues: "
-                                f"{review_response.issue_count}; "
-                                "remaining issues: "
-                                f"{re_review_response.issue_count}."
-                            ),
-                        }
-                    ],
-                    retry_instructions=[
-                        "根据复审剩余问题继续修复SQL。"
-                    ],
+                    need_retry=(
+                        re_review_decision.route
+                        == ReviewRoute.AUTO_FIX
+                    ),
+                    need_human_confirm=(
+                        re_review_decision.route
+                        != ReviewRoute.AUTO_FIX
+                    ),
+                    checked_items=(
+                        checked_items
+                        + [
+                            {
+                                "name": (
+                                    "trust_gate"
+                                ),
+                                "passed": False,
+                                "detail": (
+                                    re_review_decision
+                                    .reason
+                                ),
+                            }
+                        ]
+                    ),
+                    retry_instructions=(
+                        [
+                            (
+                                "根据复审仍存在的 "
+                                "trust-gating issues "
+                                "继续修复 SQL。"
+                            )
+                        ]
+                        if (
+                            re_review_decision.route
+                            == ReviewRoute.AUTO_FIX
+                        )
+                        else []
+                    ),
                 )
 
             checked_items.append(

@@ -40,8 +40,8 @@ from sql_pilot_engine.workflow.sql_agent_workflow import (
 
 def build_sql_pilot_engine(
     *,
-    enable_llm: bool = False,
-    llm_provider: str = "mock",
+    enable_llm: bool = True,
+    llm_provider: str = "deepseek",
     metadata_provider_factory=None,
 ) -> SQLPilotEngine:
 
@@ -67,7 +67,7 @@ def build_sql_pilot_engine(
 
     explain_service = (
         ExplainService(
-                llm_client=llm_clien
+                llm_client=llm_client
             )
         if llm_client is not None
         else None
@@ -112,9 +112,9 @@ def build_sql_agent_workflow(
         ]
         | None
     ) = None,
-    default_enable_metadata: bool = False,
-    enable_llm: bool = False,
-    llm_provider: str = "mock",
+    default_enable_metadata: bool = True,
+    enable_llm: bool = True,
+    llm_provider: str = "deepseek",
 ) -> SQLAgentWorkflow:
     return SQLAgentWorkflow(
         engine=build_sql_pilot_engine(

@@ -40,29 +40,36 @@ def make_issue(
     )
 
 
-def check_select_star(sql: str, context: ReviewContext) -> list[Issue]:
-    """通过AST事实判断是否存在SELECT *。
+def check_select_star(
+    sql: str,
+    context: ReviewContext,
+) -> list[Issue]:
 
-    sql参数暂时保留，是为了兼容统一Rule接口；
-    本规则的核心判断已经不依赖SQL字符串。
-    """
-    
     facts = context.sql_facts
-    
-    if facts is None or not facts.has_select_star:
+
+    if (
+        facts is None
+        or not facts.has_select_star
+    ):
         return []
-    
 
     return [
         make_issue(
             rule_id="SELECT_STAR",
-            title="避免使用 SELECT *",
+            title="检测到 SELECT *",
             severity=Severity.MEDIUM,
-            message="检测到 SELECT *，字段范围不可控，可能引入不必要的数据扫描。",
-            suggestion="请显式声明需要查询的字段。",
-            evidence="AST: Select projection contains Star",
+            message=(
+                "SELECT * 可能增加扫描量，"
+                "并使输出字段随表结构变化。"
+            ),
+            suggestion=(
+                "如字段范围明确，建议显式声明需要的字段。"
+            ),
+            evidence=(
+                "AST: Select projection contains Star"
+            ),
             category="style",
-            action=IssueAction.HUMAN_REVIEW,
+            action=IssueAction.ADVISORY,
         )
     ]
 
@@ -95,20 +102,32 @@ def check_drop_or_truncate(sql: str, context: ReviewContext) -> list[Issue]:
 
 
 
-def check_non_ascii_whitespace(sql: str, context: ReviewContext) -> list[Issue]:
-    if contains_non_ascii_whitespace(sql):
-        return [
-            make_issue(
-                rule_id="NON_ASCII_WHITESPACE",
-                title="检测到全角或不可见空白字符",
-                severity=Severity.LOW,
-                message="SQL 中包含全角空格或不可见空白，可能导致执行失败或难以排查。",
-                suggestion="建议替换为普通空格。",
-                evidence="non-ascii whitespace",
-                category="style",
-            )
-        ]
-    return []
+def check_non_ascii_whitespace(
+    sql: str,
+    context: ReviewContext,
+) -> list[Issue]:
+
+    if not contains_non_ascii_whitespace(
+        sql
+    ):
+        return []
+
+    return [
+        make_issue(
+            rule_id="NON_ASCII_WHITESPACE",
+            title="检测到全角或不可见空白字符",
+            severity=Severity.LOW,
+            message=(
+                "SQL 中包含全角空格或不可见空白，"
+                "可能导致执行失败或难以排查。"
+            ),
+            suggestion="替换为普通空格。",
+            evidence="non-ascii whitespace",
+            category="syntax",
+            action=IssueAction.AUTO_FIX,
+            auto_fixable=True,
+        )
+    ]
 
 
 BASIC_RULES = [

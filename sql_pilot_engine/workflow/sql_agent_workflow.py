@@ -73,7 +73,11 @@ class SQLAgentWorkflow:
         engine: SQLPilotEngine,
         max_retries: int = 1,
         default_enable_metadata: bool = False,
+        default_enable_llm: bool = True,
+        default_llm_provider: str = "deepseek",
+        default_fix_provider: str = "llm",
     ) -> None:
+
         if max_retries < 0:
             raise ValueError(
                 "max_retries cannot be negative."
@@ -86,6 +90,18 @@ class SQLAgentWorkflow:
             default_enable_metadata
         )
 
+        self.default_enable_llm = (
+            default_enable_llm
+        )
+
+        self.default_llm_provider = (
+            default_llm_provider
+        )
+
+        self.default_fix_provider = (
+            default_fix_provider
+        )
+
     def run(
         self,
         sql: str,
@@ -93,11 +109,10 @@ class SQLAgentWorkflow:
         *,
         categories: set[str] | None = None,
         enable_metadata: bool | None = None,
-        enable_llm: bool = False,
-        llm_provider: str = "mock",
-        fix_provider: str = "auto",
+        enable_llm: bool | None = None,
+        llm_provider: str | None = None,
+        fix_provider: str | None = None,
     ) -> SQLAgentWorkflowResult:
-
 
 
         trace_id = str(uuid4())
@@ -111,6 +126,31 @@ class SQLAgentWorkflow:
             else enable_metadata
         )
 
+        enable_llm = (
+            self.default_enable_llm
+            if enable_llm is None
+            else enable_llm
+        )
+
+        llm_provider = (
+            self.default_llm_provider
+            if llm_provider is None
+            else llm_provider
+        )
+
+        fix_provider = (
+            self.default_fix_provider
+            if fix_provider is None
+            else fix_provider
+        )
+
+        # 测试或显式关闭 LLM 时，
+        # 不应该还要求 LLM Fix。
+        if (
+            not enable_llm
+            and fix_provider == "llm"
+        ):
+            fix_provider = "auto"
 
         if enable_llm and self.engine.explain_available:
             
@@ -175,6 +215,15 @@ class SQLAgentWorkflow:
                 explain_response=explain_response,
                 review_response=review_response,
                 route_history=route_history,
+                # Review 已经确认当前 SQL
+                # 可以进入 Trusted 状态。
+                trusted_sql=sql,
+
+                # Optimization 尚未进入 Workflow，
+                # 所以当前 final_sql == trusted_sql。
+                final_sql=sql,
+
+                optimization_applied=False,
             )
 
 
@@ -284,6 +333,17 @@ class SQLAgentWorkflow:
             )
 
             if critic_response.passed:
+
+                trusted_sql = (
+                    fix_response.fixed_sql
+                )
+
+                if not trusted_sql:
+                    raise RuntimeError(
+                        "Critic passed but fixed_sql "
+                        "is missing."
+                    )
+
                 return SQLAgentWorkflowResult(
                     success=True,
                     trace_id=trace_id,
@@ -302,6 +362,11 @@ class SQLAgentWorkflow:
                         critic_response
                     ),
                     route_history=route_history,
+
+                    trusted_sql=trusted_sql,
+                    final_sql=trusted_sql,
+
+                    optimization_applied=False,
                 )
 
             # 只有已经成功复审当前fixed_sql，

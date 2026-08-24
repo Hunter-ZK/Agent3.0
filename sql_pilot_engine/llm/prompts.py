@@ -25,10 +25,30 @@ LLM_REVIEW_JSON_SCHEMA = {
                         "evidence": {"type": "string"},
                         "category": {"type": "string"},
                         "confidence": {"type": "number"},
+                        "action": {
+                            "type": "string",
+                            "enum": [
+                                "advisory",
+                                "auto_fix",
+                                "context_required",
+                                "human_review",
+                            ],
+                        },
+                        "auto_fixable": {
+                            "type": "boolean",
+                        },
                     },
-                    "required": [
-                        "rule_id", "title", "severity", "message",
-                        "suggestion", "evidence", "category", "confidence",
+                "required": [
+                    "rule_id",
+                    "title",
+                    "severity",
+                    "message",
+                    "suggestion",
+                    "evidence",
+                    "category",
+                    "confidence",
+                    "action",
+                    "auto_fixable",
                     ],
                 },
             }
@@ -52,9 +72,11 @@ SYSTEM_PROMPT = """
       "severity": "medium",
       "message": "问题说明",
       "suggestion": "修改建议",
-      "evidence": "SQL 证据",
+      "evidence": "SQL或上下文证据",
       "category": "semantic",
-      "confidence": 0.7
+      "confidence": 0.85,
+      "action": "advisory",
+      "auto_fixable": false
     }
   ]
 }
@@ -70,6 +92,30 @@ SYSTEM_PROMPT = """
 8. 不允许省略 title、message、evidence、category。
 9. 如果没有补充问题，必须返回：{"issues": []}
 
+action 必须是以下四种之一：
+
+1. advisory
+   问题值得提示，但当前 SQL 仍可被认为可信。
+   例如性能、可维护性、风格、低风险优化建议。
+
+2. auto_fix
+   当前证据已经足够，可以在不猜测业务事实的情况下自动修改 SQL。
+
+3. context_required
+   无法仅凭现有 SQL / Metadata / Context 判断正确答案，需要补充业务信息。
+
+4. human_review
+   问题可能影响业务正确性，但当前无法可靠自动修复。
+
+禁止输出 block。
+真正的硬阻断由确定性 Rule / Metadata Validator 负责。
+
+如果 action=auto_fix，则 auto_fixable 必须为 true。
+其他情况通常为 false。
+
+不要为了“发现问题”而发现问题。
+只有存在明确 SQL 证据或上下文证据时才输出 Issue。
+
 重点关注：JOIN 后聚合重复计算、聚合空值、过滤口径一致性、DataWorks 调度参数、分层设计、数据质量风险。
 不要简单重复规则引擎已经明确发现的问题。
 """.strip()
@@ -83,14 +129,26 @@ REPAIR_SYSTEM_PROMPT = """
 {
   "issues": [
     {
-      "rule_id": "LLM_EXAMPLE_RULE",
-      "title": "问题标题",
-      "severity": "medium",
-      "message": "问题说明",
-      "suggestion": "修改建议",
-      "evidence": "SQL 证据",
-      "category": "semantic",
-      "confidence": 0.7
+        "rule_id": "LLM_EXAMPLE_RULE",
+        "title": "问题标题",
+        "severity": "medium",
+        "message": "问题说明",
+        "suggestion": "修改建议",
+        "evidence": "SQL 证据",
+        "category": "semantic",
+        "confidence": 0.7,
+        "action": {
+            "type": "string",
+            "enum": [
+                "advisory",
+                "auto_fix",
+                "context_required",
+                "human_review",
+            ],
+        },
+        "auto_fixable": {
+            "type": "boolean",
+        },
     }
   ]
 }
@@ -140,19 +198,19 @@ def build_user_prompt(
 文件路径：
 {file_path}
 
-【系统硬性规则目录】
+## 系统硬性规则目录
 {rule_catalog_text}
 
-【规则引擎已发现问题】
+## 规则引擎已发现问题
 {rule_issues_text}
 
-【SQL 结构分析上下文】
+## SQL 结构分析上下文
 {analysis_context_text or "未提供。"}
 
-【元数据上下文】
+## 元数据上下文
 {metadata_context_text or "未提供。"}
 
-【SQL 原文】
+## SQL 原文
 ```sql
 {sql}
 ```
