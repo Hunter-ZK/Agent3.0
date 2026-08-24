@@ -208,6 +208,7 @@ class ReviewService:
                     metadata_context_text=(
                         metadata_context_text
                     ),
+                    query_context=query_context,
                 )
             )
 
@@ -273,7 +274,9 @@ class ReviewService:
             metadata_context_text=(
                 metadata_context_text
             ),
-            query_context=query_context,
+            query_context=(
+                query_context
+            ),
         )
 
 

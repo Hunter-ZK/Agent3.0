@@ -143,6 +143,11 @@ class LLMReviewer:
             json_schema=LLM_REVIEW_JSON_SCHEMA,
         )
 
+        logger.debug(
+            "reviewer.response\n%r",
+            raw_result,
+        )
+
         try:
             return self._parse_issues(
                 raw_result

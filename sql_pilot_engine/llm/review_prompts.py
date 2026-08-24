@@ -149,8 +149,6 @@ BLOCK 只允许 Deterministic Guardrail 产生。
 
 ### auto_fixable
 
-- action=auto_fix 时必须为 true；
-- 其他所有 action 必须为 false。
 不要输出 auto_fixable。
 是否可以自动修复由系统根据 action=auto_fix 自动派生。
 
