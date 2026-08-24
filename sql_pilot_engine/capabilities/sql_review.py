@@ -15,9 +15,9 @@ from sql_pilot_engine.workflow.sql_agent_workflow import (
 )
 
 
-class SQLReviewService:
+class SQLReviewCapability:
     """
-    用户 SQL → Trusted SQL 的 Capability Facade。
+    用户 SQL → Trusted SQL 的 Capability
 
     本 Service 不负责：
 

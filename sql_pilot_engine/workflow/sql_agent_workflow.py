@@ -333,8 +333,6 @@ class SQLAgentWorkflow:
                         re_review_response
                     ),
                     trace_id=trace_id,
-                    mode=mode,
-                    dialect=dialect,
                 )
             )
 

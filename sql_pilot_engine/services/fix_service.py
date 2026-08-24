@@ -76,11 +76,17 @@ class FixService:
             )
 
         analysis = (
-            self.analysis_adapter.analyze(
-                sql=context.sql,
-                dialect=context.dialect,
-            )
+            review_result.analysis_result
         )
+
+        if analysis is None:
+            analysis = (
+                self.analysis_adapter.analyze(
+                    sql=context.sql,
+                    dialect=context.dialect,
+                )
+            )
+
         if analysis.parse_result.success and analysis.facts is not None:
             analysis_context_text = (
                 build_analysis_context_text(
@@ -128,6 +134,7 @@ class FixService:
                 review_result.fix_suggestions
             ),
             fixed_sql_result=fixed_sql_result,
+            analysis_result=analysis,
         )
     
 

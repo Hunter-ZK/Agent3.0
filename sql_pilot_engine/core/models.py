@@ -1,3 +1,9 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+
+
 from dataclasses import (
     asdict,
     dataclass,
@@ -11,6 +17,10 @@ from sql_pilot_engine.core.enums import (
     Severity,
 )
 
+if TYPE_CHECKING:
+    from sql_pilot_engine.analysis.sql_analysis import (
+        SQLAnalysisResult,
+    )
 
 @dataclass
 class Issue:
@@ -132,6 +142,13 @@ class ReviewResult:
     fixed_sql_result: (
         FixedSqlResult | None
     ) = None
+    analysis_result: (
+        SQLAnalysisResult | None
+    ) = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def to_dict(self) -> dict:
         return {

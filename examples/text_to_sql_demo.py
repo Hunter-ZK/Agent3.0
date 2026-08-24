@@ -21,14 +21,17 @@ from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLClarification,
     TextToSQLRequest,
 )
-from sql_pilot_engine.services.text_to_sql_service import (
-    TextToSQLService,
+from sql_pilot_engine.capabilities.text_to_sql import (
+    TextToSQLCapability,
 )
 from sql_pilot_engine.app.text_to_sql_factory import (
-    build_text_to_sql_service,
+    build_text_to_sql_capability,
 )
 from sql_pilot_engine.metadata.sqlite_repository import (
     SQLiteMetadataRepository,
+)
+from sql_pilot_engine.app.sql_core_factory import (
+    build_sql_agent_workflow,
 )
 
 # ============================================================
@@ -60,7 +63,7 @@ class FakePlannerModel:
         return """
         {
         "tables": [
-            "dwd_hd_101_cldwdk"
+            "odps_prd_dwd.dwd_hd_101_cldwdk"
         ],
         "dimensions": [
             "dt"
@@ -90,7 +93,7 @@ class FakeSQLModel:
         SELECT
             SUM(loan_bal_rmb) AS loan_bal_rmb,
             dt
-        FROM dwd_hd_101_cldwdk
+        FROM odps_prd_dwd.dwd_hd_101_cldwdk
         WHERE is_high_tech_ent_loan_code = '1'
         AND dt = '${p_month_yyyymm}'
         GROUP BY dt
@@ -104,7 +107,7 @@ class FakeSQLModel:
 
 def build_demo_service(
     use_real_llm: bool,
-) -> TextToSQLService:
+) -> TextToSQLCapability:
 
     project_root = (
         Path(__file__)
@@ -123,6 +126,7 @@ def build_demo_service(
         return SQLiteMetadataRepository(
             metadata_db_path
         )
+        
 
 
     if not metadata_db_path.is_file():
@@ -165,7 +169,27 @@ def build_demo_service(
 
         semantic_validator_model = None
 
-    return build_text_to_sql_service(
+    metadata_provider_factory = build_metadata_provider
+
+    validation_workflow = (
+        build_sql_agent_workflow(
+            metadata_provider_factory=(
+                metadata_provider_factory
+            ),
+            default_enable_metadata=(
+                metadata_provider_factory
+                is not None
+            ),
+            enable_llm=True,
+            llm_provider=(
+                "deepseek"
+                if use_real_llm
+                else "mock"
+            ),
+        )
+    )
+
+    return build_text_to_sql_capability(
         semantic_model_path=(
             semantic_model_path
         ),
@@ -197,6 +221,8 @@ def build_demo_service(
         max_sql_retries=0,
 
         max_semantic_retries=1,
+        
+        validation_workflow=validation_workflow,
     )
 
 def parse_args() -> argparse.Namespace:

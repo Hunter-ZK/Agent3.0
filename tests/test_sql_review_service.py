@@ -5,7 +5,7 @@ from types import (
 from sql_pilot_engine.schemas.sql_review import (
     SQLReviewInput,
 )
-from sql_pilot_engine.services.sql_review_service import (
+from sql_pilot_engine.capabilities.sql_review import (
     SQLReviewService,
 )
 

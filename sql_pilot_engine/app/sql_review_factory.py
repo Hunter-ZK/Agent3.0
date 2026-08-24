@@ -10,12 +10,12 @@ from sql_pilot_engine.app.sql_core_factory import (
 from sql_pilot_engine.metadata.provider import (
     MetadataProvider,
 )
-from sql_pilot_engine.services.sql_review_service import (
-    SQLReviewService,
+from sql_pilot_engine.capabilities.sql_review import (
+    SQLReviewCapability,
 )
 
 
-def build_sql_review_service(
+def build_sql_review_capability(
     *,
     metadata_provider_factory: (
         Callable[
@@ -25,11 +25,11 @@ def build_sql_review_service(
         | None
     ) = None,
     max_sql_retries: int = 1,
-) -> SQLReviewService:
+) -> SQLReviewCapability:
     """
     SQL Review Capability Composition Root。
 
-    SQLReviewService 不负责创建：
+    SQLReviewCapability 不负责创建：
 
     - Metadata Provider
     - SQL Engine
@@ -51,6 +51,6 @@ def build_sql_review_service(
         ),
     )
 
-    return SQLReviewService(
+    return SQLReviewCapability(
         workflow=workflow
     )

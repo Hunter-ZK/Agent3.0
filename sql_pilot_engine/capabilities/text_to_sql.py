@@ -14,7 +14,7 @@ from sql_pilot_engine.schemas.text_to_sql import (
 )
 
 
-class TextToSQLService:
+class TextToSQLCapability:
     """
     Text-to-SQL Application Facade。
 

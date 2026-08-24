@@ -4182,6 +4182,3 @@ data_type
 3. llm文件里单独的prompts文件命名呢？请你确认下文件内容和命名
 4. 为什么又有sql_review_service和review_service,请你检查
 
-
-1. 为什么在def build_text_to_sql_service(新增这两个参数，很奇怪
-2. 

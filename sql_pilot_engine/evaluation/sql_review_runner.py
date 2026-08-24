@@ -12,7 +12,7 @@ from sql_pilot_engine.evaluation.sql_review_evaluator import (
 from sql_pilot_engine.schemas.sql_review import (
     SQLReviewInput,
 )
-from sql_pilot_engine.services.sql_review_service import (
+from sql_pilot_engine.capabilities.sql_review import (
     SQLReviewService,
 )
 

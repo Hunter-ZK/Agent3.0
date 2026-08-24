@@ -1,10 +1,9 @@
 # sql_review_agent/engine/sql_review_engine.py
 
 from collections.abc import Callable
-from typing import Any
 from uuid import uuid4
 
-from sql_pilot_engine.metadata import MetadataProvider, MockMetadataProvider
+from sql_pilot_engine.metadata import MetadataProvider
 from sql_pilot_engine.schemas.requests import SQLExplainRequest, SQLFixRequest, SQLOptimizeRequest, SQLReviewRequest
 from sql_pilot_engine.schemas.responses import SQLFixResponse, SQLReviewResponse, SQLExplainResponse, SQLCriticResponse, SQLOptimizeResponse
 from sql_pilot_engine.services.review_service import ReviewService
@@ -100,8 +99,8 @@ class SQLPilotEngine:
     def review(self, request: SQLReviewRequest) -> SQLReviewResponse:
         """执行 SQL 审查。"""
         context = self._build_execution_context(request)
-        context.metadata_provider = self._resolve_metadata_provider(context)
         try:
+            context.metadata_provider = self._resolve_metadata_provider(context.enable_metadata)
             result = self.review_service.review(context)
             return SQLReviewResponse.from_review_result(result, trace_id=context.trace_id)
         except Exception as error:
@@ -126,8 +125,8 @@ class SQLPilotEngine:
             critic_feedback=request.critic_feedback,
             retry_count=request.retry_count,
         )
-        context.metadata_provider = self._resolve_metadata_provider(context)
         try:
+            context.metadata_provider = self._resolve_metadata_provider(context.enable_metadata)
             review_result = self._extract_prior_review_result(prior_review=prior_review, sql=request.sql,)
             result = self.fix_service.fix(context, review_result=review_result,)
             return SQLFixResponse.from_review_result(result, trace_id=context.trace_id)
@@ -207,11 +206,6 @@ class SQLPilotEngine:
 
         context = self._build_execution_context(request)
 
-        context.metadata_provider = (
-            self._resolve_metadata_provider(
-                context
-            )
-        )
 
         if self.optimize_service is None:
             return (
@@ -226,6 +220,11 @@ class SQLPilotEngine:
             )
 
         try:
+            context.metadata_provider = (
+                self._resolve_metadata_provider(
+                    context
+                )
+            )
             result = (
                 self.optimize_service
                 .optimize(

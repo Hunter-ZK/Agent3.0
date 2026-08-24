@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from sql_pilot_engine.app.sql_review_factory import (
-    build_sql_review_service,
+    build_sql_review_capability,
 )
 from sql_pilot_engine.metadata.sqlite_repository import (
     SQLiteMetadataRepository,
@@ -91,7 +91,7 @@ def main() -> None:
         )
 
     service = (
-        build_sql_review_service(
+        build_sql_review_capability(
             metadata_provider_factory=(
                 build_metadata_provider
             )

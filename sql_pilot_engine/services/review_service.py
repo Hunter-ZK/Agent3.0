@@ -120,6 +120,7 @@ class ReviewService:
                 issues=[
                     parse_issue
                 ],
+                analysis_result=analysis,
             )
 
         sql_facts = analysis.facts
@@ -227,6 +228,7 @@ class ReviewService:
                 issues
             ),
             issues=issues,
+            analysis_result=analysis,
         )
 
     def run_llm_review(

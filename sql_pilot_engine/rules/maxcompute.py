@@ -26,7 +26,18 @@ def check_insert_overwrite_requires_table(
     context: ReviewContext,
 ) -> list[Issue]:
 
-    _ = context
+    dialect = (
+        context.dialect
+        .strip()
+        .lower()
+    )
+
+    if dialect not in {
+        "maxcompute",
+        "odps",
+        "dataworks",
+    }:
+        return []
 
     normalized = normalize_sql(
         sql

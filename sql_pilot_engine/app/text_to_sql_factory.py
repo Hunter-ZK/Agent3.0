@@ -63,15 +63,18 @@ from sql_pilot_engine.services.semantic_validation_service import (
     SemanticSQLValidator,
 )
 
-from sql_pilot_engine.services.text_to_sql_service import (
-    TextToSQLService,
+from sql_pilot_engine.capabilities.text_to_sql import (
+    TextToSQLCapability,
 )
 
 from sql_pilot_engine.metadata.provider import (
     MetadataProvider,
 )
+from sql_pilot_engine.workflow.sql_agent_workflow import (
+    SQLAgentWorkflow,
+)
 
-def build_text_to_sql_service(
+def build_text_to_sql_capability(
     *,
     semantic_model_path: str | Path,
 
@@ -110,19 +113,19 @@ def build_text_to_sql_service(
 
     max_clarification_rounds: int = 3,
     
-    sql_review_enable_llm: bool = True,
-    sql_review_llm_provider: str = (
-        "deepseek"
-    ),
+    validation_workflow: (
+        SQLAgentWorkflow | None
+    ) = None,
     
-) -> TextToSQLService:
+    
+) -> TextToSQLCapability:
     """
     Text-to-SQL Composition Root。
 
     这个函数只负责：
     创建组件
     → 组装 QueryAgentGraph
-    → 用 TextToSQLService 包装 Application API
+    → 用 TextToSQLCapability 包装 Application API
 
     不执行任何业务流程。
     """
@@ -242,26 +245,21 @@ def build_text_to_sql_service(
             )
         )
 
-    validation_workflow = (
-        build_sql_agent_workflow(
-            max_retries=(
-                max_sql_retries
-            ),
-            metadata_provider_factory=(
-                metadata_provider_factory
-            ),
-            default_enable_metadata=(
-                metadata_provider_factory
-                is not None
-            ),
-            enable_llm=(
-                sql_review_enable_llm
-            ),
-            llm_provider=(
-                sql_review_llm_provider
-            ),
+    if validation_workflow is None:
+        validation_workflow = (
+            build_sql_agent_workflow(
+                max_retries=(
+                    max_sql_retries
+                ),
+                metadata_provider_factory=(
+                    metadata_provider_factory
+                ),
+                default_enable_metadata=(
+                    metadata_provider_factory
+                    is not None
+                ),
+            )
         )
-    )
 
     # ========================================================
     # Runtime
@@ -319,6 +317,6 @@ def build_text_to_sql_service(
     # Application Facade
     # ========================================================
 
-    return TextToSQLService(
+    return TextToSQLCapability(
         graph=graph
     )

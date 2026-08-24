@@ -222,6 +222,8 @@ def build_user_prompt(
 
 ```sql
 {sql}
+```
+
 请基于完整上下文独立执行智能 Review，
 并严格输出 JSON。
 """.strip()

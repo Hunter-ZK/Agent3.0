@@ -18,7 +18,7 @@ from sql_pilot_engine.evaluation.text_to_sql_evaluator import (
 from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLRequest,
 )
-from sql_pilot_engine.services.text_to_sql_service import (
+from sql_pilot_engine.capabilities.text_to_sql import (
     TextToSQLService,
 )
 

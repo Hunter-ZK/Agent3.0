@@ -1,6 +1,6 @@
 import sql_pilot_engine.app.sql_review_factory as factory_module
 
-from sql_pilot_engine.services.sql_review_service import (
+from sql_pilot_engine.capabilities.sql_review import (
     SQLReviewService,
 )
 

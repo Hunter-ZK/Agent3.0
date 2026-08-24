@@ -147,6 +147,14 @@ class LLMReviewer:
             item["auto_fixable"]
         )
 
+        if not isinstance(
+            auto_fixable,
+            bool,
+        ):
+            raise LLMResponseValidationError(
+                "auto_fixable 必须是 boolean。"
+            )
+
         if (
             action
             is IssueAction.AUTO_FIX

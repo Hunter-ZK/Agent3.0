@@ -199,11 +199,14 @@ class CriticService:
 
             checked_items.append(
                 {
-                    "name": "remaining_issue_count",
+                    "name": (
+                        "trust_gating_issues_remaining"
+                    ),
                     "passed": True,
                     "detail": (
-                        f"Original issues: {review_response.issue_count}; "
-                        "remaining issues: 0."
+                        "Re-review issue count: "
+                        f"{re_review_response.issue_count}; "
+                        "no trust-gating issues remain."
                     ),
                 }
             )
@@ -227,7 +230,7 @@ class CriticService:
                 passed=True,
                 trace_id=trace_id,
                 status="passed",
-                reason="Fixed SQL passed deterministic re-review.",
+                reason="Fixed SQL passed trusted re-review.",
                 need_human_confirm=False,
                 checked_items=checked_items,
                 warnings=warnings,
