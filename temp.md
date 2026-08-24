@@ -4692,3 +4692,1952 @@ Per-case stability
 
 
 python examples/text_to_sql_demo.py --question "统计本期高新技术企业贷款余额" --use-real-llm --log-level DEBUG
+
+
+
+
+
+
+
+你的上下文已经很长了，接下来我希望你能做一次完整的工作交接。 请根据我们之前的全部对话内容，自动梳理并写一份结构清晰的《工作交接文档》。这份文档的受众是“下一个新开启对话的 AI”，目标是让它通过读取该文档，并结合 GitHub 上的项目内容，能够无缝接替你的工作继续完成。 请你梳理并涵盖以下核心维度（具体结构与呈现方式由你自由组织）： 
+
+\- **\*\*工作职责与工作要求\*\***（包括我给你的角色定位、规范标准，以及曾经纠正过的避坑事项） 
+
+\- **\*\*任务内容与工作方式\*\***（包括我们日常的协作模式、处理问题的思路或特定偏好） 
+
+\- 工作的目标以及目前确定下来的技术架构和未来的项目发展内容
+
+\- **\*\*项目进度\*\***（已完成的成果、当前状态以及紧接着需要完成的下阶段任务） 
+
+\- **\*\*GitHub 项目对接说明\*\***（结合仓库代码的注意事项与核心关注点） 
+
+\- 在这段对话过程中我的一些重要要求和你的自我反思总结 
+
+
+
+
+
+# Agent3.0 / DataAgent 工作交接文档
+
+**交接日期：2026-08-24**
+**目标读者：下一次新开启对话中的主开发 AI**
+**GitHub：`Hunter-ZK/Agent3.0`，默认分支 `main`**
+
+> 本文档用于让下一位 AI 直接接续 Agent3.0 / DataAgent 的开发、架构收口、调试和技术训练工作。
+> 当前 GitHub 最新确认提交为 **`20260824-8`，SHA `d1f79c5a045b17cb4ea5f4c4f3a4cfc23b42b11e`**。该提交已经补上 ReviewService 的 QueryContext 传递、Reviewer 原始返回 DEBUG 日志、Context 回归测试，并清理了 `auto_fixable` Prompt 冲突。
+
+---
+
+# 一、项目定位与最终目标
+
+Agent3.0 / DataAgent 不是一个“让 AI 一次性生成代码”的项目，而是一个长期、真实的软件研发与技术训练项目。
+
+项目同时有两个目标：
+
+1. **做出真正可运行、可测试、可维护、可持续扩展的 DataAgent。**
+2. **让用户最终能够独立理解、设计、修改和维护这个系统，而不是机械复制 AI 给出的代码。**
+
+因此下一位主开发 AI 既是：
+
+* 技术架构师；
+* 主开发指导者；
+* 代码 Review / Debug 负责人；
+* DataAgent 产品与技术顾问；
+* Stage Gate / Evaluation 设计者。
+
+但不是持续出题的学习教练。主开发窗口应以：
+
+> **高密度推进真实项目 + 把关键技术讲透**
+
+为主。
+
+---
+
+# 二、用户的工作要求与协作规范
+
+这一部分必须长期遵守。
+
+## 2.1 不允许擅自改变需求或架构
+
+用户已经明确要求：
+
+* 不擅自改需求；
+* 不未经授权扩展范围；
+* 不把建议说成已经完成；
+* 不把推测说成事实；
+* 不重复已经完成的工作；
+* 不为了“架构漂亮”不停增加新 DTO、新层、新接口。
+
+特别是以下变化必须**先讨论方案，再开发**：
+
+* 大规模架构调整；
+* 新增共享模块；
+* 持久化方案变化；
+* 主 Workflow 改造；
+* 公共 DTO / State 大改；
+* Capability 边界调整；
+* Context ownership 改变。
+
+正确工作方式：
+
+```text
+发现问题
+↓
+说明真实问题
+↓
+提出 2~3 个方案（必要时）
+↓
+说明 Trade-off
+↓
+用户确认
+↓
+进入代码修改
+```
+
+禁止：
+
+```text
+先写一堆代码
+↓
+发现设计不对
+↓
+再重新定义架构
+```
+
+---
+
+## 2.2 Debug 必须“验证后修改”，禁止根据猜测直接给方案
+
+
+用户明确指出：
+
+> **推测问题以后应该去验证，而不是直接给解决方案。**
+
+后续排查必须遵循：
+
+```text
+Observe
+↓
+Hypothesis
+↓
+Verify actual call chain / raw I/O / minimal reproduction
+↓
+Exclude alternatives
+↓
+【已确认根因】 / 【仍是推测】
+↓
+Production Fix
+```
+
+尤其涉及：
+
+* Context 为什么丢；
+* Review 为什么 `context_required`；
+* Metadata 为什么 NOT_FOUND；
+* SQL 为什么被 BLOCK；
+* LLM 输出为什么异常；
+
+必须先获取实际证据。
+
+不能再：
+
+> “我觉得应该是 X，所以你改 Y。”
+
+---
+
+## 2.3 代码交付方式
+
+### 小改动
+
+优先：
+
+```text
+具体文件
++ 精确位置
++ 原代码
++ 修改后代码
++ 为什么
++ 怎么验证
+```
+
+不要动不动整文件替换。
+
+### 大改 / Test / Demo / Fixture
+
+可以提供完整可复制代码。
+
+用户特别要求：
+
+> 标注【可直接复制】的代码，尤其测试文件，应尽量完整，不给只有几行的残片。
+
+---
+
+## 2.4 开发教学节奏
+
+用户不是传统软件工程师，但具有较强：
+
+* SQL；
+* 数仓；
+* MaxCompute；
+* DataWorks；
+* 数据建模；
+* 产品；
+* 项目管理；
+
+背景。
+
+讲解软件架构时，要解释：
+
+```text
+为什么有这一层
+解决什么问题
+输入是什么
+输出是什么
+谁调用谁
+如果没有这一层会怎样
+```
+
+尤其：
+
+* DTO；
+* Protocol；
+* Service；
+* Engine；
+* Workflow；
+* Factory；
+* Dependency Injection；
+* State；
+* Context；
+
+不要只给定义。
+
+同时用户不喜欢开发节奏过碎：
+
+> **一个阶段只引入一个主要架构概念，但一个阶段内部要高密度做完整。**
+
+---
+
+# 三、GitHub 工作规范
+
+仓库：
+
+```text
+https://github.com/Hunter-ZK/Agent3.0
+```
+
+Python：
+
+```text
+>=3.14,<3.15
+```
+
+默认分支：
+
+```text
+main
+```
+
+## 3.1 什么时候扫描 GitHub
+
+用户已经明确：
+
+**默认不要每轮扫描 GitHub。**
+
+只有用户明确说：
+
+* 已 push；
+* 查看最新代码；
+* 检查 GitHub；
+* 全仓扫描；
+* 项目监督；
+* 做工作交接；
+* 根据最新代码重新判断；
+
+时，再扫描。
+
+当前这份交接已经进行了一次最新校准。
+
+最新远端提交为：
+
+```text
+20260824-8
+d1f79c5a045b17cb4ea5f4c4f3a4cfc23b42b11e
+```
+
+新窗口首次接手时，可以再确认一次 HEAD；完成首次校准后，不要每轮重复扫。
+
+---
+
+## 3.2 GitHub 扫描不能只看 README
+
+应至少关注：
+
+```text
+latest commits
+src/core code
+runtime/workflow
+services
+LLM executors/prompts
+metadata
+tests
+examples
+pyproject.toml
+真正调用链
+```
+
+代码事实优先级：
+
+```text
+用户本地实际运行输出
+>
+GitHub 当前 main
+>
+历史交接文档
+>
+AI 对历史的记忆
+```
+
+如果用户本地已经修改但未 push，本地运行结果优先。
+
+---
+
+# 四、V1 产品目标
+
+当前 V1 只保留四个核心成果：
+
+1. **Trusted SQL**
+2. **Text-to-SQL 智能问数**
+3. **窄版数仓开发**
+4. **Agent / Skill / Evaluation 基础能力**
+
+总体产品主链：
+
+```text
+User
+ ↓
+Agent Runtime
+ ↓
+Planning
+ ↓
+Context Intelligence
+ ↓
+Generation
+ ↓
+SQL Validation / Trusted SQL
+ ↓
+Execution（后置）
+ ↓
+Result
+```
+
+横向：
+
+```text
+Evaluation
+Tool Registry
+Skill Registry
+Observability
+LLM Adapter
+```
+
+## 非常重要
+
+Text-to-SQL V1 最终产物：
+
+> **准确、可信的 SQL**
+
+不是：
+
+> SQL 必须实际执行并返回数据库结果。
+
+当前不把：
+
+* DuckDB；
+* 真实数据库连接；
+* Production Execution；
+
+作为 Text-to-SQL Stage Gate。
+
+---
+
+# 五、当前冻结的软件分层
+
+建议长期保持：
+
+```text
+app
+→ Composition Root / Factory
+
+capabilities
+→ 产品能力 Facade
+
+runtime / workflow
+→ 状态、路由、Retry、HITL、多阶段流程
+
+engine
+→ Shared SQL Core 稳定门面
+
+services
+→ Review / Fix / Explain / Optimize 等内部用例
+
+llm
+→ Reviewer / Fixer / Explainer / Optimizer / Prompt / Client
+
+analysis
+metadata
+validation
+rules
+fixing
+→ 确定性基础能力
+
+core
+→ 稳定领域模型
+
+schemas
+→ 外部 Request / Response / Capability DTO
+```
+
+原则：
+
+> 每一层必须有不可替代职责。
+
+不要为了“抽象统一”建立无意义：
+
+```text
+BaseService
+UniversalAgent
+UniversalContext
+UniversalCapabilityContract
+```
+
+---
+
+# 六、Trusted SQL 架构
+
+当前 Trusted SQL 是整个项目最成熟的 Shared Capability。
+
+核心流程：
+
+```text
+SQL
+ ↓
+SQLAnalysisAdapter / SQLGlot
+ ↓
+SQLFacts
+ ↓
+Deterministic Guardrails
+ ├─ Syntax
+ ├─ Dangerous Operations
+ └─ Metadata Physical Truth
+ ↓
+LLM Reviewer
+ ↓
+ReviewResult
+ ↓
+Routing
+ ├─ advisory only → Trusted
+ ├─ context_required → stop
+ ├─ human_review → stop
+ ├─ block → stop
+ └─ auto_fix
+       ↓
+      Fix
+       ↓
+      Full Re-review
+       ↓
+      Critic
+       ↓
+      Trusted SQL
+```
+
+---
+
+## 6.1 SQL 分析 ADR
+
+已经冻结：
+
+```text
+SQLGlot
+↓
+Thin SQLAnalysisAdapter
+↓
+Agent3.0 SQLFacts / DTO
+```
+
+不要恢复：
+
+* 自研 parser；
+* 自研 Scope；
+* 自研 Lineage；
+* 每条 Rule 自己 Parse SQL。
+
+原则：
+
+> Parse once per review/stage。
+
+---
+
+## 6.2 Issue / Routing Contract
+
+`Issue.action` 是唯一可信生命周期行为事实源。
+
+主要 Action：
+
+```text
+ADVISORY
+AUTO_FIX
+CONTEXT_REQUIRED
+HUMAN_REVIEW
+BLOCK
+IGNORE
+```
+
+规则：
+
+* LLM 不允许产生 `BLOCK`；
+* `BLOCK` 只属于 deterministic evidence；
+* LLM 输出 block 时内部降权为 human_review；
+* Severity 只是风险等级，不决定 Trusted SQL；
+* `blocking` 是从 action 派生的兼容属性；
+* advisory-only SQL 可以成为 Trusted SQL；
+* Fix 后必须完整 Re-review；
+* Re-review 后 Critic 才能放行。
+
+---
+
+# 七、Context Intelligence：本轮最终确认的架构
+
+这是本次交接最重要的架构决策。
+
+## 7.1 一个 Turn 只有一个 QueryContext
+
+用户最终明确要求：
+
+> **同一个问题只有一个 Context，传给所有需要它的接口即可。**
+
+当前定义：
+
+```text
+QueryContext
+=
+当前 User Question / Turn 的唯一 Task Context
+```
+
+包含：
+
+```text
+question
+
+semantic_context
+→ Semantic Knowledge
+
+business_knowledge
+→ RAG Business Knowledge
+→ Mandatory / Fixed Business Rules
+
+verified_sql
+→ Verified SQL Knowledge
+
+session_context
+→ 当前任务用户补充/澄清的信息
+```
+
+---
+
+## 7.2 Context 构建一次，不因消费者变化
+
+正确架构：
+
+```text
+Context Intelligence
+       ↓
+   QueryContext
+       │
+       ├─ Planner
+       ├─ Generator
+       ├─ Validation
+       ├─ Reviewer
+       ├─ Fixer
+       └─ Semantic Validator
+```
+
+**必须是同一个对象。**
+
+禁止：
+
+```text
+PlannerContext
+GenerationContext
+ReviewTaskContext
+FixContext
+ValidationContext
+Context Projection
+Context Inheritance
+重新 RAG
+重新构建 Semantic Context
+```
+
+---
+
+## 7.3 QueryAgentState 是 QueryContext 的 Runtime 持有者
+
+当前代码已经：
+
+```text
+QueryAgentState
+└─ query_context
+```
+
+Context Builder 创建后进入 State。
+
+因此 Text-to-SQL Graph 内部：
+
+```text
+state["query_context"]
+→ Planner
+→ Generator
+→ Validate
+→ Semantic Validator
+```
+
+不要重新增加另一份 semantic_context 到 State。
+
+---
+
+## 7.4 为什么 SQLAgentWorkflow 可以接 QueryContext
+
+这是本轮讨论后最终确认：
+
+```text
+QueryAgentState
+属于 Text-to-SQL Runtime
+
+SQLAgentWorkflow
+属于独立 Trusted SQL 子工作流
+```
+
+所以不能：
+
+```text
+SQLAgentWorkflow
+直接依赖 QueryAgentState
+```
+
+否则 SQL Core 会反向依赖 Text-to-SQL / LangGraph。
+
+正确：
+
+```python
+validation_workflow.run(
+    generated_sql,
+    query_context=state["query_context"],
+)
+```
+
+即：
+
+> **在 Workflow 边界把同一个 QueryContext 传进去一次。**
+
+---
+
+## 7.5 SQLExecutionContext 不是第二套业务 Context
+
+当前存在：
+
+```text
+SQLExecutionContext
+```
+
+其含义是：
+
+> SQL Core 一次运行所需的执行参数容器。
+
+例如：
+
+```text
+sql
+dialect
+metadata_provider
+llm config
+trace_id
+retry
+query_context → 引用唯一 QueryContext
+```
+
+因此：
+
+```text
+QueryContext
+= 这个任务“已经知道什么”
+
+SQLExecutionContext
+= 当前 SQL Core “怎么执行”
+```
+
+不能把二者混为一谈。
+
+---
+
+# 八、Planning / Generation / Explain / Validation 的职责区别
+
+下一位 AI 应保持这个理解。
+
+## Planning
+
+回答：
+
+> 用户到底要查询什么？
+
+输出：
+
+```text
+table
+metric
+dimension
+filter
+group_by
+requirements
+```
+
+属于原子 Stage。
+
+---
+
+## Generation
+
+回答：
+
+> 根据 QueryPlan + QueryContext，SQL 怎么写？
+
+属于单次 Generator。
+
+Retry 是否再次调用 Generator，由外层 Graph 决定。
+
+---
+
+## Explain
+
+回答：
+
+> 已经存在的 SQL 实际在做什么？
+
+用于提供：
+
+```text
+SQL summary
+business purpose
+main tables
+output columns
+uncertainties
+route signals
+```
+
+是原子 Executor。
+
+---
+
+## Validation
+
+当前所谓 Validate 实际是一个完整子 Workflow：
+
+```text
+Explain
+↓
+Review
+↓
+Route
+↓
+Fix
+↓
+Re-review
+↓
+Critic
+```
+
+所以它使用：
+
+```text
+SQLAgentWorkflow
+```
+
+是合理的。
+
+整个系统其实是：
+
+```text
+QueryAgentGraph
+    │
+    ├─ Planner
+    ├─ Generator
+    ├─ SQLAgentWorkflow
+    │    ├─ Explain
+    │    ├─ Review
+    │    ├─ Fix
+    │    └─ Critic
+    │
+    └─ Semantic Validator
+```
+
+即嵌套 Workflow。
+
+---
+
+# 九、Metadata 架构
+
+Metadata 是 Shared Physical Truth，不属于 Warehouse Capability。
+
+冻结原则：
+
+```text
+Physical Metadata
+≠
+Semantic Model
+≠
+Business Knowledge
+```
+
+核心 Domain DTO：
+
+```text
+ColumnMetadata
+TableMetadata
+TableLookupResult
+```
+
+不要再新增：
+
+```text
+MetadataSnapshot
+MetadataTableSnapshot
+MetadataColumnSnapshot
+```
+
+作为公共 Domain Model。
+
+---
+
+## 9.1 SQLite
+
+SQLite 是持久化事实库。
+
+Runtime：
+
+```text
+只读
+不 initialize
+不 import Excel
+不 rebuild
+```
+
+Import / Rebuild 是维护流程。
+
+---
+
+## 9.2 一个物理字段只保留一个主描述
+
+用户已经明确否决：
+
+```text
+同一字段维护多个历史中文描述
+→ alias 主模型
+```
+
+原则：
+
+> 一个物理表 / 字段只保留一个主中文描述。
+
+历史漂移不成为当前 Physical Truth 的主结构。
+
+---
+
+## 9.3 当前新发现的 Metadata 三态问题
+
+这是下一窗口的重点。
+
+当前 Excel import 对：
+
+```text
+is_partition
+```
+
+没有事实时写：
+
+```text
+NULL
+```
+
+这是正确的：
+
+```text
+UNKNOWN
+```
+
+但当前 Runtime Repository 会：
+
+```text
+NULL
+→ 没有 partition field
+→ ()
+→ bool(()) = False
+```
+
+最终 Reviewer 收到：
+
+```text
+Is Partitioned: False
+```
+
+于是：
+
+```text
+UNKNOWN
+被错误转换成
+FALSE
+```
+
+这在最新实际运行中已经暴露。
+
+当前运行中 Query Context 明确认为：
+
+```text
+dt = 数据报送日期分区字段
+```
+
+而 Physical Metadata 给 Reviewer：
+
+```text
+Is Partitioned: False
+Partition Fields: None
+```
+
+同时物理字段描述中：
+
+```text
+is_high_tech_mfg_loan_code
+= 是否高技术制造业贷款代码
+```
+
+而 Business Knowledge 当前认为：
+
+```text
+is_high_tech_mfg_loan_code='1'
+= 高新技术企业贷款
+```
+
+这说明已经进入：
+
+> **Physical Metadata 与 Business Knowledge 的事实一致性治理阶段。**
+
+最新日志已经证明 Query Context 能完整进入 Reviewer，同时最终仍为 `context_required`。
+
+---
+
+# 十、Text-to-SQL 当前架构
+
+```text
+TextToSQLCapability
+ ↓
+QueryAgentGraph
+ ↓
+Retrieve Context
+ ↓
+QueryContext
+ ↓
+Planner
+ ↓
+Generator
+ ↓
+SQLAgentWorkflow
+ ↓
+Semantic Validator
+ ↓
+Trusted SQL / Clarification / Failure
+```
+
+---
+
+## 10.1 Factory 最新设计
+
+本轮用户明确指出：
+
+> `text_to_sql_factory` 参数过多，尤其 Metadata 配置重复、混乱。
+
+已经完成方向收口：
+
+```text
+text_to_sql_factory
+→ Context
+→ Planner
+→ Generator
+→ QueryAgentGraph
+```
+
+不再负责：
+
+```text
+metadata_provider_factory
+max_sql_retries
+SQL Core 内部构造
+```
+
+`validation_workflow` 应作为已经组装好的依赖注入。
+
+即：
+
+```text
+SQL Core Factory
+→ Metadata
+→ Review
+→ Fix
+→ LLM
+→ Trusted SQL Workflow
+
+Text-to-SQL Factory
+→ 注入 validation_workflow
+```
+
+最新 `20260824-7` 已实施这一减肥方向，`20260824-8` 在此基础上继续修复 Review Context。
+
+---
+
+## 10.2 Mandatory Rules
+
+Mandatory Rule 不依赖 Vector Top-K。
+
+目前贷款领域示例：
+
+```text
+本期
+→ dt = '${p_month_yyyymm}'
+```
+
+由：
+
+```text
+MandatoryRuleMatcher
+```
+
+在 QueryContextBuilder 阶段确定性注入。
+
+Generic Text-to-SQL Factory 不应该认识：
+
+```text
+LOAN_MANDATORY_RULES
+```
+
+Domain / Demo 自己构建：
+
+```text
+QueryContextBuilder(
+    mandatory_rule_matcher=...
+)
+```
+
+然后注入 Factory。
+
+---
+
+# 十一、时间语义的最新决策
+
+历史评估曾认为：
+
+```text
+同比 / 环比缺时间
+→ clarify
+```
+
+但后续已经修改这一策略。
+
+当前：
+
+```text
+本期 / 当期 / 当前期
+→ ${p_month_yyyymm}
+```
+
+是合法 Runtime Convention。
+
+因此：
+
+```text
+统计本期高新技术企业贷款余额
+```
+
+不应 Clarify。
+
+同比 / 环比如果已经有 authoritative runtime period，可以基于：
+
+```text
+${p_month_yyyymm}
+```
+
+推导上期或上年同期。
+
+不要机械沿用旧 Golden 的“必须 clarify”。
+
+只有真正存在：
+
+```text
+多个 materially different business meanings
+```
+
+才 Clarify。
+
+---
+
+# 十二、Evaluation 历史与当前状态
+
+历史 Text-to-SQL V1 曾达到：
+
+```text
+12 / 14
+85.7%
+```
+
+Trusted SQL 当时：
+
+```text
+100%
+```
+
+历史两类失败主要是：
+
+* 多业务主题歧义；
+* 时间语义缺上下文。
+
+但后来进行架构 Consolidation 后出现明显 Regression。
+
+曾经的 11 Case 非绿色测试：
+
+```text
+planning 11/11
+clarification 11/11
+SQL trust 0/11
+```
+
+其中：
+
+```text
+10 context_required
+1 blocked
+```
+
+这说明：
+
+> Planning / Context / Generation 大体工作，但 Trusted SQL Gate 产生了严重回归。
+
+历史 Reviewer 独立 A/B 已经看到典型问题包括：
+
+```text
+LLM_AGG_GRANULARITY
+LLM_FILTER_CODE_VALUE
+LLM_PARTITION_DATE
+LLM_PERF_SCAN_RANGE
+```
+
+
+
+---
+
+# 十三、最近这轮回归排查的完整结论
+
+这是下一位 AI 接手后最重要的历史。
+
+## 阶段 1：Generator Markdown Fence
+
+真实 LLM 曾生成：
+
+````text
+```sql
+SELECT ...
+```
+````
+
+SQLGlot 没报 parse error，但错误解析成：
+
+```text
+Statement Type = column
+Source Tables = None
+```
+
+Plain/Fenced A/B 已确认。
+
+后来 Generator 增加只剥离完整外层 Fence 的窄 normalization。
+
+最新日志中 Generated SQL 已经恢复为正常纯 SQL。
+
+---
+
+## 阶段 2：发现 Reviewer 没有 QueryContext
+
+旧日志显示：
+
+```text
+## Query Context
+未提供
+```
+
+最终发现历史原因不是简单“删掉了一行”。
+
+旧 Text-to-SQL 通过时：
+
+```text
+LLM Review 默认没有作为前置 Trust Gate
+Semantic Validator 在后面消费完整 QueryContext
+```
+
+后来：
+
+```text
+LLM Reviewer
+```
+
+被升级成 Trusted SQL 的正式 Gate，却没有同步升级 Validation Input Contract。
+
+因此形成 Integration Regression。
+
+---
+
+## 阶段 3：Context 传递最终修复
+
+最终链：
+
+```text
+QueryAgentState
+→ SQLAgentWorkflow
+→ SQLReviewRequest
+→ SQLExecutionContext
+→ ReviewService
+→ review_sql
+→ run_llm_review
+→ LLMReviewer
+```
+
+曾经最后一个实际 Bug 是：
+
+```python
+review_sql()
+→ run_llm_review(...)
+```
+
+漏掉：
+
+```python
+query_context=query_context
+```
+
+最新 commit `20260824-8` 已补齐，并增加专门回归测试：
+
+```text
+tests/test_review_service_context.py
+```
+
+---
+
+## 阶段 4：Context 已经通，但仍然 context_required
+
+最新实际运行已经确认：
+
+Reviewer Prompt 中已经完整出现：
+
+```text
+User Question
+Semantic Knowledge
+Business Knowledge
+Verified SQL Knowledge
+```
+
+因此：
+
+> **Context 传递问题现在已经 CLOSED。**
+
+但最后：
+
+```text
+validation_status = context_required
+```
+
+仍然存在。
+
+这意味着当前真正问题已经转移到：
+
+> **Reviewer 拿到完整 Context 后，为什么仍然产生 context_required Issue。**
+
+---
+
+
+# 十七、业务知识资产的长期发展方向
+
+已经形成过正式的元数据资产盘点方案，其核心方向正确：
+
+```text
+Physical Metadata
+↓
+Semantic Model
+↓
+Business Knowledge
+↓
+Verified SQL
+```
+
+而不是：
+
+> 把全部字段描述直接塞给 LLM。
+
+长期业务资产分层建议：
+
+### P0
+
+* Table Business Semantics
+* Metrics
+* Fixed Filter Rules
+* Time Semantics
+* Key Dimensions
+
+### P1
+
+* Term / Alias
+* Value Dictionary
+* Business Topics
+* Recommended Usage
+
+### P2
+
+* Join Knowledge
+* Grain / relationship
+* More complex modeling semantics
+
+当前资产建设方案仍是：
+
+> 先稳定系统主能力，再扩大知识资产覆盖。
+
+此前正式盘点方案也明确记录：物理全量字段本身不足以支撑准确 Text-to-SQL，需要逐步补充 Metric、Filter、Time、Alias、Join 等业务语义资产。
+
+---
+
+# 十八、后续路线
+
+当前主线建议：
+
+```text
+P0
+Current Reviewer Regression
+↓
+恢复 Text-to-SQL Trusted SQL baseline
+↓
+Evaluation V2
+↓
+确认新 V1 baseline
+```
+
+之后：
+
+```text
+SQL Optimization V0.2
+↓
+Knowledge Grounding / Semantic Asset
+↓
+Narrow Warehouse Development
+↓
+Skill / Tool / Capability Foundation
+```
+
+Optimization 的原则已经确定：
+
+```text
+Trusted SQL
+↓
+Optimization Candidate
+↓
+Deterministic Re-review
+↓
+Semantic-equivalence Critic
+↓
+PASS → Candidate
+FAIL → 原 Trusted SQL
+```
+
+Optimization 永远不能降低 Trusted SQL 的可靠性。
+
+---
+
+# 十九、下一窗口第一轮建议怎么开始
+
+建议下一 AI 开场直接做这件事：
+
+### 第一步
+
+确认 GitHub HEAD 是否仍是：
+
+```text
+20260824-8
+d1f79c5...
+```
+
+若用户没有继续 push，可以直接基于当前交接继续，不必重新全仓扫描。
+
+### 第二步
+
+让用户运行或读取最新：
+
+```text
+reviewer.response
+```
+
+不要再改 Context。
+
+### 第三步
+
+把 Reviewer Issues 分成：
+
+```text
+已被 QueryContext 证明
+已被 Physical Metadata 证明
+真实缺失
+上下文冲突
+纯 Advisory
+错误 context_required
+```
+
+### 第四步
+
+只修经过验证的根因。
+
+### 第五步
+
+运行：
+
+```text
+focused tests
+pytest -q
+real LLM single case
+Evaluation V2
+```
+
+必须有真实输出后再宣布通过。
+
+---
+
+# 二十、本轮对话中用户的重要要求
+
+这些要求值得下一 AI 特别记住。
+
+## “为什么以前通过，现在优化架构后反而不通过？”
+
+用户不接受：
+
+> “现在没功能，那我们再加一个。”
+
+必须追历史：
+
+```text
+旧能力为什么能工作
+↓
+架构变化改变了什么
+↓
+哪一个 Contract 没同步升级
+```
+
+本轮最终确认：
+
+> LLM Review 被升级为 Trusted SQL 前置 Gate，而 Context Contract 没同步扩展，是 Regression 的重要来源。
+
+---
+
+## “一个 Context 为什么要搞那么复杂？”
+
+用户明确否决：
+
+```text
+ReviewContext V2
+FixContext
+Context Projection
+Inheritance
+多份内容
+```
+
+核心原则：
+
+> **一个 Context 构建一次，传给所有需要它的接口。**
+
+软件层级可以存在 Request / ExecutionContext，但不能变成第二套业务 Context。
+
+---
+
+## “为什么你不先看看 QueryAgentState？”
+
+这是本轮重要教训。
+
+下一 AI 在提出：
+
+> “应该把 X 放 State”
+
+之前必须先检查：
+
+> State 里是不是已经有 X。
+
+本轮其实：
+
+```text
+query_context
+```
+
+早就在 `QueryAgentState` 中。
+
+前面没有检查代码就提出重新设计，是错误方法。
+
+---
+
+# 二十一、主开发 AI 的自我反思与后续禁区
+
+本轮出现过多次不应重复的问题。
+
+## 21.1 过早给方案，没有先验证
+
+曾出现：
+
+```text
+看到 context_required
+↓
+猜 Context 没有
+↓
+马上设计修改
+```
+
+而没有先逐级确认：
+
+```text
+State
+Workflow
+Request
+Engine
+Service
+Reviewer
+```
+
+之后才发现真正遗漏只是某一层的一行参数。
+
+以后必须先链路验证。
+
+---
+
+## 21.2 把简单 Context 流设计复杂
+
+曾提出：
+
+```text
+ReviewTaskContext
+projection
+render_review_context
+SQLExecutionContext 包装更多层
+```
+
+用户及时纠正：
+
+> 为什么不直接一个 Context 传给所有接口？
+
+后续禁止重新回到多 Context 架构。
+
+---
+
+## 21.3 没有先看已有 State / Contract
+
+在讨论是否加入 `QueryContext` 时，没有第一时间确认：
+
+```text
+QueryAgentState
+```
+
+实际上已经有该字段。
+
+这导致重复设计。
+
+以后：
+
+> **先读现有 Contract，再提出新 Contract。**
+
+---
+
+## 21.4 一次给出太多修改，掩盖真实根因
+
+曾经为一个 Context Bug 同时建议修改：
+
+* Graph；
+* Workflow；
+* Request；
+* ExecutionContext；
+* Engine；
+* Review；
+* Fix；
+* Prompt；
+* Factory；
+
+结果用户修改很多以后行为没有变化。
+
+真正最后一层只是：
+
+```python
+query_context=query_context
+```
+
+漏掉。
+
+以后必须：
+
+```text
+找到第一个 value 正确的位置
+↓
+找到下一个 value 变成错误的位置
+↓
+只修断点
+```
+
+---
+
+## 21.5 没有提前增加可观测性
+
+Reviewer 正常返回的 JSON 没有 DEBUG 输出。
+
+于是：
+
+```text
+context_required
+```
+
+只能猜原因。
+
+最新 `20260824-8` 已补：
+
+```text
+reviewer.response
+```
+
+以后复杂 Agent 调试原则：
+
+> **首先让中间状态可见，再修改算法。**
+
+---
+
+## 21.6 把 UNKNOWN 当成 FALSE
+
+Metadata 领域尤其要严格：
+
+```text
+不存在
+≠
+未知
+≠
+查询失败
+```
+
+类似：
+
+```text
+partition unknown
+```
+
+绝不能自动转换成：
+
+```text
+not partitioned
+```
+
+这一点与此前：
+
+```text
+FOUND
+NOT_FOUND
+ERROR
+```
+
+三态原则完全一致。
+
+---
+
+# 二十二、最终冻结规则清单
+
+下一 AI 应把下面视为当前项目的硬约束：
+
+```text
+1. Text-to-SQL 最终产物是 Trusted SQL，不以真实执行作为当前 Gate。
+
+2. SQL Analysis 使用 SQLGlot + Thin Adapter + Own DTO。
+
+3. QueryAgentGraph 是 Text-to-SQL 唯一 canonical runtime。
+
+4. 一个 User Turn 只有一个 QueryContext。
+
+5. QueryContext 构建一次，所有下游共享，不重新 RAG。
+
+6. QueryAgentState 持有 QueryContext。
+
+7. SQLAgentWorkflow 可在边界接受 QueryContext，但不能依赖 QueryAgentState。
+
+8. SQLExecutionContext 是运行容器，不是第二套业务 Context。
+
+9. Physical Metadata / Semantic Model / Business Knowledge 必须分层。
+
+10. SQLite 是 Metadata Physical Truth，Runtime 只读。
+
+11. 一个物理表/字段一个主中文描述。
+
+12. Issue.action 是 Trusted SQL 路由事实源。
+
+13. LLM 不得 BLOCK。
+
+14. Fix 必须 Re-review，再 Critic。
+
+15. 重大架构调整先讨论后实现。
+
+16. Debug 先验证根因，再修改。
+
+17. 不为了抽象而增加 BaseService / Universal DTO / Universal Framework。
+
+18. 默认不反复扫描 GitHub。
+
+19. 测试通过必须有实际 pytest 输出，不可口头假定。
+
+20. 当前不要继续调整 Context 架构；优先解决 Reviewer 为什么在完整 Context 下仍返回 context_required。
+```
+
+---
+
+# 二十三、当前交接状态一句话总结
+
+截至 **2026-08-24 / commit `20260824-8`**：
+
+> **Trusted SQL 主架构、Text-to-SQL Graph、单一 QueryContext 架构、Factory 分层、Context 到 Reviewer 的传递已经基本收口；当前真正的 P0 不再是“Context 没传过去”，而是“Reviewer 在已经拿到完整 Context 后仍然产生 `context_required`”。下一步必须读取新增的 `reviewer.response` 原始 Issue，结合 Physical Metadata 与 Business Knowledge 的冲突逐项验证，不允许再凭状态码猜根因。**
+
+这就是下一窗口应直接接手的位置。
+
+
+
+
+1. **GitHub 当前是不是完整事实源？**
+   `20260824-8` 以后，你本地还有没有**尚未 push** 的代码修改？如果有，我之后的“全仓逐行审计”只能以 GitHub 为基准，同时把本地差异标为未知；如果没有，我就冻结 `d1f79c5...` 为本轮 Baseline。
+
+2. **V1 最终到底是一个什么产品形态？**
+   我已经知道四项 V1 能力是 Trusted SQL、Text-to-SQL、窄版数仓开发、Agent/Skill/Evaluation。现在缺的是最终使用方式：你希望 V1 首先成为
+   **A. 一个可运行的 Python DataAgent 内核/SDK**，
+   **B. 一个可以通过 API 被业务系统调用的后端服务**，
+   还是 **C. 先形成完整技术能力，界面/API 产品化以后再做**？
+   **我的倾向是 C → A，再 API 化。**当前仓库本质仍然是 Python Engine/Capability，而不是服务产品，没必要现在引入 Web/API 层。
+
+3. **V1 的主要业务用户是谁？**
+   是你自己/数据开发人员，用自然语言完成 SQL 和数仓开发；还是普通业务人员直接问数？这个区别很大。前者可以接受更多技术状态和人工确认，后者必须把 Metadata、澄清、错误恢复隐藏得更多。
+
+4. **V1 是否明确以 MaxCompute / DataWorks 为第一生产目标？**
+   当前项目虽然 SQLGlot 提供多方言能力，但工程描述、Rule、Prompt、Metadata 和真实案例明显都是 MaxCompute/DataWorks 导向，`pyproject.toml` 甚至仍描述为 “SQL Review Engine for MaxCompute / DataWorks”。
+   **我的建议：架构保持 dialect 可扩展，但 V1 验收只针对 MaxCompute。**不要为了所谓通用 DataAgent 同时兼容 MySQL/PostgreSQL/Spark SQL。
+
+5. **Trusted SQL 是不是整个 V1 的“公共底座”，而不是 Text-to-SQL 私有步骤？**
+   我认为答案应该是“是”。也就是说未来：
+   `Text-to-SQL → Trusted SQL`
+   `Warehouse Development → Trusted SQL`
+   `SQL Optimization → Trusted SQL`
+   都复用同一个 SQL Core，而不是各写一套 Validator。当前 `SQLAgentWorkflow` 已基本符合这个方向。
+   如果你同意，我会把这作为正式冻结原则。
+
+6. **生产态 Trusted SQL 中，Physical Metadata 到底是不是强制依赖？**
+   这是一个必须现在确定的架构决策。当前 `build_sql_agent_workflow()` 默认是 `default_enable_metadata=False`。
+   但如果我们宣称“可信 SQL”，我认为生产 Text-to-SQL 下至少涉及真实业务表时，**Metadata 应当默认启用**。否则字段是否存在、数据类型等物理事实无法真正验证。测试和纯 SQL Review 可以显式关闭。
+   你是否接受这个方向？
+
+7. **Metadata 不知道某个事实时，希望系统如何处理？**
+   我认为必须正式确立三态甚至多态：
+   `TRUE / FALSE / UNKNOWN`，
+   `FOUND / NOT_FOUND / ERROR`。
+   例如“Excel 没告诉我们 dt 是不是分区字段”，绝不能理解成“dt 不是分区字段”。当前代码恰好违反了这一点。
+   这里我倾向把“事实未知”传递到底，而不是让 Reviewer 猜。
+
+8. **当 Physical Metadata 与 Business Knowledge 冲突时，谁有最终解释权？**
+   当前真实案例已经出现这种情况，所以不能拖到以后再定。我的建议是建立明确 Authority，而不是简单说“谁优先级高”：
+
+   * 表/字段存在、字段类型、真实物理分区 → **Physical Metadata**；
+   * 指标定义、代码值业务含义、业务过滤条件、时间语义 → **Business/Semantic Knowledge**；
+   * 本次用户选择/澄清 → **Session Context**，只能改变业务意图，不能修改物理事实；
+   * Verified SQL → 参考证据，不能覆盖上述权威事实。
+     你是否认同？如果不认同，需要指出例外。
+
+9. **“一个 Turn 只有一个 QueryContext”需要再精确定义一次。**
+   当前 `QueryContext` 是 `frozen=True`；正常链路确实同一个对象进入 Planner、Generator、Trusted SQL Workflow 和 Semantic Validator。
+   但用户回答澄清问题以后，当前 Graph 会把答案加入 `session_context`，然后重新经过 `retrieve_context`，**生成一个新的 QueryContext**。
+   我认为这是合理的：**一次“上下文快照”一个 QueryContext；HITL 增加了新事实以后必须重建快照，但禁止每个下游消费者各建自己的 Context。**
+   你是否接受这个更精确的定义？
+
+10. **`ReviewContext`、`SQLExecutionContext` 这类名字是否允许保留？**
+    它们不是第二份业务 Context。`ReviewContext` 保存 AST/SQLFacts/MetadataProvider 等 SQL Review 技术状态；`SQLExecutionContext` 保存 SQL Core 本次执行参数，并引用同一个 QueryContext。
+    **我的判断是应该保留这种技术上下文，禁止的是第二套业务知识 Context。**否则为了“只允许一个叫 Context 的类”反而会破坏合理的软件分层。你是否认可？
+
+11. **LLM Reviewer 与 SemanticSQLValidator 的职责要怎么切？这是当前最重要的架构问题之一。**
+    现在 Reviewer 的 Prompt 明确检查“指标口径、业务过滤、时间语义、SQL业务语义一致性”；而后面的 `SemanticSQLValidator` 又检查“正确表、指标、过滤、时间、聚合、完整回答问题”。两者存在明显重叠。
+    我的初步方向是：
+    **Trusted SQL Reviewer** 负责“这段 SQL 本身是否可靠/安全/合理，以及基于已有上下文可发现的 SQL 风险”；
+    **Semantic Validator** 专门负责“这段可信 SQL 是否完整实现了这次 QueryPlan / 用户意图”。
+    也就是 `SQL correctness/trust` 与 `task fulfillment` 分开。
+    你是否认同？这个确认以后我才会判断当前 `context_required` 到底应该在哪一层产生。
+
+12. **`context_required` 的权限边界是否要收紧？**
+    我不建议继续允许 Reviewer 只因为“它自己不确信”就输出 `context_required`。如果 QueryContext 已经有权威答案，它就不能再次追问；只有**确实缺失、且不同答案会生成 materially different SQL** 时才能要求上下文。当前 Prompt 已经试图表达这条原则，但还没有形成足够严格的程序 Contract。
+    是否把它设为正式规则？
+
+13. **Clarification 最终是 Planning 的责任，还是所有阶段都允许发起？**
+    当前 Planner 可以 Clarify，Semantic Validator 也可以 Clarify，Trusted SQL Reviewer 还能产生 `context_required`。这意味着有三个入口。
+    我的倾向不是强行只留 Planner，而是：底层发现缺失 → 返回结构化 Missing Context；**真正对用户发起 HITL 统一由 QueryAgentGraph**。这样各层发现问题，但 Runtime 拥有用户交互。你是否接受？
+
+14. **你对“窄版数仓开发”的具体定义现在必须补全。**
+    “单目标表”我知道，但它还不足以设计架构。你期待它能做到哪些步骤？比如：
+    `需求理解 → 源表发现 → 字段映射 → 目标表 Schema → ETL SQL → SQL 校验 → 建表 SQL/任务代码`，
+    还是只做到其中一部分？
+    这是我现在最缺的一块产品定义，因为它决定未来是否复用 QueryAgentGraph、QueryContext、Planning，以及是否需要新的 Warehouse Workflow。
+
+15. **窄版数仓开发是否同样“不执行，只产出可信代码”？**
+    Text-to-SQL 已经明确最终交付 Trusted SQL，不以数据库真实执行为 Gate。
+    我倾向 V1 的数仓开发也采取类似原则：产出经过静态与语义验证的 DDL/DML/ETL SQL，不要求真正向 DataWorks 发布。请确认。
+
+16. **Semantic Model 到底是“人工治理资产”还是未来要由系统自动生成/维护？**
+    当前代码把它作为 JSON/领域代码加载，但运行时每次都会渲染进入 Context。
+    如果未来你希望“导入全量 Metadata → LLM 辅助生成 Semantic Assets → 人工审核 → 发布”，那我们现在设计资产层时就要保留这个生命周期；如果永远手工写 JSON，则没必要提前建设复杂管理系统。
+
+17. **Business Knowledge / Verified SQL 的持久化与发布机制是否属于 V1？**
+    当前 Text-to-SQL Factory 会建立 Vector Store，并在 Capability 构建时 `vector_store.add(context_documents)`。
+    我认为这个方式适合当前实验，但不适合最终 Runtime：**知识导入应该和查询 Runtime 分开**，类似你已经对 Metadata 做的 rebuild/runtime separation。
+    你是否希望在 Text-to-SQL baseline 稳定后，把 Knowledge Asset 也改成“离线构建、运行时只读”？
+
+18. **贷款领域是否就是当前 V1 的唯一 Golden Domain？**
+    当前 V2 Evaluation 已经围绕科技贷款、绿色贷款、余额、获贷企业数、加权利率、地区、机构类型和歧义澄清建立案例。
+    我的建议是先把这个 domain 做到稳定，而不是立即增加更多行业。等平台能力稳定后再测试第二个 domain，验证架构是否真的泛化。
+
+19. **Evaluation 的正式通过标准是什么？**
+    不能再只说“跑过了”。我建议下一版冻结至少四个 Gate：
+    `Deterministic/unit tests 100%`
+
+    * `Text-to-SQL Golden Cases`
+    * `Trusted SQL Gate`
+    * `真实 LLM 重复稳定性`。
+      特别是 LLM 不是确定性函数，一次 100% 不代表系统稳定。你是否愿意把“关键 Golden Case 连续多轮通过”纳入 V1 Gate？如果担心 API 成本，可以只对核心 Case 做重复测试。
+
+20. **你希望 Evaluation 更看重“最终 SQL 正确”，还是每个中间 Stage 也必须匹配？**
+    例如最终 SQL 正确，但 Planner 把某个 requirement 放进 `filters` 而不是 `requirements`，是否算失败？我的建议是：
+
+    * 中间 Contract 只验证影响下游的关键语义；
+    * 最终 SQL correctness / semantic fidelity 权重最高；
+    * 不为了固定 LLM 的“思考格式”过度约束中间结果。
+      请确认。
+
+21. **LangGraph 是否正式冻结为 Text-to-SQL Runtime？**
+    现在已经不是简单试验：HITL `interrupt/resume`、Checkpoint、Retry、State 都依赖 LangGraph。
+    我目前**不建议再退回普通 Python Workflow**。除非全仓审计发现严重理由，否则应该把 LangGraph 定为 Agent Runtime 基础设施。你是否同意？
+
+22. **未来的 Agent Runtime 是“每个 Capability 一个 Graph”，还是最终有一个顶层 Agent 再选择 Capability？**
+    这会直接决定未来 Skill/Tool 架构。我倾向于：
+    `Top-level Agent Runtime / Planner`
+    → 选择 `TextToSQLCapability / WarehouseCapability / SQLReviewCapability / ...`
+    → 每个复杂 Capability 可以有自己的内部 Graph。
+    而不是做一个超级 LangGraph，把所有业务节点都塞进一张图。你对此有无产品设想？
+
+23. **Skill 与 Tool 在你的项目里最终分别是什么？**
+    这是目前四个 V1 目标中定义最薄的一块。我的理解候选是：
+
+    * Tool：确定性/外部能力，例如 Metadata Search、SQL Analysis、未来 DataWorks API；
+    * Skill：面向任务的可组合知识+流程，例如“字段命名”“数仓表设计”“贷款指标查询”。
+      但这个定义不能由我自行冻结，需要你告诉我你期待的 Skill 产品形态。
+
+24. **LLM 供应商是否必须可替换？**
+    当前实际主模型是 DeepSeek，但代码已经抽象 Client / TextGenerationModel。我的建议是：**V1 运行基准用 DeepSeek，架构保持 Provider 可替换，但不为了多模型兼容制造额外框架。**你是否同意？
+
+25. **生产 Observability 要到什么程度？**
+    现在新增 `reviewer.response` DEBUG 非常有利于 Debug，但以后 QueryContext、SQL、业务规则乃至内部表名都可能属于敏感资产。
+    我建议区分：
+    `dev/debug：完整 prompt/response`
+    `prod：trace + stage + status + token/latency + 脱敏摘要`。
+    是否需要把 Observability 当成 V1 平台基础能力的一部分？
+
+26. **Repository 本身要不要纳入这轮治理？**
+    当前 `.gitignore` 已经明确忽略 `__pycache__ / *.pyc / *.egg-info / .DS_Store`，但仓库历史上仍实际跟踪了这些文件；根目录也直接提交了 7MB 左右的 `agent_metadata.db`。
+    我的建议是全仓审计里把**代码卫生、死代码、重复文件、生成物、资产文件管理**一起处理，而不只找功能 Bug。否则“胡拼乱凑感”很大一部分正是从这些技术债开始积累的。
+
+27. **Metadata SQLite DB 是否计划长期提交进 Git？**
+    这里需要你给产品/部署意图，而不是让我按通用 Best Practice 猜。如果它只是本地生成物，我会建议移出版本库，仅保留 Schema + source + rebuild；如果它是一个经过审核的版本化 Metadata Snapshot，则可以继续纳入，但需要明确版本与更新策略。
+
+28. **我以后是只给你修改指导，还是在你明确授权时也可以直接修改 GitHub？**
+    我现在对仓库有写权限，但在没有你明确要求的情况下，我不会写。结合你的开发学习目标，我倾向继续：
+    **我逐行审查 → 给文件/位置/原因/修改代码 → 你修改和运行 → push 后我复核**。
+    大型测试文件可以给完整代码。你是否继续采用这个方式？
+
+29. **这次全仓扫描的范围是否包括“历史兼容代码是否还应该存在”？**
+    例如当前 `ReviewService.review()` 明确写着新入口，而 `review_sql()` 因旧调用方和旧测试继续保留。
+    我建议这次不仅判断“代码能不能跑”，还要分类：
+    **Canonical / Compatibility / Deprecated / Dead Code / Future Placeholder**。
+    只有这样才能真正判断是否已经产生新旧架构混杂。你同意的话，我会把它纳入扫描标准。
+
+30. **最后，需要你给我两个真实运行事实。**
+    GitHub 只能告诉我代码是什么，不能告诉我 DeepSeek 今天实际返回了什么。等你回答完架构问题后，我需要：
+    **当前 HEAD 的最新 `pytest -q` 完整结果**，以及那条“本期高新技术企业贷款余额”的**最新真实运行输出，尤其 `reviewer.response`**。
+    这两个不是让你现在解释原因，只是后续代码审计完成后用于和 Runtime Reality 对齐。
+
+1. github为最新；2. C; 3. 先面对我自己；4. 以dataworks为主导；5. 我考虑agent的主要产出是trusted\_sql，但是应该还有其他更多样式才对；6. llm和metadat默认开启；7. 建立多态吧；8. 我觉得本来这两部分内容就不应该冲突，如果冲突的话我觉得进入clarify，有session确定；9. 这就在于怎么定义querycontext了，我之前对它的定义就只是固定的业务知识，包含semantic\_model knowledge fix\_rule session\_text等，它只跟用户的提问内容有关，跟哪个环节和能力无关。你是怎么考虑的呢？10. 命名不规范的，你提出方案修改就行；11.我认同你的分工，但是你需要再确认下；12. 设立；13. 我觉得都允许发起clarify，我觉得humaninloop非常重要；14. 我觉得这个步骤还是太长了，先放到最后面实现，但是所有步骤我觉得都要做到，形成端到端；15. 所有代码目前都不考虑执行；16. 我觉得smantic\_model应该是人机协同整理的资产，你觉得呢？17. 先考虑只读吧；18. 不，我的业务非常多，但目前我更需要的是稳定我的dataagent产品，而不是业务和数据；19. 对核心case做重复测试；20. 按你的建议来；21. 同意；22. 按你倾向来，你如果不确定，参考业界常用架构；23. 这部分先不考虑，我后面再补充需求；24. 可替换；25. 这部分不着急吧，等建设完整再设立？26. 一起处理吧；27. 长期提交git；28. 继续采用；29. 我觉得旧架构要清理了，就只保留干净的新架构；30. FAILED tests/test\_query\_agent\_graph\_hitl.py::test\_graph\_interrupts\_and\_resumes - TypeError: PassingValidationWorkflow\.run() got an unexpected keyword argument 'query\_context'
+
+   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_semantic\_pass\_produces\_trusted\_sql - TypeError: PassingValidationWorkflow\.run() got an unexpectedkeyword argument 'query\_context'
+
+   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_semantic\_fail\_retries\_then\_passes - TypeError: PassingValidationWorkflow\.run() got an unexpected keyword argument 'query\_context'
+
+   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_deterministic\_block\_stops\_before\_semantic\_validation - TypeError: FailingValidationWorkflow\.run()got an unexpected keyword argument 'dialect'
+
+   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_semantic\_need\_clarification\_interrupts - TypeError: PassingValidationWorkflow\.run() got an unexpected keyword argument 'query\_context'
+
+   FAILED tests/test\_sql\_review\_factory.py::test\_factory\_disables\_metadata\_without\_provider - assert False
+
+   FAILED tests/test\_to\_sql\_service.py::test\_text\_to\_sql\_pipeline\_returns\_trusted\_sql - TypeError: build\_text\_to\_sql\_capability() got an unexpected keyword argument 'max\_sql\_retries'
+
+   FAILED tests/test\_to\_sql\_service.py::test\_text\_to\_sql\_pipeline\_blocks\_dangerous\_sql - TypeError: build\_text\_to\_sql\_capability() got an unexpected keyword argument 'max\_sql\_retries'
+
+   8 failed, 34 passed in 4.53s。 
+
+上述内容，是一份交接文档，你需要阅读上述所有内容，并对这份项目进行一次技术分析，不需要完成交接文档里的工作内容。1.我希望你能够通过逐行扫描github代码的方式，确认我目前项目的进度、问题、方向等情况，文档内容仅作参考；2. 你要从一开始就确定我的项目后续的工作方案和具体方向，与我确认好技术架构；3.  现在请你先对我的项目、方案、内容提出你应该有的问题，以让你充分了解我的需求
+
+
+A. 元数据事实源（最关键，其余都依赖它）
+data/metadata/raw/全量字段.xlsx 到底是什么？ 是 MaxCompute 真实 DDL 导出，还是业务报送口径的字段清单？它有没有数据类型列、分区标识列，只是导入代码没读？还是源文件本身就没有？
+你能否拿到真实的物理 Schema？（DESC 导出 / DataWorks 元数据 API / information_schema）如果能，V1 应该以它为准，Excel 降级为业务描述补充；如果不能，我们必须承认「类型和分区永远 UNKNOWN」，Trusted SQL 的判定标准要相应下调。
+ods_hd_100_cldkxx 的真实粒度是什么？ 它到底是借据明细，还是已经按 field_type_code 聚合的报送表？这个答案决定 COUNT(DISTINCT ent_code) 和加权利率这两个指标能不能成立——目前物理表里已经有 loan_ent_num 和 loan_rate 现成聚合列。
+这是我整理的字段清单，没有收集其他信息，可以收集，但要额外费时间，且不是我目前的工作重点，我现在的工作重点应该是先完成整个平台的搭建，目前这些数据能够充分验证我的功能我觉得就可以了。
+
+
+B. 知识资产
+loan_model.json 是你按真实业务写的，还是为了跑通 Demo 编的？ 我需要知道它是「待修正的资产」还是「待丢弃的脚手架」。
+如果 ods_hd_100/200_cldkxx 不是你真正要查的表，真实场景应该指向哪一批？库里有 ads_js_201_cldwdk_gx_v3(市场处_存量单位贷款_高新技术企业)、ads_rh_scc_bb_cldwdk_gx_v3 等一批明显更贴近的表。你希望 V1 的 Golden Domain 建在 ODS 还是 ADS 上？
+is_high_tech_mfg_loan_code：物理说「高技术制造业」，你的业务规则说「高新技术企业」——哪个对？ 这是你第 8 条回答「本来就不应该冲突，冲突就 clarify」的第一个实战样本。如果这类冲突源自 Semantic Model 写错，那它就不该走 clarify，而该走资产修正。我需要你确认：冲突的默认处理是"问用户"还是"标记为资产缺陷、阻断并报告"？
+这些冲突跟上面回答理解一样
+
+C. Trusted SQL 门槛
+在 data_type 全部 UNKNOWN 的现状下，你接受什么样的 Trusted SQL 定义？ 我倾向：表存在 + 字段存在 + 无危险操作 + 分区已限定 + 指标口径与已声明业务规则一致 = Trusted；类型相关的检查在 UNKNOWN 时降级为 advisory 而非 context_required。你认可吗？
+可以
+
+Generator 要不要拿 Metadata？ 我强烈建议要（按 Plan 命中的表注入字段清单）。但这会让 Generation Prompt 变大——build_metadata_context_text 现在是全表字段无裁剪 dump，ods_hd_100_cldkxx 有 33 个字段（含 10 个 backup），别的表可能上百。你接受我引入一个「按 Plan 裁剪字段」的机制吗？这算是新增模块，按规矩我先问。
+我觉得裁剪字段会不会使得元数据内容丢失呢？你可以做个判断
+
+Reviewer 的 context_required 要不要接 HITL？ 接的话，Reviewer 必须输出结构化 missing_context（当前 Schema 里没有这个字段，需要扩契约）。你确认要扩吗？
+扩
+
+D. 清理范围
+你第 29 条说「旧架构清理，只保留干净的新架构」——我按这个标准，standards/ 整包、旧 evaluation 三件套、旧 examples eval、根 cli.py、temp.md、handoff/、docs/ 是否全部删除？ 特别是 handoff/ 和 docs/ 里有 4 份互相矛盾的历史文档，我建议全删只留一份 ARCHITECTURE.md。你确认吗？
+把你觉得需要更新和清理的内容列个方案，哪些需要清理，怎么清理给我
+
+.pyc / .DS_Store / egg-info 需要从 Git 历史中移除（git rm --cached），这会产生一个大 commit。你接受吗？
+可以
+
+agent_metadata.db 你说长期提交 Git。 那我需要一个版本策略：每次 rebuild 都提交 7MB 二进制会让仓库快速膨胀。我的建议是保留提交，但配套 metadata_build_info 里记录源文件 hash + 构建时间，并约定「只在源 Excel 变化时重建」。你认可吗？
+可以
+
+E. 工作方式
+第一阶段你希望我先做哪个？
+(a) 先修 8 个红灯 + 建测试基础设施（1 轮，见效快，让 baseline 变绿）
+(b) 先做元数据事实层对齐（最根本，但需要你先回答 A 组问题）
+我的倾向是 (a) → (b)：先让 pytest -q 全绿，才有资格谈回归。
+先a后b
+
+你有没有能力提供一张表的真实 DESC 输出？ 只要一张（比如 ods_hd_100_cldkxx），我就能验证 Excel 与物理 Schema 的偏差程度，从而判断整个元数据资产是「需要补字段」还是「需要重建」。这是我现在最缺的一个 Runtime Reality。
+你觉得重要吗？重要的话我完全可以提供，excel基本就是最真实的，semantic是我编造的；
+
+我不仅仅希望你停留在这些方面，我希望你能够充分评价我的项目架构、技术路线和后续的实现情况，为我描述一份完整的技术文档，内容要充分，既要考虑到我自身对产品的需求和定义，也要跟进市场目前dataagent的技术路线，最好还能参考目前pi-agent、harness、claude code等agent的设计俩年。让我能够开展后续工作。
