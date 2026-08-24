@@ -74,7 +74,7 @@ def test_factory_enables_metadata_with_provider(
 
     monkeypatch.setattr(
         factory_module,
-        "build_workflow",
+        "build_sql_agent_workflow",
         fake_build_workflow,
     )
 

@@ -17,7 +17,7 @@ from sql_pilot_engine.llm.context_builder import (
 )
 from sql_pilot_engine.llm.fixer import LLMFixer
 from sql_pilot_engine.llm.review_prompts import (
-    build_rule_issues_text,
+    build_issues_text,
 )
 from sql_pilot_engine.services.review_service import (
     ReviewService,
@@ -40,11 +40,11 @@ class FixService:
         self,
         review_service: ReviewService,
         llm_client: BaseLLMClient | None = None,
-        analysis_adapater: SQLAnalysisAdapter | None = None,
+        analysis_adapter: SQLAnalysisAdapter | None = None,
     ) -> None:
         self.review_service = review_service
         self.llm_client = llm_client
-        self.analysis_adapater = analysis_adapater or SQLAnalysisAdapter()
+        self.analysis_adapter = analysis_adapter or SQLAnalysisAdapter()
 
     def fix(
         self,
@@ -76,7 +76,7 @@ class FixService:
             )
 
         analysis = (
-            self.analysis_adapater.analyze(
+            self.analysis_adapter.analyze(
                 sql=context.sql,
                 dialect=context.dialect,
             )
@@ -140,71 +140,76 @@ class FixService:
         analysis_context_text: str,
         metadata_context_text: str,
     ) -> FixedSqlResult:
-        auto_result = generate_fixed_sql(
-            sql=context.sql,
-            issues=review_result.issues,
-            metadata_provider=(
-                context.metadata_provider
-            ),
+
+        deterministic_result = (
+            generate_fixed_sql(
+                sql=context.sql,
+                issues=(
+                    review_result.issues
+                ),
+            )
         )
 
-        if context.fix_provider == "auto":
-            return auto_result
-
-        if context.fix_provider != "llm":
-            auto_result.manual_notes.append(
-                "AI_REVIEW_TODO: "
-                f"不支持的fix_provider="
-                f"{context.fix_provider}，"
-                "已回退到auto修复。"
+        if (
+            context.fix_provider
+            == "auto"
+        ):
+            return (
+                deterministic_result
             )
-            return auto_result
+
+        if (
+            context.fix_provider
+            != "llm"
+        ):
+            raise ValueError(
+                "Unsupported fix_provider: "
+                f"{context.fix_provider!r}"
+            )
 
         if self.llm_client is None:
-            auto_result.manual_notes.append(
-                "AI_REVIEW_TODO: "
-                "fix_provider=llm，"
-                "但未注入llm_client，"
-                "已回退到auto修复。"
+            raise RuntimeError(
+                "fix_provider='llm' "
+                "but no LLM client "
+                "is configured."
             )
-            return auto_result
 
-        rule_issues_text = build_rule_issues_text(
-            review_result.issues
+        review_issues_text = (
+            build_issues_text(
+                review_result.issues
+            )
         )
 
         if context.critic_feedback:
             feedback_text = "\n".join(
                 f"- {item}"
-                for item in context.critic_feedback
+                for item
+                in context.critic_feedback
             )
 
-            rule_issues_text += (
-                "\n\nCritic对上一轮修复的反馈：\n"
+            review_issues_text += (
+                "\n\n"
+                "## Critic Feedback\n"
                 f"{feedback_text}"
             )
 
-        try:
-            fixer = LLMFixer(
-                client=self.llm_client
-            )
+        fixer = LLMFixer(
+            client=self.llm_client
+        )
 
-            return fixer.fix(
-                original_sql=context.sql,
-                auto_fixed_sql=auto_result.fixed_sql,
-                rule_issues_text=rule_issues_text,
-                analysis_context_text=(
-                    analysis_context_text
-                ),
-                metadata_context_text=(
-                    metadata_context_text
-                ),
-            )
-
-        except Exception as error:
-            auto_result.manual_notes.append(
-                "AI_REVIEW_TODO: "
-                "LLM修复失败，已回退到auto修复。"
-                f"错误信息：{error}"
-            )
-            return auto_result
+        return fixer.fix(
+            original_sql=context.sql,
+            deterministic_pre_fix_sql=(
+                deterministic_result
+                .fixed_sql
+            ),
+            review_issues_text=(
+                review_issues_text
+            ),
+            analysis_context_text=(
+                analysis_context_text
+            ),
+            metadata_context_text=(
+                metadata_context_text
+            ),
+        )

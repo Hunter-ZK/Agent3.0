@@ -23,14 +23,14 @@ class LLMFixer:
     def fix(
         self,
         original_sql: str,
-        auto_fixed_sql: str,
+        deterministic_pre_fix_sql: str,
         rule_issues_text: str,
         analysis_context_text: str,
         metadata_context_text: str,
     ) -> FixedSqlResult:
         user_prompt = build_fix_user_prompt(
             original_sql=original_sql,
-            auto_fixed_sql=auto_fixed_sql,
+            deterministic_pre_fix_sql=deterministic_pre_fix_sql,
             rule_issues_text=rule_issues_text,
             analysis_context_text=analysis_context_text,
             metadata_context_text=metadata_context_text,

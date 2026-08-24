@@ -444,7 +444,15 @@ class QueryAgentGraph:
         state: QueryAgentState,
     ) -> dict:
 
-        validation = self.validation_workflow.run(state["generated_sql"])
+        validation = (
+            self.validation_workflow.run(
+                state["generated_sql"],
+                dialect=state.get(
+                    "dialect",
+                    "maxcompute",
+                ),
+            )
+        )
 
         return {
             "validation_result":(

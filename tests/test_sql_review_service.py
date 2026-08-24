@@ -2,8 +2,8 @@ from types import (
     SimpleNamespace,
 )
 
-from sql_pilot_engine.services.sql_review_contracts import (
-    SQLReviewRequest,
+from sql_pilot_engine.schemas.sql_review import (
+    SQLReviewInput,
 )
 from sql_pilot_engine.services.sql_review_service import (
     SQLReviewService,
@@ -61,6 +61,8 @@ def make_result(
     fix_response=None,
     re_review_response=None,
     error_message=None,
+    trusted_sql: str | None = None,
+    final_sql: str | None = None,
 ):
     return SimpleNamespace(
         success=success,
@@ -81,6 +83,12 @@ def make_result(
             "review",
         ],
         error_message=error_message,
+        trusted_sql=trusted_sql,
+        final_sql=(
+            final_sql
+            if final_sql is not None
+            else trusted_sql
+        ),
     )
 
 
@@ -103,7 +111,7 @@ def test_normal_sql_returns_trusted_sql():
     )
 
     result = service.review(
-        SQLReviewRequest(
+        SQLReviewInput(
             sql=sql
         )
     )
@@ -155,7 +163,7 @@ def test_blocked_sql_has_no_trusted_sql():
     )
 
     result = service.review(
-        SQLReviewRequest(
+        SQLReviewInput(
             sql=sql
         )
     )
@@ -220,7 +228,7 @@ def test_metadata_required_is_not_review_failed():
     )
 
     result = service.review(
-        SQLReviewRequest(
+        SQLReviewInput(
             sql=sql
         )
     )
@@ -287,7 +295,7 @@ def test_fixed_sql_becomes_trusted_sql():
     )
 
     result = service.review(
-        SQLReviewRequest(
+        SQLReviewInput(
             sql=original_sql
         )
     )
@@ -320,7 +328,7 @@ def test_internal_error_maps_to_review_failed():
     )
 
     result = service.review(
-        SQLReviewRequest(
+        SQLReviewInput(
             sql=(
                 "SELECT 1"
             )
@@ -376,7 +384,7 @@ def test_issue_is_projected_to_public_contract():
     )
 
     result = service.review(
-        SQLReviewRequest(
+        SQLReviewInput(
             sql=sql
         )
     )

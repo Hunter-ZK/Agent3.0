@@ -37,16 +37,16 @@ class LLMReviewer:
         self,
         sql: str,
         file_path: str,
-        rule_catalog_text: str,
-        rule_issues_text: str,
+        guardrail_catalog_text: str,
+        deterministic_issues_text: str,
         analysis_context_text: str = "",
         metadata_context_text: str = "",
     ) -> list[Issue]:
         user_prompt = build_user_prompt(
             sql=sql,
             file_path=file_path,
-            rule_catalog_text=rule_catalog_text,
-            rule_issues_text=rule_issues_text,
+            guardrail_catalog_text=guardrail_catalog_text,
+            deterministic_issues_text=deterministic_issues_text,
             analysis_context_text=analysis_context_text,
             metadata_context_text=metadata_context_text,
         )
@@ -143,7 +143,7 @@ class LLMReviewer:
             )
 
 
-        auto_fixable = bool(
+        auto_fixable = (
             item["auto_fixable"]
         )
 
@@ -157,6 +157,15 @@ class LLMReviewer:
                 "auto_fixable 必须为 true。"
             )
 
+        if (
+            action
+            != IssueAction.AUTO_FIX
+            and auto_fixable
+        ):
+            raise LLMResponseValidationError(
+                "只有 action=auto_fix 时 "
+                "auto_fixable 才能为 true。"
+            )
 
         return Issue(
             rule_id=rule_id,

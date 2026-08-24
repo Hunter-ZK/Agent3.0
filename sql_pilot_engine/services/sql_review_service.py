@@ -87,9 +87,9 @@ class SQLReviewService:
         )
 
         fix_applied = (
-            self._fix_applied(
-                workflow_result.fix_response
-            )
+            workflow_result.success
+            and workflow_result.final_status
+            == "fix_verified"
         )
 
         trusted_sql = (
@@ -246,6 +246,15 @@ class SQLReviewService:
                             )
                         )
                     ),
+                    action=(
+                        self._to_string(
+                            self._read_value(
+                                issue,
+                                "action",
+                                "human_review",
+                            )
+                        )
+                    ),
                     blocking=bool(
                         self._read_value(
                             issue,
@@ -304,113 +313,11 @@ class SQLReviewService:
 
         return None
 
-    @staticmethod
-    def _extract_fixed_sql(
-        response: Any,
-    ) -> str | None:
-        if response is None:
-            return None
-
-        # 第一种：
-        # response.fixed_sql
-        direct = getattr(
-            response,
-            "fixed_sql",
-            None,
-        )
-
-        if (
-            isinstance(
-                direct,
-                str,
-            )
-            and direct.strip()
-        ):
-            return direct
-
-        raw_result = getattr(
-            response,
-            "raw_result",
-            None,
-        )
-
-        if raw_result is None:
-            return None
-
-        # 第二种：
-        # raw_result.fixed_sql
-        raw_fixed = getattr(
-            raw_result,
-            "fixed_sql",
-            None,
-        )
-
-        if (
-            isinstance(
-                raw_fixed,
-                str,
-            )
-            and raw_fixed.strip()
-        ):
-            return raw_fixed
-
-        # 第三种：
-        # raw_result.fixed_sql_result
-        fixed_result = getattr(
-            raw_result,
-            "fixed_sql_result",
-            None,
-        )
-
-        if isinstance(
-            fixed_result,
-            str,
-        ):
-            if fixed_result.strip():
-                return fixed_result
-
-            return None
-
-        if fixed_result is not None:
-            for name in (
-                "fixed_sql",
-                "sql",
-            ):
-                value = getattr(
-                    fixed_result,
-                    name,
-                    None,
-                )
-
-                if (
-                    isinstance(
-                        value,
-                        str,
-                    )
-                    and value.strip()
-                ):
-                    return value
-
-        return None
 
     # ========================================================
     # Fix / Risk
     # ========================================================
 
-    @staticmethod
-    def _fix_applied(
-        fix_response: Any,
-    ) -> bool:
-        if fix_response is None:
-            return False
-
-        return bool(
-            getattr(
-                fix_response,
-                "success",
-                False,
-            )
-        )
 
     def _extract_risk_level(
         self,

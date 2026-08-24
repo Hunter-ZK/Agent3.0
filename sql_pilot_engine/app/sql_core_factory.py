@@ -97,7 +97,6 @@ def build_sql_pilot_engine(
         ),
         metadata_provider_factory=(
             metadata_provider_factory
-            or MockMetadataProvider
         ),
     )
 
@@ -105,28 +104,39 @@ def build_sql_pilot_engine(
 def build_sql_agent_workflow(
     max_retries: int = 1,
     *,
-    metadata_provider_factory: (
-        Callable[
-            [],
-            MetadataProvider,
-        ]
-        | None
-    ) = None,
-    default_enable_metadata: bool = True,
+    metadata_provider_factory=None,
+    default_enable_metadata: bool = False,
     enable_llm: bool = True,
     llm_provider: str = "deepseek",
 ) -> SQLAgentWorkflow:
+
+    engine = build_sql_pilot_engine(
+        enable_llm=enable_llm,
+        llm_provider=llm_provider,
+        metadata_provider_factory=(
+            metadata_provider_factory
+        ),
+    )
+
     return SQLAgentWorkflow(
-        engine=build_sql_pilot_engine(
-            enable_llm=enable_llm,
-            llm_provider=llm_provider,
-            metadata_provider_factory=(
-                metadata_provider_factory
-            ),
+        engine=engine,
+        critic_service=(
+            CriticService()
         ),
         max_retries=max_retries,
         default_enable_metadata=(
             default_enable_metadata
+        ),
+        default_enable_llm=(
+            enable_llm
+        ),
+        default_llm_provider=(
+            llm_provider
+        ),
+        default_fix_provider=(
+            "llm"
+            if enable_llm
+            else "auto"
         ),
     )
 

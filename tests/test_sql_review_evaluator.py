@@ -4,11 +4,10 @@ from sql_pilot_engine.evaluation.sql_review_cases import (
 from sql_pilot_engine.evaluation.sql_review_evaluator import (
     SQLReviewEvaluator,
 )
-from sql_pilot_engine.services.sql_review_contracts import (
+from sql_pilot_engine.schemas.sql_review import (
     SQLReviewIssue,
     SQLReviewResult,
 )
-
 
 def make_result(
     *,
@@ -112,6 +111,7 @@ def test_evaluator_checks_rule_id():
         severity="high",
         message="table missing",
         suggestion=None,
+        action="block",
         blocking=True,
         auto_fixable=False,
     )

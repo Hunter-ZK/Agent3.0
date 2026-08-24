@@ -105,8 +105,10 @@ class SQLAgentWorkflow:
     def run(
         self,
         sql: str,
-        file_path: str = "",
+        file_path: str = "<memory>",
         *,
+        mode: str = "prod",
+        dialect: str = "maxcompute",
         categories: set[str] | None = None,
         enable_metadata: bool | None = None,
         enable_llm: bool | None = None,
@@ -164,6 +166,8 @@ class SQLAgentWorkflow:
                     enable_llm=enable_llm,
                     llm_provider=llm_provider,
                     trace_id=trace_id,
+                    mode=mode,
+                    dialect=dialect,
                 )
             )
 
@@ -186,6 +190,8 @@ class SQLAgentWorkflow:
                 enable_llm=enable_llm,
                 llm_provider=llm_provider,
                 trace_id=trace_id,
+                mode=mode,
+                dialect=dialect,
             )
         )
 
@@ -269,6 +275,8 @@ class SQLAgentWorkflow:
                     trace_id=trace_id,
                     retry_count=attempt,
                     critic_feedback=critic_feedback,
+                    mode=mode,
+                    dialect=dialect,
                 ),
                 prior_review=(
                     current_review_response
@@ -299,6 +307,8 @@ class SQLAgentWorkflow:
                             enable_llm=enable_llm,
                             llm_provider=llm_provider,
                             trace_id=trace_id,
+                            mode=mode,
+                            dialect=dialect,
                         )
                     )
                 )
@@ -323,6 +333,8 @@ class SQLAgentWorkflow:
                         re_review_response
                     ),
                     trace_id=trace_id,
+                    mode=mode,
+                    dialect=dialect,
                 )
             )
 

@@ -9,8 +9,8 @@ from sql_pilot_engine.evaluation.sql_review_evaluator import (
     SQLReviewCaseEvaluation,
     SQLReviewEvaluator,
 )
-from sql_pilot_engine.services.sql_review_contracts import (
-    SQLReviewRequest,
+from sql_pilot_engine.schemas.sql_review import (
+    SQLReviewInput,
 )
 from sql_pilot_engine.services.sql_review_service import (
     SQLReviewService,
@@ -66,7 +66,7 @@ class SQLReviewEvaluationRunner:
 
             result = (
                 self._service.review(
-                    SQLReviewRequest(
+                    SQLReviewInput(
                         sql=case.sql
                     )
                 )

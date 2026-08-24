@@ -4,37 +4,38 @@ from sql_pilot_engine.core.context import (
 from sql_pilot_engine.core.models import (
     Issue,
 )
+from sql_pilot_engine.rules.base import (
+    Rule,
+)
+from sql_pilot_engine.rules.maxcompute import (
+    MAXCOMPUTE_RULES,
+)
 from sql_pilot_engine.rules.safety import (
     SAFETY_RULES,
 )
 
-from sql_pilot_engine.rules.maxcompute import (
-    MAXCOMPUTE_RULES,
-)
 
 class RuleRegistry:
-    """规则注册表。"""
+    """确定性 SQL Guardrail 注册表。"""
 
     def __init__(self) -> None:
-        self.rules = [
-            *SAFETY_RULES,
-            *MAXCOMPUTE_RULES,
-        ]
+        self.rules: dict[
+            str,
+            Rule,
+        ] = {}
+
         self.register_many(
-            BASIC_RULES
+            SAFETY_RULES
         )
+
         self.register_many(
             MAXCOMPUTE_RULES
-        )
-        self.register_many(
-            METADATA_RULES
         )
 
     def register(
         self,
         rule: Rule,
     ) -> None:
-
         self.rules[
             rule.rule_id
         ] = rule
@@ -45,7 +46,9 @@ class RuleRegistry:
     ) -> None:
 
         for rule in rules:
-            self.register(rule)
+            self.register(
+                rule
+            )
 
     def list_rules(
         self,
@@ -97,6 +100,12 @@ class RuleRegistry:
     def build_catalog_text(
         self,
     ) -> str:
+        """提供给 LLM 的系统硬边界，不是完整 Review Checklist。"""
+
+        if not self.rules:
+            return (
+                "当前没有额外确定性 Guardrail。"
+            )
 
         lines: list[str] = []
 

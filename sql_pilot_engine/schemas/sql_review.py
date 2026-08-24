@@ -30,21 +30,18 @@ class SQLReviewInput:
     slots=True,
 )
 class SQLReviewIssue:
-    """
-    面向 Capability 调用方的精简 Issue。
-
-    Validation Domain 内部的 Issue 仍然保留更多
-    routing / metadata / source 等内部字段。
-    """
-
     rule_id: str
     severity: str
     message: str
     suggestion: str | None
 
-    blocking: bool
-    auto_fixable: bool
+    action: str
 
+    # 外部便利字段，由 action 派生，
+    # 不是第二事实源。
+    blocking: bool
+
+    auto_fixable: bool
 
 @dataclass(
     frozen=True,

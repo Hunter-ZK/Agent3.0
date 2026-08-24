@@ -68,21 +68,22 @@ FIX_REPAIR_SYSTEM_PROMPT = """
 5. manual_notes 必须是字符串数组。
 """.strip()
 
-
 def build_fix_user_prompt(
+    *,
     original_sql: str,
-    auto_fixed_sql: str,
-    rule_issues_text: str,
+    deterministic_pre_fix_sql: str,
+    review_issues_text: str,
     analysis_context_text: str,
     metadata_context_text: str,
 ) -> str:
 
     return f"""
-请根据以下完整 Context 生成 Candidate SQL。
+请基于完整 Review Context
+生成完整 Candidate SQL。
 
 ## Review Issues
 
-{rule_issues_text}
+{review_issues_text}
 
 ## SQL Analysis
 
@@ -99,11 +100,15 @@ def build_fix_user_prompt(
 
 ## 确定性预修复 SQL
 ```sql
-{auto_fixed_sql}
+{deterministic_pre_fix_sql}
 
-请输出完整 fixed_sql。
-不要只输出修改片段。
-不要无依据创造业务规则。
+要求：
+
+输出完整 fixed_sql，不要只输出修改片段。
+确定性预修复 SQL 只是参考，不是权威答案。
+可以执行 Python Rule 没有覆盖的合理修复。
+不得无依据创造表、字段、JOIN、指标、日期、分区值和业务口径。
+Context 不足时不要猜，把需要确认的内容放入 manual_notes。
 """.strip()
 
 def build_fix_repair_prompt(raw_result: dict[str, Any], error_message: str) -> str:

@@ -264,12 +264,27 @@ class SQLPilotEngine:
                 )
             )
 
-    def _resolve_metadata_provider(self, context: SQLExecutionContext):
-        if context.metadata_provider is not None:
-            return context.metadata_provider
-        if not context.enable_metadata:
+    def _resolve_metadata_provider(
+        self,
+        *,
+        enable_metadata: bool,
+    ):
+        if not enable_metadata:
             return None
-        return self.metadata_provider_factory()
+
+        if (
+            self.metadata_provider_factory
+            is None
+        ):
+            raise RuntimeError(
+                "Metadata validation is enabled "
+                "but no metadata_provider_factory "
+                "is configured."
+            )
+
+        return (
+            self.metadata_provider_factory()
+        )
 
     @staticmethod
     def _build_execution_context(

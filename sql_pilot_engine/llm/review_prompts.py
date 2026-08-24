@@ -1,30 +1,50 @@
-# sql_review_agent/llm/prompts.py
 
 import json
-from typing import Any
 
-from sql_pilot_engine.core.models import Issue
+from sql_pilot_engine.core.models import (
+    Issue,
+)
+
 
 LLM_REVIEW_JSON_SCHEMA = {
     "name": "sql_review_result",
     "schema": {
         "type": "object",
-        "additionalProperties": False,
         "properties": {
             "issues": {
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "additionalProperties": False,
                     "properties": {
-                        "rule_id": {"type": "string"},
-                        "title": {"type": "string"},
-                        "severity": {"type": "string"},
-                        "message": {"type": "string"},
-                        "suggestion": {"type": "string"},
-                        "evidence": {"type": "string"},
-                        "category": {"type": "string"},
-                        "confidence": {"type": "number"},
+                        "rule_id": {
+                            "type": "string",
+                        },
+                        "title": {
+                            "type": "string",
+                        },
+                        "severity": {
+                            "type": "string",
+                            "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                            ],
+                        },
+                        "message": {
+                            "type": "string",
+                        },
+                        "suggestion": {
+                            "type": "string",
+                        },
+                        "evidence": {
+                            "type": "string",
+                        },
+                        "category": {
+                            "type": "string",
+                        },
+                        "confidence": {
+                            "type": "number",
+                        },
                         "action": {
                             "type": "string",
                             "enum": [
@@ -38,179 +58,196 @@ LLM_REVIEW_JSON_SCHEMA = {
                             "type": "boolean",
                         },
                     },
-                "required": [
-                    "rule_id",
-                    "title",
-                    "severity",
-                    "message",
-                    "suggestion",
-                    "evidence",
-                    "category",
-                    "confidence",
-                    "action",
-                    "auto_fixable",
+                    "required": [
+                        "rule_id",
+                        "title",
+                        "severity",
+                        "message",
+                        "suggestion",
+                        "evidence",
+                        "category",
+                        "confidence",
+                        "action",
+                        "auto_fixable",
                     ],
+                    "additionalProperties": False,
                 },
             }
         },
-        "required": ["issues"],
+        "required": [
+            "issues"
+        ],
+        "additionalProperties": False,
     },
 }
 
+
 SYSTEM_PROMPT = """
-你是 SQL Review 的主要智能审查器。
+你是 Agent3.0 的 SQL 智能审查器。
 
-Deterministic Guardrails 与 MetadataValidator
-已经负责能够确定判断的硬事实。
+系统已经使用 SQLGlot、确定性 Guardrails
+和 MetadataValidator 处理能够明确判断的硬事实。
 
-你的职责是处理需要 SQL 理解和上下文推理的问题，包括但不限于：
+你的主要职责是处理需要 SQL 理解、业务语义
+和上下文推理的问题。
 
-- JOIN 语义与重复放大风险
-- 聚合口径
+重点关注但不限于：
+
+- JOIN 语义与数据放大风险
+- 聚合粒度与指标口径
 - NULL 处理
-- 过滤逻辑
-- 日期和调度语义
+- 过滤条件合理性
+- 日期与调度语义
 - 分区使用合理性
 - 数据粒度
-- 业务语义一致性
-- SQL 可维护性
-- 潜在性能问题
+- SQL 业务语义一致性
+- 可维护性
+- 性能风险
 
-不要因为没有对应的 Python Rule 就忽略问题。
-也不要为了发现问题而强行制造问题。
+不要因为没有对应 Python Rule 就忽略问题。
+也不要为了发现问题而制造问题。
 
-action：
+action 只能是：
 
 advisory
-= 有建议，但 SQL 仍可信。
+= 有价值的建议，但当前 SQL 仍可以可信。
 
 auto_fix
-= 当前信息充分，可以自动修改。
+= 当前上下文已经足够，可以安全自动修改。
 
 context_required
-= 缺少业务或环境信息，不能猜。
+= 缺少必要上下文，不能猜。
 
 human_review
-= 有实质性风险，但不能安全自动处理。
+= 存在实质风险，但当前无法安全自动修复。
 
 禁止输出 block。
-BLOCK 由 Deterministic Guardrails 决定。
+BLOCK 只允许由确定性安全边界产生。
 
 禁止编造：
-- 表
-- 字段
+
+- 不存在的表
+- 不存在的字段
 - JOIN 关系
-- 指标口径
+- 指标定义
 - 日期规则
 - 分区值
+- 业务口径
+
+只返回符合 Schema 的 JSON object。
 """.strip()
 
+
 REPAIR_SYSTEM_PROMPT = """
-你是一个 json schema 修复器。
+你负责修复上一轮 SQL Review JSON。
 
-你的任务：把上一次 LLM 返回的 json 修复为严格符合目标 schema 的 json。
+只修复 JSON Contract，
+不要重新执行 SQL Review。
 
-目标 schema：
+最终只能返回：
+
 {
   "issues": [
     {
-        "rule_id": "LLM_EXAMPLE_RULE",
-        "title": "问题标题",
-        "severity": "medium",
-        "message": "问题说明",
-        "suggestion": "修改建议",
-        "evidence": "SQL 证据",
-        "category": "semantic",
-        "confidence": 0.7,
-        "action": {
-            "type": "string",
-            "enum": [
-                "advisory",
-                "auto_fix",
-                "context_required",
-                "human_review",
-            ],
-        },
-        "auto_fixable": {
-            "type": "boolean",
-        },
+      "rule_id": "LLM_EXAMPLE",
+      "title": "问题标题",
+      "severity": "medium",
+      "message": "问题说明",
+      "suggestion": "修改建议",
+      "evidence": "证据",
+      "category": "semantic",
+      "confidence": 0.8,
+      "action": "advisory",
+      "auto_fixable": false
     }
   ]
 }
 
-强制要求：
-1. 只输出 json。
-2. 根对象必须只有 issues 字段。
-3. 每个 issue 必须包含且只能包含：rule_id, title, severity, message, suggestion, evidence, category, confidence。
-4. 如果原始内容中有 description，请改名为 message。
-5. 如果缺少 title，请根据 rule_id 生成简短中文标题。
-6. 如果缺少 evidence，请根据内容填 "LLM semantic review"。
-7. 如果缺少 category，请填 "semantic"。
-8. rule_id 必须以 LLM_ 开头。
-9. severity 只能是 low、medium、high。
-10. confidence 必须是 0 到 1 的数字。
+禁止增加其他字段。
 """.strip()
 
 
-def build_rule_issues_text(issues: list[Issue]) -> str:
-    if not issues:
-        return "规则引擎未发现明显问题。"
+def build_issues_text(
+    issues: list[Issue],
+) -> str:
 
-    lines: list[str] = []
-    for index, issue in enumerate(issues, start=1):
-        lines.append(f"{index}. Rule ID: {issue.rule_id}")
-        lines.append(f"   Title: {issue.title}")
-        lines.append(f"   Severity: {issue.severity.value}")
-        lines.append(f"   Category: {issue.category}")
-        lines.append(f"   Message: {issue.message}")
-        lines.append(f"   Suggestion: {issue.suggestion}")
-        lines.append(f"   Evidence: {issue.evidence}")
-        lines.append("")
-    return "\n".join(lines)
+    if not issues:
+        return "无确定性问题。"
+
+    return json.dumps(
+        [
+            issue.to_dict()
+            for issue
+            in issues
+        ],
+        ensure_ascii=False,
+        indent=2,
+    )
 
 
 def build_user_prompt(
+    *,
     sql: str,
     file_path: str,
-    rule_catalog_text: str,
-    rule_issues_text: str,
+    guardrail_catalog_text: str,
+    deterministic_issues_text: str,
     analysis_context_text: str = "",
     metadata_context_text: str = "",
 ) -> str:
-    return f"""
-请审查以下 MaxCompute / DataWorks SQL，并只输出 json。
 
-文件路径：
+    return f"""
+请审查以下 SQL。
+
+## 文件路径
+
 {file_path}
 
-## 系统硬性规则目录
-{rule_catalog_text}
+## Deterministic Guardrails
 
-## 规则引擎已发现问题
-{rule_issues_text}
+{guardrail_catalog_text}
 
-## SQL 结构分析上下文
+## 已发现的确定性问题
+
+{deterministic_issues_text}
+
+## SQL Analysis / SQLFacts
+
 {analysis_context_text or "未提供。"}
 
-## 元数据上下文
+## Metadata Context
+
 {metadata_context_text or "未提供。"}
 
-## SQL 原文
+## SQL
+
 ```sql
 {sql}
-```
+请基于完整上下文独立执行智能 Review，
+并严格输出 JSON。
 """.strip()
 
 
-def build_repair_prompt(raw_result: dict[str, Any], error_message: str) -> str:
-    return f"""
-上一次返回的 json 没有通过系统校验。
+def build_repair_prompt(
+    *,
+    raw_result: dict,
+    error_message: str,
+    ) -> str:
 
-校验错误：
+    return f"""
+
+上一轮 JSON 不符合 Contract。
+
+Validation Error
+
 {error_message}
 
-请把下面这个 json 修复成严格符合目标 schema 的 json。
+Raw Result
 
-原始 json：
-{json.dumps(raw_result, ensure_ascii=False, indent=2)}
+{json.dumps(
+raw_result,
+ensure_ascii=False,
+indent=2,
+)}
+
+请只修复 JSON 结构。
 """.strip()

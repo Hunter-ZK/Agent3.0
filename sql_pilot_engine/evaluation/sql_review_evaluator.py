@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from sql_pilot_engine.evaluation.sql_review_cases import (
     SQLReviewGoldenCase,
 )
-from sql_pilot_engine.services.sql_review_contracts import (
+from sql_pilot_engine.schemas.sql_review import (
     SQLReviewResult,
 )
 

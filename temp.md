@@ -4181,3 +4181,7 @@ data_type
 2. rules/basic这个文件我觉得有点不合适，跟我之前的理念一样，就是难道我需要去列举各种情况来复核代码吗，还是可以调用llm去完成呢？
 3. llm文件里单独的prompts文件命名呢？请你确认下文件内容和命名
 4. 为什么又有sql_review_service和review_service,请你检查
+
+
+1. 为什么在def build_text_to_sql_service(新增这两个参数，很奇怪
+2. 

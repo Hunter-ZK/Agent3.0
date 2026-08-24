@@ -11,19 +11,35 @@ def count_by_severity(issues: list[Issue]) -> dict[str, int]:
     return counts
 
 
-def build_overall_conclusion(result: ReviewResult) -> str:
-    counts = count_by_severity(result.issues)
-    high_count = counts[Severity.HIGH.value]
-    medium_count = counts[Severity.MEDIUM.value]
-    low_count = counts[Severity.LOW.value]
+def build_overall_conclusion(
+    result: ReviewResult,
+) -> str:
 
-    if high_count > 0:
-        return f"该 SQL 存在 {high_count} 个高风险问题、{medium_count} 个中风险问题、{low_count} 个低风险问题，不建议直接发布到生产环境。"
-    if medium_count > 0:
-        return f"该 SQL 存在 {medium_count} 个中风险问题、{low_count} 个低风险问题，建议修复后再发布。"
-    if low_count > 0:
-        return f"该 SQL 存在 {low_count} 个低风险提示，整体风险较低，但建议确认后再发布。"
-    return "该 SQL 未发现明显风险。"
+    blocking_issues = [
+        issue
+        for issue
+        in result.issues
+        if issue.blocking
+    ]
+
+    if blocking_issues:
+        return (
+            "该 SQL 仍存在 "
+            f"{len(blocking_issues)} "
+            "个 Trust Gate 问题，"
+            "当前不能进入 Trusted 状态。"
+        )
+
+    if result.issues:
+        return (
+            "该 SQL 未发现阻断性问题，"
+            f"当前保留 {len(result.issues)} "
+            "条非阻断建议。"
+        )
+
+    return (
+        "该 SQL 未发现明显问题。"
+    )
 
 
 def select_top_risks(issues: list[Issue], limit: int = 5) -> list[Issue]:

@@ -109,6 +109,12 @@ def build_text_to_sql_service(
     max_semantic_retries: int = 1,
 
     max_clarification_rounds: int = 3,
+    
+    sql_review_enable_llm: bool = True,
+    sql_review_llm_provider: str = (
+        "deepseek"
+    ),
+    
 ) -> TextToSQLService:
     """
     Text-to-SQL Composition Root。
@@ -245,8 +251,15 @@ def build_text_to_sql_service(
                 metadata_provider_factory
             ),
             default_enable_metadata=(
-                metadata_provider_factory is not None
-            )
+                metadata_provider_factory
+                is not None
+            ),
+            enable_llm=(
+                sql_review_enable_llm
+            ),
+            llm_provider=(
+                sql_review_llm_provider
+            ),
         )
     )
 
