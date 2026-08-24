@@ -55,26 +55,34 @@ def decide_review_route(
         raise ValueError(
             "Cannot route a failed review response."
         )
-        
+
+    NON_BLOCKING_ACTIONS = {
+        IssueAction.ADVISORY.value,
+        IssueAction.IGNORE.value,
+    }
+
     actionable_issues = [
-        issue 
+        issue
         for issue in response.issues
         if _read_action(issue)
-        != IssueAction.IGNORE.value
+        not in NON_BLOCKING_ACTIONS
     ]
     
     if not actionable_issues:
+        if response.issue_count == 0:
+            final_status = "no_issue"
+            reason = "No issues were found."
+        else:
+            final_status = "trusted_with_advisories"
+            reason = (
+                "Only non-blocking advisory issues remain."
+            )
+
         return ReviewRouteDecision(
             route=ReviewRoute.COMPLETE,
-            reason=(
-                "No actionable issues remain."
-            ),
+            reason=reason,
             actionable_issue_count=0,
-            final_status=(
-                "no_issue"
-                if response.issue_count == 0
-                else "ignored_issues"
-            ),
+            final_status=final_status,
         )
 
     if any(

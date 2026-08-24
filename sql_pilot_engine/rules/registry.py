@@ -4,29 +4,22 @@ from sql_pilot_engine.core.context import (
 from sql_pilot_engine.core.models import (
     Issue,
 )
-from sql_pilot_engine.rules.base import (
-    Rule,
+from sql_pilot_engine.rules.safety import (
+    SAFETY_RULES,
 )
-from sql_pilot_engine.rules.basic import (
-    BASIC_RULES,
-)
+
 from sql_pilot_engine.rules.maxcompute import (
     MAXCOMPUTE_RULES,
 )
-from sql_pilot_engine.rules.metadata import (
-    METADATA_RULES,
-)
-
 
 class RuleRegistry:
     """规则注册表。"""
 
     def __init__(self) -> None:
-        self.rules: dict[
-            str,
-            Rule,
-        ] = {}
-
+        self.rules = [
+            *SAFETY_RULES,
+            *MAXCOMPUTE_RULES,
+        ]
         self.register_many(
             BASIC_RULES
         )

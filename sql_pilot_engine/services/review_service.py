@@ -6,7 +6,7 @@ from sql_pilot_engine.core.models import Issue, ReviewResult
 from sql_pilot_engine.llm.clients import BaseLLMClient
 from sql_pilot_engine.llm.context_builder import build_analysis_context_text, build_metadata_context_text
 from sql_pilot_engine.llm.errors import LLMAPIError, LLMError, LLMResponseParseError, LLMResponseValidationError
-from sql_pilot_engine.llm.prompts import build_rule_issues_text
+from sql_pilot_engine.llm.review_prompts import build_rule_issues_text
 from sql_pilot_engine.llm.reviewer import LLMReviewer
 from sql_pilot_engine.rules.registry import RuleRegistry
 from sql_pilot_engine.core.execution_context import SQLExecutionContext

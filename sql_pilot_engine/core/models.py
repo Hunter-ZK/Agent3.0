@@ -28,6 +28,7 @@ class Issue:
     auto_fixable: bool = False
     requires_metadata: bool = False
     requires_knowledge: bool = False
+    blocking: bool = False
 
     metadata: dict = field(default_factory=dict)
 
@@ -40,16 +41,16 @@ class Issue:
 
         return data
 
-@property
-def blocking(self) -> bool:
-    """该 Issue 是否阻止当前 SQL 直接成为 Trusted SQL。"""
+    @property
+    def is_trust_blocking(self) -> bool:
+        """Whether this issue prevents SQL from becoming trusted."""
 
-    return self.action in {
-        IssueAction.AUTO_FIX,
-        IssueAction.CONTEXT_REQUIRED,
-        IssueAction.HUMAN_REVIEW,
-        IssueAction.BLOCK,
-    }
+        return self.action in {
+            IssueAction.AUTO_FIX,
+            IssueAction.CONTEXT_REQUIRED,
+            IssueAction.HUMAN_REVIEW,
+            IssueAction.BLOCK,
+        }
 
 @dataclass
 class FixSuggestion:

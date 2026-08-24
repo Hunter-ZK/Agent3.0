@@ -16,7 +16,7 @@ from sql_pilot_engine.llm.context_builder import (
     build_metadata_context_text,
 )
 from sql_pilot_engine.llm.fixer import LLMFixer
-from sql_pilot_engine.llm.prompts import (
+from sql_pilot_engine.llm.review_prompts import (
     build_rule_issues_text,
 )
 from sql_pilot_engine.services.review_service import (

@@ -6,7 +6,7 @@ from sql_pilot_engine.core.enums import IssueSource, Severity, IssueAction
 from sql_pilot_engine.core.models import Issue
 from sql_pilot_engine.llm.clients import BaseLLMClient
 from sql_pilot_engine.llm.errors import LLMResponseValidationError
-from sql_pilot_engine.llm.prompts import (
+from sql_pilot_engine.llm.review_prompts import (
     LLM_REVIEW_JSON_SCHEMA,
     REPAIR_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
