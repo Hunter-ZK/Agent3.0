@@ -1,14 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import (
-    Iterable,
-    Callable,
-)
+from collections.abc import Iterable
 from pathlib import Path
-
-from sql_pilot_engine.app.sql_core_factory import (
-    build_sql_agent_workflow,
-)
 
 from sql_pilot_engine.context.builder import (
     QueryContextBuilder,
@@ -67,12 +60,10 @@ from sql_pilot_engine.capabilities.text_to_sql import (
     TextToSQLCapability,
 )
 
-from sql_pilot_engine.metadata.provider import (
-    MetadataProvider,
-)
 from sql_pilot_engine.workflow.sql_agent_workflow import (
     SQLAgentWorkflow,
 )
+
 
 def build_text_to_sql_capability(
     *,
@@ -82,16 +73,15 @@ def build_text_to_sql_capability(
         ContextDocument
     ],
 
-    metadata_provider_factory: (
-        Callable[
-            [],
-            MetadataProvider,
-        ] | None
-    ) = None,
-
     planner_model: TextGenerationModel,
 
     sql_model: TextGenerationModel,
+
+    validation_workflow: SQLAgentWorkflow,
+
+    context_builder: (
+        QueryContextBuilder | None
+    ) = None,
 
     semantic_validator_model: (
         TextGenerationModel | None
@@ -107,27 +97,24 @@ def build_text_to_sql_capability(
 
     embedding_dimensions: int = 128,
 
-    max_sql_retries: int = 0,
-
     max_semantic_retries: int = 1,
 
     max_clarification_rounds: int = 3,
-    
-    validation_workflow: (
-        SQLAgentWorkflow | None
-    ) = None,
-    
-    
+
 ) -> TextToSQLCapability:
     """
     Text-to-SQL Composition Root。
 
-    这个函数只负责：
-    创建组件
-    → 组装 QueryAgentGraph
-    → 用 TextToSQLCapability 包装 Application API
+    只负责：
 
-    不执行任何业务流程。
+    Context Infrastructure
+    → Planner
+    → Generator
+    → QueryAgentGraph
+    → TextToSQLCapability
+
+    SQL Core / Metadata / Trusted SQL Workflow
+    由调用方提前组装后注入。
     """
 
     # ========================================================
@@ -138,12 +125,6 @@ def build_text_to_sql_capability(
         raise ValueError(
             "embedding_dimensions "
             "must be greater than 0"
-        )
-
-    if max_sql_retries < 0:
-        raise ValueError(
-            "max_sql_retries "
-            "must be >= 0"
         )
 
     if max_semantic_retries < 0:
@@ -198,8 +179,10 @@ def build_text_to_sql_capability(
         )
     )
 
-    context_builder = (
-        QueryContextBuilder()
+    active_context_builder = (
+        context_builder
+        if context_builder is not None
+        else QueryContextBuilder()
     )
 
     # ========================================================
@@ -228,7 +211,7 @@ def build_text_to_sql_capability(
     )
 
     # ========================================================
-    # Validation
+    # Semantic Validation
     # ========================================================
 
     semantic_validator = None
@@ -242,22 +225,6 @@ def build_text_to_sql_capability(
                 model=(
                     semantic_validator_model
                 )
-            )
-        )
-
-    if validation_workflow is None:
-        validation_workflow = (
-            build_sql_agent_workflow(
-                max_retries=(
-                    max_sql_retries
-                ),
-                metadata_provider_factory=(
-                    metadata_provider_factory
-                ),
-                default_enable_metadata=(
-                    metadata_provider_factory
-                    is not None
-                ),
             )
         )
 
@@ -283,7 +250,7 @@ def build_text_to_sql_capability(
         ),
 
         context_builder=(
-            context_builder
+            active_context_builder
         ),
 
         planner=planner,
@@ -312,10 +279,6 @@ def build_text_to_sql_capability(
             max_clarification_rounds
         ),
     )
-
-    # ========================================================
-    # Application Facade
-    # ========================================================
 
     return TextToSQLCapability(
         graph=graph

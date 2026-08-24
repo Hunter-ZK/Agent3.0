@@ -9,6 +9,9 @@ from sql_pilot_engine.metadata.models import (
 from sql_pilot_engine.metadata.provider import (
     MetadataProvider,
 )
+from sql_pilot_engine.context.builder import (
+    QueryContext,
+)
 
 
 def build_analysis_context_text(
@@ -398,4 +401,63 @@ def build_metadata_context_text(
 
     return "\n".join(
         lines
+    )
+
+def build_query_context_text(
+    query_context: QueryContext | None,
+) -> str:
+    """
+    将已有 QueryContext 渲染为 LLM 可读文本。
+
+    不执行 Retrieval。
+    不重建 Semantic Model。
+    不修改 QueryContext。
+    """
+
+    if query_context is None:
+        return "未提供。"
+
+    sections: list[str] = []
+
+    sections.append(
+        "## User Question\n"
+        f"{query_context.question}"
+    )
+
+    if query_context.semantic_context:
+        sections.append(
+            "## Semantic Knowledge\n"
+            f"{query_context.semantic_context}"
+        )
+
+    if query_context.business_knowledge:
+        sections.append(
+            "## Business Knowledge\n"
+            + "\n\n".join(
+                item.document.text
+                for item
+                in query_context.business_knowledge
+            )
+        )
+
+    if query_context.verified_sql:
+        sections.append(
+            "## Verified SQL Knowledge\n"
+            + "\n\n".join(
+                item.document.text
+                for item
+                in query_context.verified_sql
+            )
+        )
+
+    if query_context.session_context:
+        sections.append(
+            "## Session Context\n"
+            + "\n\n".join(
+                query_context.session_context
+            )
+        )
+
+    return "\n\n".join(
+        sections
     )

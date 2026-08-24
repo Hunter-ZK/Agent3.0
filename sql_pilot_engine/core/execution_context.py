@@ -1,25 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from sql_pilot_engine.context.builder import (
+        QueryContext,
+    )
 
 
 @dataclass
 class SQLExecutionContext:
     """
-    SQL Core 内部一次执行的共享上下文。
+    SQL Core 内部一次执行的共享运行上下文。
 
-    Request:
-        外部接口 DTO
+    注意：
+    QueryContext 是当前用户任务的业务上下文；
+    SQLExecutionContext 是 SQL Core 的执行参数容器。
 
-    SQLExecutionContext:
-        Engine 进入内部 Service 后使用的执行上下文
-
-    Response:
-        外部返回 DTO
-
-    Core 不认识任何具体 Request 类型。
+    SQLExecutionContext 不重新生成 QueryContext，
+    只保存上游传入的同一个对象引用。
     """
 
     sql: str
@@ -39,6 +40,8 @@ class SQLExecutionContext:
     enable_llm: bool = False
 
     llm_provider: str = "mock"
+
+    query_context: QueryContext | None = None
 
     fix_sql: bool = False
 

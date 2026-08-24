@@ -1,8 +1,11 @@
 # sql_review_agent/schemas/requests.py
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
+from sql_pilot_engine.context.builder import (
+        QueryContext,
+    )
 
 @dataclass
 class SQLReviewRequest:
@@ -22,6 +25,7 @@ class SQLReviewRequest:
     llm_provider: str = "mock"
     metadata_provider: Any | None = None
     trace_id: str | None = None
+    query_context: QueryContext | None = None
 
 
 @dataclass

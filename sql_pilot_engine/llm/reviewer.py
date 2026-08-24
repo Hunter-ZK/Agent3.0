@@ -22,6 +22,9 @@ from sql_pilot_engine.llm.review_prompts import (
     build_repair_prompt,
     build_user_prompt,
 )
+from sql_pilot_engine.context.builder import (
+    QueryContext,
+)
 
 import logging
 
@@ -113,6 +116,7 @@ class LLMReviewer:
         deterministic_issues_text: str,
         analysis_context_text: str = "",
         metadata_context_text: str = "",
+        query_context: QueryContext| None = None,
     ) -> list[Issue]:
 
         user_prompt = build_user_prompt(
@@ -130,6 +134,7 @@ class LLMReviewer:
             metadata_context_text=(
                 metadata_context_text
             ),
+            query_context=query_context,
         )
 
         raw_result = self.client.generate_json(

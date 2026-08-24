@@ -219,4 +219,7 @@ class FixService:
             metadata_context_text=(
                 metadata_context_text
             ),
+            query_context=(
+                context.query_context
+            ),
         )

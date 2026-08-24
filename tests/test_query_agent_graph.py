@@ -78,13 +78,18 @@ class FakeValidationResult:
 
 
 class PassingValidationWorkflow:
+
     def run(
         self,
         sql: str,
         *,
         dialect: str = "maxcompute",
+        query_context=None,
     ):
         _ = dialect
+
+        assert query_context is not None
+        assert query_context.question
 
         return FakeValidationResult(
             success=True,

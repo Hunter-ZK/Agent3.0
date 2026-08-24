@@ -107,7 +107,6 @@ class QueryAgentState(TypedDict):
     # SQL Validation
     # ========================================================
 
-    
     candidate_sql: NotRequired[
         str | None
     ]
@@ -116,24 +115,25 @@ class QueryAgentState(TypedDict):
         str | None
     ]
 
+    validation_error_message: NotRequired[
+        str | None
+    ]
+
+
     # ========================================================
     # Semantic Validation
     # ========================================================
-    
-    semantic_validation_status: (
-        str | None
-    )
-
-    semantic_missing_requirements: (
-        tuple[str, ...]
-    )
-
-    semantic_issues: (
-        tuple[str, ...]
-    )
 
     semantic_validation_status: NotRequired[
         str | None
+    ]
+
+    semantic_missing_requirements: NotRequired[
+        tuple[str, ...]
+    ]
+
+    semantic_issues: NotRequired[
+        tuple[str, ...]
     ]
 
 

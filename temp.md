@@ -4687,3 +4687,8 @@ Per-case stability
 
 
 
+
+
+
+
+python examples/text_to_sql_demo.py --question "统计本期高新技术企业贷款余额" --use-real-llm --log-level DEBUG

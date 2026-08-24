@@ -56,6 +56,7 @@ class ReviewService:
             metadata_provider=context.metadata_provider,
             enable_llm=context.enable_llm,
             llm_provider=context.llm_provider,
+            query_context=context.query_context,
         )
 
     def review_sql(
@@ -68,6 +69,7 @@ class ReviewService:
         metadata_provider=None,
         enable_llm: bool = False,
         llm_provider: str = "mock",
+        query_context = None,
     ) -> ReviewResult:
 
         analysis = (
@@ -239,6 +241,7 @@ class ReviewService:
         deterministic_issues: list[Issue],
         analysis_context_text: str,
         metadata_context_text: str,
+        query_context = None,
     ) -> list[Issue]:
 
         if self.llm_client is None:
@@ -270,6 +273,7 @@ class ReviewService:
             metadata_context_text=(
                 metadata_context_text
             ),
+            query_context=query_context,
         )
 
 

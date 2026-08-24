@@ -13,6 +13,9 @@ from sql_pilot_engine.llm.fix_prompts import (
     build_fix_user_prompt,
 )
 
+from sql_pilot_engine.context.builder import (
+    QueryContext,
+)
 
 class LLMFixer:
     """LLM SQL 修复器。"""
@@ -24,16 +27,18 @@ class LLMFixer:
         self,
         original_sql: str,
         deterministic_pre_fix_sql: str,
-        rule_issues_text: str,
+        review_issues_text: str,
         analysis_context_text: str,
         metadata_context_text: str,
+        query_context: QueryContext | None = None,
     ) -> FixedSqlResult:
         user_prompt = build_fix_user_prompt(
             original_sql=original_sql,
             deterministic_pre_fix_sql=deterministic_pre_fix_sql,
-            rule_issues_text=rule_issues_text,
+            review_issues_text=review_issues_text,
             analysis_context_text=analysis_context_text,
             metadata_context_text=metadata_context_text,
+            query_context=query_context,
         )
 
         raw_result = self.client.generate_json(

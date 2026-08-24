@@ -424,7 +424,7 @@ class QueryAgentGraph:
         result = (
             self.sql_generator.generate(
                 plan=plan,
-                query_context=(state["query_context"]),
+                query_context=query_context,
                 dialect=state.get("dialect","maxcompute"),
                 revision_feedback=state.get("revision_feedback",(),),
             )
@@ -440,17 +440,38 @@ class QueryAgentGraph:
     # Deterministic SQL Validation
     # ========================================================
     def _validate_sql(
-        self,       
+        self,
         state: QueryAgentState,
     ) -> dict:
 
+        query_context = state.get(
+            "query_context"
+        )
+
+        if query_context is None:
+            raise RuntimeError(
+                "QueryContext is missing "
+                "before SQL validation."
+            )
+
+        generated_sql = state.get(
+            "generated_sql"
+        )
+
+        if not generated_sql:
+            raise RuntimeError(
+                "Generated SQL is missing "
+                "before SQL validation."
+            )
+
         validation = (
             self.validation_workflow.run(
-                state["generated_sql"],
+                generated_sql,
                 dialect=state.get(
                     "dialect",
                     "maxcompute",
                 ),
+                query_context=query_context,
             )
         )
 

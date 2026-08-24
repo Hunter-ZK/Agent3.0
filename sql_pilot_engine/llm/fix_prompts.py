@@ -3,6 +3,14 @@
 import json
 from typing import Any
 
+from sql_pilot_engine.context.builder import (
+    QueryContext,
+)
+
+from sql_pilot_engine.llm.context_builder import (
+    build_query_context_text,
+)
+
 FIX_JSON_SCHEMA = {
     "name": "sql_fix_result",
     "schema": {
@@ -75,11 +83,16 @@ def build_fix_user_prompt(
     review_issues_text: str,
     analysis_context_text: str,
     metadata_context_text: str,
+    query_context=None,
 ) -> str:
 
     return f"""
 请基于完整 Review Context
 生成完整 Candidate SQL。
+
+## Query Context
+
+{build_query_context_text(query_context)}
 
 ## Review Issues
 
@@ -92,6 +105,8 @@ def build_fix_user_prompt(
 ## Metadata Context
 
 {metadata_context_text}
+
+
 
 ## 原始 SQL
 

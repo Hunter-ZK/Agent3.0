@@ -1,5 +1,7 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from uuid import uuid4
+
+from typing import Any
 
 from sql_pilot_engine.engine import SQLPilotEngine
 from sql_pilot_engine.schemas.requests import (
@@ -17,6 +19,12 @@ from sql_pilot_engine.schemas.responses import (
 from sql_pilot_engine.workflow.review_routing import (
     ReviewRoute,
     decide_review_route,
+)
+from sql_pilot_engine.context.builder import (
+    QueryContext,
+)
+from sql_pilot_engine.core.execution_context import (
+    SQLExecutionContext,
 )
 
 @dataclass
@@ -109,6 +117,7 @@ class SQLAgentWorkflow:
         *,
         mode: str = "prod",
         dialect: str = "maxcompute",
+        query_context: QueryContext | None = None,
         categories: set[str] | None = None,
         enable_metadata: bool | None = None,
         enable_llm: bool | None = None,
@@ -168,6 +177,7 @@ class SQLAgentWorkflow:
                     trace_id=trace_id,
                     mode=mode,
                     dialect=dialect,
+                    query_context=query_context,
                 )
             )
 
@@ -192,6 +202,7 @@ class SQLAgentWorkflow:
                 trace_id=trace_id,
                 mode=mode,
                 dialect=dialect,
+                query_context=query_context,
             )
         )
 
@@ -277,6 +288,7 @@ class SQLAgentWorkflow:
                     critic_feedback=critic_feedback,
                     mode=mode,
                     dialect=dialect,
+                    query_context=query_context,
                 ),
                 prior_review=(
                     current_review_response
@@ -309,6 +321,7 @@ class SQLAgentWorkflow:
                             trace_id=trace_id,
                             mode=mode,
                             dialect=dialect,
+                            query_context=query_context,
                         )
                     )
                 )

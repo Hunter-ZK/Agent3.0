@@ -16,6 +16,7 @@ from sql_pilot_engine.observability.logging import (
 )
 from sql_pilot_engine.context.semantic.loan_domain import (
     LOAN_DOMAIN_CONTEXT_DOCUMENTS,
+    LOAN_MANDATORY_RULES,
 )
 from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLClarification,
@@ -32,6 +33,14 @@ from sql_pilot_engine.metadata.sqlite_repository import (
 )
 from sql_pilot_engine.app.sql_core_factory import (
     build_sql_agent_workflow,
+)
+
+from sql_pilot_engine.context.builder import (
+    QueryContextBuilder,
+)
+
+from sql_pilot_engine.context.mandatory_rules import (
+    MandatoryRuleMatcher,
 )
 
 # ============================================================
@@ -189,6 +198,14 @@ def build_demo_service(
         )
     )
 
+    context_builder = QueryContextBuilder(
+        mandatory_rule_matcher=(
+            MandatoryRuleMatcher(
+                LOAN_MANDATORY_RULES
+            )
+        )
+    )
+
     return build_text_to_sql_capability(
         semantic_model_path=(
             semantic_model_path
@@ -198,8 +215,8 @@ def build_demo_service(
             LOAN_DOMAIN_CONTEXT_DOCUMENTS
         ),
 
-        metadata_provider_factory=(
-            build_metadata_provider
+        context_builder=(
+            context_builder
         ),
 
         planner_model=(
@@ -217,8 +234,6 @@ def build_demo_service(
         collection_name=(
             "text_to_sql_demo"
         ),
-
-        max_sql_retries=0,
 
         max_semantic_retries=1,
         

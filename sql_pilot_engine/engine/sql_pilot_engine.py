@@ -321,6 +321,9 @@ class SQLPilotEngine:
             llm_provider=(
                 request.llm_provider
             ),
+            query_context=(
+                request.query_context
+            ),
             fix_sql=fix_sql,
             fix_provider=fix_provider,
             trace_id=(

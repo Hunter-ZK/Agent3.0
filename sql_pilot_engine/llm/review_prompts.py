@@ -1,10 +1,16 @@
 
 import json
-
+from typing import Any
 from sql_pilot_engine.core.models import (
     Issue,
 )
+from sql_pilot_engine.context.builder import (
+    QueryContext,
+)
 
+from sql_pilot_engine.llm.context_builder import (
+    build_query_context_text,
+)
 
 LLM_REVIEW_JSON_SCHEMA = {
     "name": "sql_review_result",
@@ -54,9 +60,6 @@ LLM_REVIEW_JSON_SCHEMA = {
                                 "human_review",
                             ],
                         },
-                        "auto_fixable": {
-                            "type": "boolean",
-                        },
                     },
                     "required": [
                         "rule_id",
@@ -68,7 +71,6 @@ LLM_REVIEW_JSON_SCHEMA = {
                         "category",
                         "confidence",
                         "action",
-                        "auto_fixable",
                     ],
                     "additionalProperties": False,
                 },
@@ -218,6 +220,7 @@ def build_user_prompt(
     deterministic_issues_text: str,
     analysis_context_text: str = "",
     metadata_context_text: str = "",
+    query_context: QueryContext | None = None,
 ) -> str:
 
     return f"""
@@ -226,6 +229,10 @@ def build_user_prompt(
 ## 文件路径
 
 {file_path}
+
+## Query Context
+
+{build_query_context_text(query_context)}
 
 ## Deterministic Guardrails
 
@@ -243,13 +250,39 @@ def build_user_prompt(
 
 {metadata_context_text or "未提供。"}
 
+
+
 ## SQL
 
 ```sql
 {sql}
 ```
+## Context Authority
 
-请基于完整上下文独立执行智能 Review，
+Query Context 中已经明确提供的业务定义、
+业务筛选条件、指标口径、运行期参数和
+Session Context，应作为当前任务的有效业务证据。
+
+不要再次要求确认 Query Context
+已经明确提供的信息。
+
+Metadata Context 对以下物理事实具有权威性：
+
+表是否存在；
+字段是否存在；
+字段类型；
+物理分区属性。
+
+Query Context 对以下业务事实具有权威性：
+
+业务术语映射；
+指标定义；
+业务过滤条件；
+当前任务时间语义；
+运行参数约定；
+用户已经确认的信息。
+
+请基于以上完整上下文独立执行智能 Review，
 并严格输出 JSON。
 """.strip()
 
@@ -278,3 +311,4 @@ indent=2,
 
 请只修复 JSON 结构。
 """.strip()
+
