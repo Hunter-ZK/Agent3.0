@@ -92,6 +92,7 @@ class SemanticSQLValidator:
         status = SemanticValidationStatus(
             data["status"]
         )
+                
         
         return SemanticValidationResult(
             status=status,

@@ -66,16 +66,25 @@ class RecordingSQLGenerator:
 class FakeValidationResult:
     success: bool
     final_status: str
+    final_sql: str | None = None
+    error_message: str | None = None
     fix_response: object | None = None
 
 
 class PassingValidationWorkflow:
-    def run(self, sql: str):
+    def run(
+        self,
+        sql: str,
+        *,
+        dialect: str = "maxcompute",
+    ):
+        _ = dialect
+
         return FakeValidationResult(
             success=True,
             final_status="no_issue",
+            final_sql=sql,
         )
-
 
 class FailingValidationWorkflow:
     def run(self, sql: str):

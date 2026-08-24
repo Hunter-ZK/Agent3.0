@@ -306,16 +306,92 @@ class DeepSeekLLMClient(BaseLLMClient):
 
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
-    def generate_json(self, system_prompt: str, user_prompt: str, json_schema: dict[str, Any]) -> dict[str, Any]:
+
+    @staticmethod
+    def _build_structured_system_prompt(
+        *,
+        system_prompt: str,
+        json_schema: dict[str, Any],
+    ) -> str:
+        """将本次调用的 JSON Schema 转成模型可理解的输出约束。
+
+        注意：
+        - 不知道调用方是 Reviewer / Fixer / Explainer；
+        - 不包含任何 SQL Review 专属字段；
+        - Schema 完全由调用方传入。
+        """
+
+        schema = json_schema.get(
+            "schema",
+            json_schema,
+        )
+
+        schema_text = json.dumps(
+            schema,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+        return f"""
+    {system_prompt}
+
+    ## Structured JSON Output Contract
+
+    本次任务要求返回结构化 JSON。
+
+    你必须严格按照以下 JSON Schema 输出：
+
+    {schema_text}
+
+    要求：
+
+    - 只返回 JSON object；
+    - 不返回 Markdown code fence；
+    - 不返回 JSON 之外的解释文字；
+    - 不修改字段名；
+    - 不遗漏 required 字段；
+    - 不增加 Schema 未允许的字段；
+    - number、boolean、string、array、object 等字段类型必须严格匹配 Schema；
+    - 字段层级必须严格匹配 Schema。
+    """.strip()
+
+    def generate_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        json_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+
+        structured_system_prompt = (
+            self._build_structured_system_prompt(
+                system_prompt=system_prompt,
+                json_schema=json_schema,
+            )
+        )
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
+                    {
+                        "role": "system",
+                        "content": (
+                            structured_system_prompt
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": user_prompt,
+                    },
                 ],
-                # JSON Output 主要保证返回合法 JSON；字段 schema 由本地校验和 repair 保障。
-                response_format={"type": "json_object"},
+
+                # DeepSeek 当前这里仍使用 JSON Object 模式。
+                # 字段级 Contract 通过本次调用传入的
+                # json_schema 注入 Prompt。
+                response_format={
+                    "type": "json_object"
+                },
+
                 temperature=0,
                 max_tokens=4096,
             )

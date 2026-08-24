@@ -4182,3 +4182,508 @@ data_type
 3. llm文件里单独的prompts文件命名呢？请你确认下文件内容和命名
 4. 为什么又有sql_review_service和review_service,请你检查
 
+
+
+======================================================================
+DETERMINISTIC ONLY
+======================================================================
+success: True
+status: no_issue
+error: None
+route: ['explain_skipped', 'review']
+trusted_sql:
+SELECT SUM(loan_bal_rmb) AS tech_loan_balance
+FROM odps_prd_dwd.ods_hd_100_cldkxx
+WHERE is_high_tech_mfg_loan_code = '1'
+  AND dt = '202607'
+
+
+issues:
+
+======================================================================
+REAL LLM REVIEW
+======================================================================
+success: True
+status: trusted_with_advisories
+error: None
+route: ['explain', 'review']
+trusted_sql:
+SELECT SUM(loan_bal_rmb) AS tech_loan_balance
+FROM odps_prd_dwd.ods_hd_100_cldkxx
+WHERE is_high_tech_mfg_loan_code = '1'
+  AND dt = '202607'
+
+
+issues:
+{'rule_id': 'LLM_EXAMPLE', 'title': 'dt字段过滤条件可能无效', 'severity': 'medium', 'message': '表 ods_hd_100_cldkxx 在元数据中标记为非分区表，但 SQL 中使用了 dt 字段进行过滤。若 dt 是普通字段，则过滤条件可能有效；若 dt 是分区字段但元数据未正确识别，则可能导致查询全表扫描。需要确认 dt 字段的实际用途。', 'suggestion': "确认 dt 字段是否为分区字段，以及 '202607' 是否为有效的日期或月份值。若 dt 是普通字段，建议检查数 据中 dt 的格式和取值范围。", 'evidence': "SQL 中使用了 dt = '202607'，但元数据未显示分区信息", 'category': 'filter_condition', 'source': 'llm', 'confidence': 0.8, 'location': None, 'action': 'advisory', 'auto_fixable': False, 'requires_metadata': False, 'requires_knowledge': False, 'metadata': {}, 'blocking': False}
+{'rule_id': 'LLM_EXAMPLE', 'title': 'is_high_tech_mfg_loan_code 字段含义不明确', 'severity': 'medium', 'message': "is_high_tech_mfg_loan_code 字段的取值含义未在元数据中说明，假设 '1' 表示是，但需确认该代码的实际业务含义，避免过滤条件错误。", 'suggestion': "确认 is_high_tech_mfg_loan_code 的取值字典，确保 '1' 代表高技术制造业贷款。", 'evidence': "SQL 中使用了 is_high_tech_mfg_loan_code = '1'，但元数据未提供取值说明", 'category': 'business_semantics', 'source': 'llm', 'confidence': 0.7, 'location': None, 'action': 'advisory', 'auto_fixable': False, 'requires_metadata': False, 'requires_knowledge': False, 'metadata': {}, 'blocking': False}
+{'rule_id': 'LLM_EXAMPLE', 'title': '潜在性能问题：全表扫描风险', 'severity': 'low', 'message': '如果表数据量较大，且 dt 字段未建立索引或不是分区字段，全表扫描可能导致性能问题。', 'suggestion': '考虑在 dt 字段上建立索引，或确认表的分区策略。', 'evidence': '表为非分区表，且 dt  字段过滤条件可能未利用索引', 'category': 'performance', 'source': 'llm', 'confidence': 0.6, 'location': None, 'action': 'advisory', 'auto_fixable': False, 'requires_metadata': False, 'requires_knowledge': False, 'metadata': {}, 'blocking': False}
+
+
+success: False
+status: review_failed
+error: LLM rule_id 必须以 LLM_ 开头。
+route: ['explain', 'review']
+trusted_sql: None
+
+[Review]
+success: False
+error: LLM rule_id 必须以 LLM_ 开头。
+issues:
+
+2. planer prompt，未指定本期，我觉得可以用时间参数替代，没有任何问题！
+
+3. 
+
+
+
+==============================================================================
+Agent3.0 · Text-to-SQL Real LLM Evaluation V2
+==============================================================================
+
+==============================================================================
+Agent3.0 · Text-to-SQL Real LLM Evaluation V2
+==============================================================================
+
+[1/2] high_tech_yoy
+question: 统计高新技术企业贷款余额同比
+result: PASS
+initial: result
+validation: trusted_with_advisories
+semantic: pass
+reason: Trusted SQL 路径通过。
+
+[1/2] high_tech_yoy
+question: 统计高新技术企业贷款余额同比
+result: FAIL
+initial: result
+validation: review_failed
+semantic: None
+reason: Text-to-SQL 最终 success=False; validation=review_failed; semantic=None
+validation_error: 只有 action=auto_fix 时 auto_fixable 才能为 true。
+
+[2/2] explicit_green_current
+question: 统计本期绿色贷款余额
+result: FAIL
+initial: result
+validation: review_failed
+semantic: None
+reason: Text-to-SQL 最终 success=False; validation=review_failed; semantic=None
+validation_error: LLM 不允许直接生成 BLOCK / IGNORE action。
+
+第一条结果我发现有时候会通过，这是为什么
+
+
+
+1. 请你重新查看llm/reviewer.py，目前逻辑很混乱
+2. [2/2] explicit_green_current
+question: 统计本期绿色贷款余额
+result: FAIL
+initial: result
+validation: blocked
+semantic: None
+reason: Text-to-SQL 最终 success=False; validation=blocked; semantic=None
+validation_error: A blocking issue exists.
+
+
+
+python -m sql_pilot_engine.metadata.ingestion.rebuild.rebuild_metadata_database --metadata-source ./data/metadata/raw/全量字段.xlsx --target-db ./data/metadata/agent_metadata.db
+
+
+
+
+##############################################################################
+explicit_high_tech_month
+统计2026年7月高新技术企业的贷款余额
+##############################################################################
+LLM review first parse failed. error=LLM issue 缺少字段：['action', 'confidence', 'evidence', 'message', 'rule_id', 'title'] raw_result={'action': 'advisory', 'issues': [{'severity': 'medium', 'category': 'date_and_partition', 'description': "dt 字段值为 '202607'，格式为 YYYYMM，疑似为月份分区。若该表为日分区表，则此过滤条件可能无法命中任何分区或导致全表扫描。请确认 dt 的分区粒度。", 'suggestion': "确认 dt 的分区粒度。若为日分区，应使用 'YYYYMMDD' 格式或使用日期函数（如 MAX(dt)）获取最新分区。"}, {'severity': 'low', 'category': 'null_handling', 'description': 'SUM(loan_bal_rmb) 会忽略 NULL 值，但若 loan_bal_rmb 存在 NULL 且业务上应视为 0，则结果可能偏低。', 'suggestion': '若业务上 NULL 应视为 0，请使用 COALESCE(loan_bal_rmb, 0) 或确认数据质量。'}], 'summary': 'SQL 逻辑简单，但需确认分区粒度与 NULL 处理。'}
+LLM review repair parse failed. first_error=LLM issue 缺少字段：['action', 'confidence', 'evidence', 'message', 'rule_id', 'title'] second_error=LLM issue 缺少字段：['suggestion'] raw_result={'action': 'advisory', 'issues': [{'severity': 'medium', 'category': 'date_and_partition', 'description': "dt 字段值为 '202607'，格式为 YYYYMM，疑似为月份分区。若该表为日分区表，则此过滤条件可能无法命中任何分区或导致全表扫描。请确认 dt 的分区粒度。", 'suggestion': "确认 dt 的分区粒度。若为日分区，应 使用 'YYYYMMDD' 格式或使用日期函数（如 MAX(dt)）获取最新分区。"}, {'severity': 'low', 'category': 'null_handling', 'description': 'SUM(loan_bal_rmb) 会忽略 NULL 值，但若 loan_bal_rmb 存在 NULL 且业务上应视为 0，则结果可能偏低。', 'suggestion': ' 若业务上 NULL 应视为 0，请使用 COALESCE(loan_bal_rmb, 0) 或确认数据质量。'}], 'summary': 'SQL 逻辑简单，但需确认分区粒度与 NULL 处理。'} repaired_result={'action': 'advisory', 'issues': [{'rule_id': 'DATE_PARTITION_FORMAT_MISMATCH', 'title': 'dt 字段疑似月份分区，但格式为 YYYYMM', 'message': "dt 字段值为 '202607'，格式为 YYYYMM，疑似为月份分区。若该表为日分区表，则此过滤条件可能无法命中任何分区或导致全表扫描。请确认 dt 的分区粒度。", 'evidence': "dt = '202607'", 'confidence': 'medium', 'action': 'advisory', 'severity': 'medium', 'category': 'date_and_partition'}, {'rule_id': 'NULL_HANDLING_IN_SUM', 'title': 'SUM 函数忽略 NULL 值', 'message': 'SUM(loan_bal_rmb) 会忽略 NULL 值，但若 loan_bal_rmb 存在 NULL 且业务上应视为 0，则结果 可能偏低。', 'evidence': 'SUM(loan_bal_rmb)', 'confidence': 'low', 'action': 'advisory', 'severity': 'low', 'category': 'null_handling'}], 'summary': 'SQL 逻辑简单，但需确认分区粒度与 NULL 处理。'}
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: True
+validation: review_failed
+semantic_status: None
+reason: SQL Trust failed: review_failed; Semantic failed: None; issues=(); system error: LLM issue 缺少字段：['suggestion']
+validation_error: LLM issue 缺少字段：['suggestion']
+
+==============================================================================
+Evaluation Summary
+==============================================================================
+runs: 1
+planning_accuracy: 1/1 (100.0%)
+clarification_accuracy: 1/1 (100.0%)
+sql_trust_rate: 0/1 (0.0%)
+semantic_pass_rate: 0/1 (0.0%)
+final_success_rate: 0/1 (0.0%)
+system_error_rate: 1/1 (100.0%)
+stable_cases: 0/1
+
+Per-case stability
+- explicit_high_tech_month: 0/1
+
+
+Traceback (most recent call last):
+  File "<stdin>", line 40, in <module>
+RuntimeError: Unexpected clarification: 您的问题不明确，请具体说明需要统计的内容（例如：科技贷款余额、绿色贷款获贷企业数等 ）以及统计维度（如按地区、机构类型等）。
+
+PS D:\学习\DataAgent\sqlpilot_phase_b1_engine\sqlpilot-latest-source> python examples/text_to_sql_demo.py `
+>>   --use-real-llm `
+>>   --question "统计本期绿色贷款加权利率" `
+>>   --dialect maxcompute `
+>>   --log-level INFO
+2026-08-24 02:52:31,752 INFO sql_pilot_engine.generation.deepseek_model run=- llm.request provider=deepseek model=deepseek-chat prompt_chars=8038
+2026-08-24 02:52:33,660 INFO httpx run=- HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2026-08-24 02:52:34,706 INFO sql_pilot_engine.generation.deepseek_model run=- llm.response provider=deepseek model=deepseek-chat response_chars=308 elapsed_ms=2954
+Traceback (most recent call last):
+  File "D:\学习\DataAgent\sqlpilot_phase_b1_engine\sqlpilot-latest-source\examples\text_to_sql_demo.py", line 452, in <module>
+    main()
+    ~~~~^^
+  File "D:\学习\DataAgent\sqlpilot_phase_b1_engine\sqlpilot-latest-source\examples\text_to_sql_demo.py", line 314, in main 
+    response = service.generate(
+        TextToSQLRequest(
+    ...<2 lines>...
+        )
+    )
+  File "D:\学习\DataAgent\sqlpilot_phase_b1_engine\sqlpilot-latest-source\sql_pilot_engine\capabilities\text_to_sql.py", line 62, in generate
+    state = self._graph.start(
+        thread_id=thread_id,
+    ...<7 lines>...
+        ),
+    )
+  File "D:\学习\DataAgent\sqlpilot_phase_b1_engine\sqlpilot-latest-source\sql_pilot_engine\runtime\query_graph.py", line 997, in start
+    return self.graph.invoke(
+           ~~~~~~~~~~~~~~~~~^
+        initial_state,
+        ^^^^^^^^^^^^^^
+        config=config,
+        ^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\Lenovo\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\pregel\main.py", line 3913, in invoke
+    for chunk in self.stream(
+                 ~~~~~~~~~~~^
+        input,
+        ^^^^^^
+    ...<11 lines>...
+        **kwargs,
+        ^^^^^^^^^
+    ):
+    ^
+  File "C:\Users\Lenovo\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\pregel\main.py", line 2967, in stream
+    for _ in runner.tick(
+             ~~~~~~~~~~~^
+        [t for t in loop.tasks.values() if not t.writes],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        schedule_task=loop.accept_push,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ):
+    ^
+  File "C:\Users\Lenovo\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\pregel\_runner.py", line 207, in tick
+    run_with_retry(
+    ~~~~~~~~~~~~~~^
+        t,
+        ^^
+    ...<10 lines>...
+        },
+        ^^
+    )
+    ^
+  File "C:\Users\Lenovo\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\pregel\_retry.py", line 617, in
+ run_with_retry
+    return task.proc.invoke(task.input, config)
+           ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Lenovo\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\_internal\_runnable.py", line 707, in invoke
+    input = context.run(step.invoke, input, config, **kwargs)
+  File "C:\Users\Lenovo\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\langgraph\_internal\_runnable.py", line 447, in invoke
+    ret = self.func(*args, **kwargs)
+  File "D:\学习\DataAgent\sqlpilot_phase_b1_engine\sqlpilot-latest-source\sql_pilot_engine\runtime\query_graph.py", line 351, in _plan_query
+    outcome = self.planner.plan(
+        query_context=(
+            query_context
+        ),
+    )
+  File "D:\学习\DataAgent\sqlpilot_phase_b1_engine\sqlpilot-latest-source\sql_pilot_engine\generation\planner.py", line 63, in plan
+    data = json.loads(raw)
+  File "C:\Users\Lenovo\AppData\Local\Python\pythoncore-3.14-64\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Users\Lenovo\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Lenovo\AppData\Local\Python\pythoncore-3.14-64\Lib\json\decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+
+
+
+
+2026-08-24 02:59:27,799 DEBUG sql_pilot_engine.generation.planner run=- planner.response
+```json
+{
+  "status": "ready",
+  "plan": {
+    "tables": ["ods_hd_200_cldkxx"],
+    "dimensions": [],
+    "metrics": ["green_loan_weighted_rate"],
+    "filters": ["dt = '${p_month_yyyymm}'"],
+    "group_by": [],
+    "requirements": ["按贷款余额加权计算绿色贷款存量利率：SUM(loan_bal_rmb * rate) / SUM(loan_bal_rmb)"]
+  }
+}
+```
+
+
+
+
+======================================================================
+DETERMINISTIC ONLY
+======================================================================
+success: True
+status: no_issue
+error: None
+route: ['explain_skipped', 'review']
+trusted_sql:
+SELECT SUM(loan_bal_rmb) AS tech_loan_balance
+FROM odps_prd_dwd.ods_hd_100_cldkxx
+WHERE is_high_tech_mfg_loan_code = '1'
+  AND dt = '202607'
+
+
+ISSUES:
+
+======================================================================
+REAL LLM REVIEW
+======================================================================
+success: False
+status: context_required
+error: Additional context is required.
+route: ['explain', 'review']
+trusted_sql: None
+
+ISSUES:
+{'rule_id': 'LLM_AGG_GRANULARITY', 'title': '聚合粒度与指标口径需确认', 'severity': 'medium', 'message': 'SQL 对 loan_bal_rmb 求和，但未明确该表的数据粒度（如每笔贷款、每笔借据、每笔合同等）。若表为明细级，SUM 结果即为科技贷款余额；若表已按机构或日期聚合，则 SUM 可能造成重复计算或口径偏差。', 'suggestion': '确认 ods_hd_100_cldkxx 表的数据粒度，并明确指标口径（如贷款 余额应为时点值，避免对多笔记录重复求和）。若表为明细，建议增加去重或明确唯一键。', 'evidence': "SELECT SUM(loan_bal_rmb) AS tech_loan_balance FROM odps_prd_dwd.ods_hd_100_cldkxx WHERE is_high_tech_mfg_loan_code = '1' AND dt = '202607'", 'category': 'aggregation', 'source': 'llm', 'confidence': 0.7, 'location': None, 'action': 'context_required', 'auto_fixable': False, 'requires_metadata': False, 'requires_knowledge': False, 'metadata': {}, 'blocking': True}
+{'rule_id': 'LLM_FILTER_CODE_VALUE', 'title': "过滤条件 is_high_tech_mfg_loan_code = '1' 的语义需确认", 'severity': 'medium', 'message': "字段 is_high_tech_mfg_loan_code 为代码字段，但元数据未提供代码值含义。'1' 是否表示“是”或“高技术制造业贷款”需确认，否则可能过滤错误。", 'suggestion': "确认 is_high_tech_mfg_loan_code 的代码字典，确保 '1' 表示“是”或“高技术制造业贷款”。若代码含义不同，需调整过滤条件。", 'evidence': "WHERE is_high_tech_mfg_loan_code = '1'", 'category': 'filter', 'source': 'llm', 'confidence': 0.6, 'location': None, 'action': 'context_required', 'auto_fixable': False, 'requires_metadata': False, 'requires_knowledge': False, 'metadata': {}, 'blocking': True}
+{'rule_id': 'LLM_PARTITION_DATE', 'title': "分区字段 dt 使用月份值 '202607'，需确认分区粒度", 'severity': 'low', 'message': "dt 字段被用作分区，但元数据未明确分区粒度。'202607' 看起来是月份分区（2026年7月），但若实际为日分区，则可能无法命中任何分区或导致扫描范围错误。", 'suggestion': "确认 dt 的分区粒度（日、月等）。若为日分区，应使用具体日期（如 '20260701'）或使用日期函数（如 dt >= '20260701' AND dt <= '20260731'）。", 'evidence': "AND dt = '202607'", 'category': 'partition', 'source': 'llm', 'confidence': 0.5, 'location': None, 'action': 'context_required', 'auto_fixable': False, 'requires_metadata': False, 'requires_knowledge': False, 'metadata': {}, 'blocking': True}
+{'rule_id': 'LLM_PERF_SCAN_RANGE', 'title': '全表扫描风险：未使用分区裁剪', 'severity': 'low', 'message': "虽然 WHERE 条件 包含 dt = '202607'，但元数据表明该表未分区（Is Partitioned: False）。因此该查询可能扫描全表，若表数据量较大，性能风险较高。", 'suggestion': '确认表是否实际分区。若未分区，建议考虑按数据日期字段（如 data_date）进行过滤，或优化表结构为分区表。若已 分区，确保 dt 为分区字段。', 'evidence': "Metadata: Is Partitioned: False; SQL: WHERE dt = '202607'", 'category': 'performance', 'source': 'llm', 'confidence': 0.8, 'location': None, 'action': 'advisory', 'auto_fixable': False, 'requires_metadata': False, 'requires_knowledge': False, 'metadata': {}, 'blocking': False}
+
+
+==============================================================================
+Agent3.0 · Text-to-SQL Evaluation V2
+==============================================================================
+cases: 11
+repeat: 1
+
+##############################################################################
+explicit_high_tech_month
+统计2026年7月高新技术企业的贷款余额
+##############################################################################
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: context_required
+semantic_status: None
+reason: SQL Trust failed: context_required; Semantic failed: None; issues=()
+validation_error: Additional context is required.
+
+##############################################################################
+current_high_tech
+统计本期高新技术企业的贷款余额
+##############################################################################
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: context_required
+semantic_status: None
+reason: SQL Trust failed: context_required; Semantic failed: None; issues=()
+validation_error: Additional context is required.
+
+##############################################################################
+high_tech_yoy
+统计高新技术企业贷款余额同比
+##############################################################################
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: context_required
+semantic_status: None
+reason: SQL Trust failed: context_required; Semantic failed: None; issues=()
+validation_error: Additional context is required.
+
+##############################################################################
+high_tech_mom
+统计高新技术企业贷款余额环比
+##############################################################################
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: context_required
+semantic_status: None
+reason: SQL Trust failed: context_required; Semantic failed: None; issues=()
+validation_error: Additional context is required.
+
+##############################################################################
+tech_enterprise_count
+统计本期科技贷款获贷企业数
+##############################################################################
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: context_required
+semantic_status: None
+reason: SQL Trust failed: context_required; Semantic failed: None; issues=()
+validation_error: Additional context is required.
+
+##############################################################################
+tech_weighted_rate
+统计本期科技贷款加权利率
+##############################################################################
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: context_required
+semantic_status: None
+reason: SQL Trust failed: context_required; Semantic failed: None; issues=()
+validation_error: Additional context is required.
+
+##############################################################################
+tech_balance_by_region
+统计本期各地区科技贷款余额
+##############################################################################
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: blocked
+semantic_status: None
+reason: SQL Trust failed: blocked; Semantic failed: None; issues=()
+validation_error: A blocking issue exists.
+
+##############################################################################
+tech_balance_by_org_type
+统计本期各金融机构类型科技贷款余额
+##############################################################################
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: context_required
+semantic_status: None
+reason: SQL Trust failed: context_required; Semantic failed: None; issues=()
+validation_error: Additional context is required.
+
+##############################################################################
+ambiguous_balance
+统计贷款余额
+##############################################################################
+Deserializing unregistered type sql_pilot_engine.context.models.ContextDocumentKind from checkpoint. This will be blocked in a future version. Set LANGGRAPH_STRICT_MSGPACK=true to block now, or add to allowed_msgpack_modules to allow explicitly: [('sql_pilot_engine.context.models', 'ContextDocumentKind')]
+Deserializing unregistered type sql_pilot_engine.context.models.ContextDocument from checkpoint. This will be blocked in a future version. Set LANGGRAPH_STRICT_MSGPACK=true to block now, or add to allowed_msgpack_modules to allow explicitly: [('sql_pilot_engine.context.models', 'ContextDocument')]
+Deserializing unregistered type sql_pilot_engine.context.models.RetrievedDocument from checkpoint. This will be blocked in a future version. Set LANGGRAPH_STRICT_MSGPACK=true to block now, or add to allowed_msgpack_modules to allow explicitly: [('sql_pilot_engine.context.models', 'RetrievedDocument')]
+Deserializing unregistered type sql_pilot_engine.context.builder.QueryContext from checkpoint. This will be blocked in a future version. Set LANGGRAPH_STRICT_MSGPACK=true to block now, or add to allowed_msgpack_modules to allow explicitly: [('sql_pilot_engine.context.builder', 'QueryContext')]
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: context_required
+semantic_status: None
+reason: SQL Trust failed: context_required; Semantic failed: None; issues=()
+validation_error: Additional context is required.
+
+##############################################################################
+ambiguous_rate
+统计本期贷款利率
+##############################################################################
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: context_required
+semantic_status: None
+reason: SQL Trust failed: context_required; Semantic failed: None; issues=()
+validation_error: Additional context is required.
+
+##############################################################################
+tech_rate_by_org_type
+统计本期各金融机构类型科技贷款加权利率
+##############################################################################
+
+run=1 final=FAIL
+planning: True
+clarification: True
+sql_trust: False
+semantic: False
+system_error: False
+validation: context_required
+semantic_status: None
+reason: SQL Trust failed: context_required; Semantic failed: None; issues=()
+validation_error: Additional context is required.
+
+==============================================================================
+Evaluation Summary
+==============================================================================
+runs: 11
+planning_accuracy: 11/11 (100.0%)
+clarification_accuracy: 11/11 (100.0%)
+sql_trust_rate: 0/11 (0.0%)
+semantic_pass_rate: 0/11 (0.0%)
+final_success_rate: 0/11 (0.0%)
+system_error_rate: 0/11 (0.0%)
+stable_cases: 0/11
+
+Per-case stability
+- explicit_high_tech_month: 0/1
+- current_high_tech: 0/1
+- high_tech_yoy: 0/1
+- high_tech_mom: 0/1
+- tech_enterprise_count: 0/1
+- tech_weighted_rate: 0/1
+- tech_balance_by_region: 0/1
+- tech_balance_by_org_type: 0/1
+- ambiguous_balance: 0/1
+- ambiguous_rate: 0/1
+- tech_rate_by_org_type: 0/1
+
+
+
+

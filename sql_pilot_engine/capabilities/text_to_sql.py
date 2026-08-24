@@ -245,9 +245,25 @@ class TextToSQLCapability:
                 "or clarification."
             )
 
-        semantic_result = state.get(
-            "semantic_result"
-        )
+        semantic_missing_requirements=(
+            tuple(
+                state.get(
+                    "semantic_missing_requirements",
+                    (),
+                )
+                or ()
+            )
+        ),
+
+        semantic_issues=(
+            tuple(
+                state.get(
+                    "semantic_issues",
+                    (),
+                )
+                or ()
+            )
+        ),
 
         return TextToSQLResult(
             question=question,
@@ -281,6 +297,12 @@ class TextToSQLCapability:
                 )
             ),
 
+            validation_error_message=(
+                state.get(
+                    "validation_error_message"
+                )
+            ),
+
             semantic_validation_status=(
                 cls._optional_status_text(
                     state.get(
@@ -292,7 +314,7 @@ class TextToSQLCapability:
             semantic_missing_requirements=(
                 tuple(
                     getattr(
-                        semantic_result,
+                        semantic_missing_requirements,
                         "missing_requirements",
                         (),
                     )
@@ -301,7 +323,7 @@ class TextToSQLCapability:
 
             semantic_issues=tuple(
                 getattr(
-                    semantic_result,
+                    semantic_issues,
                     "issues",
                     (),
                 )

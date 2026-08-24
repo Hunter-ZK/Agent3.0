@@ -60,7 +60,7 @@ class QueryPlanner:
             raw,
         )
         
-        data = json.loads(raw)
+        data = self._parse_json_response(raw)
 
         status = data.get("status")
 
@@ -143,3 +143,54 @@ class QueryPlanner:
                 )
             )
         )
+        
+    @staticmethod
+    def _parse_json_response(
+        raw: str,
+    ) -> dict:
+
+        text = raw.strip()
+
+        if text.startswith("```"):
+            lines = text.splitlines()
+
+            if (
+                lines
+                and lines[0]
+                .strip()
+                .startswith("```")
+            ):
+                lines = lines[1:]
+
+            if (
+                lines
+                and lines[-1].strip()
+                == "```"
+            ):
+                lines = lines[:-1]
+
+            text = "\n".join(
+                lines
+            ).strip()
+
+        try:
+            data = json.loads(
+                text
+            )
+
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                "Planner returned invalid JSON: "
+                f"{raw[:500]!r}"
+            ) from error
+
+        if not isinstance(
+            data,
+            dict,
+        ):
+            raise ValueError(
+                "Planner JSON root "
+                "must be an object."
+            )
+
+        return data

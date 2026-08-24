@@ -100,7 +100,11 @@ class SQLPilotEngine:
         """执行 SQL 审查。"""
         context = self._build_execution_context(request)
         try:
-            context.metadata_provider = self._resolve_metadata_provider(context.enable_metadata)
+            context.metadata_provider = self._resolve_metadata_provider(
+                enable_metadata = (
+                    context.enable_metadata
+                )
+            )
             result = self.review_service.review(context)
             return SQLReviewResponse.from_review_result(result, trace_id=context.trace_id)
         except Exception as error:
@@ -126,7 +130,11 @@ class SQLPilotEngine:
             retry_count=request.retry_count,
         )
         try:
-            context.metadata_provider = self._resolve_metadata_provider(context.enable_metadata)
+            context.metadata_provider = self._resolve_metadata_provider(
+                enable_metadata = (
+                    context.enable_metadata
+                )
+            )
             review_result = self._extract_prior_review_result(prior_review=prior_review, sql=request.sql,)
             result = self.fix_service.fix(context, review_result=review_result,)
             return SQLFixResponse.from_review_result(result, trace_id=context.trace_id)
@@ -222,7 +230,9 @@ class SQLPilotEngine:
         try:
             context.metadata_provider = (
                 self._resolve_metadata_provider(
-                    context
+                    enable_metadata = (
+                        context.enable_metadata
+                    )
                 )
             )
             result = (

@@ -16,7 +16,7 @@ from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLRequest,
 )
 from sql_pilot_engine.capabilities.text_to_sql import (
-    TextToSQLService,
+    TextToSQLCapability,
 )
 
 
@@ -91,7 +91,7 @@ def test_clarification_stops_sql_generation():
         max_semantic_retries=1,
     )
 
-    service = TextToSQLService(
+    service = TextToSQLCapability(
         graph=graph,
     )
 

@@ -169,10 +169,7 @@ def main() -> None:
                     issue.suggestion,
                 )
 
-            print(
-                "   blocking:",
-                issue.blocking,
-            )
+
             print(
                 "   auto_fixable:",
                 issue.auto_fixable,

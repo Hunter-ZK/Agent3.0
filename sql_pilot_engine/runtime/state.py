@@ -13,14 +13,6 @@ from sql_pilot_engine.generation.models import (
     QueryPlan,
 )
 
-from sql_pilot_engine.services.semantic_validation_service import (
-    SemanticValidationResult,
-)
-
-from sql_pilot_engine.workflow.sql_agent_workflow import (
-    SQLAgentWorkflowResult,
-)
-
 from sql_pilot_engine.runtime.event import (
     RuntimeEventType,
 )
@@ -114,10 +106,7 @@ class QueryAgentState(TypedDict):
     # ========================================================
     # SQL Validation
     # ========================================================
-    
-    validation_result: NotRequired[
-        SQLAgentWorkflowResult | None
-    ]
+
     
     candidate_sql: NotRequired[
         str | None
@@ -131,9 +120,17 @@ class QueryAgentState(TypedDict):
     # Semantic Validation
     # ========================================================
     
-    semantic_result: NotRequired[
-        SemanticValidationResult | None
-    ]
+    semantic_validation_status: (
+        str | None
+    )
+
+    semantic_missing_requirements: (
+        tuple[str, ...]
+    )
+
+    semantic_issues: (
+        tuple[str, ...]
+    )
 
     semantic_validation_status: NotRequired[
         str | None
@@ -152,6 +149,9 @@ class QueryAgentState(TypedDict):
     error_message: NotRequired[
         str | None
     ]
-    
 
-    
+    validation_error_message: (
+        str | None
+    )
+
+        

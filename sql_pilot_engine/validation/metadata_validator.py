@@ -108,7 +108,6 @@ class MetadataValidator:
                     action=IssueAction.CONTEXT_REQUIRED,
                     auto_fixable=False,
                     requires_metadata=True,
-                    blocking=False,
                 )
             ]
 
@@ -130,7 +129,6 @@ class MetadataValidator:
                 action=IssueAction.BLOCK,
                 auto_fixable=False,
                 requires_metadata=False,
-                blocking=True,
             )
         ]
             
@@ -202,7 +200,6 @@ class MetadataValidator:
                     action=IssueAction.BLOCK,
                     auto_fixable=False,
                     requires_metadata=False,
-                    blocking=True,
                     metadata={
                         "table_name": table_name,
                         "column_name": column.name,

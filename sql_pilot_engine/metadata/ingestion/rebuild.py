@@ -23,6 +23,9 @@ from sql_pilot_engine.standards.ingestion.excel import (
     import_standards_excel,
 )
 
+import gc  # 顶部引入
+
+
 
 @dataclass(
     frozen=True,
@@ -239,7 +242,16 @@ def rebuild_metadata_database(
             # Windows 下必须确保真正释放文件句柄。
             connection.close()
 
+        # ... 步骤 4 connection.close() 之后 ...
 
+        # 确保释放前面所有子函数可能遗留的悬挂连接句柄
+        del connection
+        gc.collect()
+
+        os.replace(
+            building,
+            target,
+        )
         os.replace(
             building,
             target,
@@ -269,3 +281,45 @@ def rebuild_metadata_database(
             building.unlink()
 
         raise
+    
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Rebuild metadata SQLite database.")
+    parser.add_argument(
+        "--metadata-source",
+        required=True,
+        help="Path to metadata excel source file",
+    )
+    parser.add_argument(
+        "--target-db",
+        required=True,
+        help="Path to target SQLite database",
+    )
+    parser.add_argument(
+        "--standards-source",
+        default=None,
+        help="Path to standards excel source file (optional)",
+    )
+    parser.add_argument(
+        "--metadata-label",
+        default="",
+        help="Metadata source label",
+    )
+    parser.add_argument(
+        "--standards-label",
+        default="",
+        help="Standards source label",
+    )
+
+    args = parser.parse_args()
+
+    print("开始重建 metadata.db ...")
+    result = rebuild_metadata_database(
+        metadata_source_path=args.metadata_source,
+        database_path=args.target_db,
+        standards_source_path=args.standards_source,
+        metadata_source_label=args.metadata_label,
+        standards_source_label=args.standards_label,
+    )
+    print(f"重建完成！数据库已输出至: {result.database_path}")

@@ -107,22 +107,50 @@ SYSTEM_PROMPT = """
 不要因为没有对应 Python Rule 就忽略问题。
 也不要为了发现问题而制造问题。
 
-action 只能是：
+### Dialect / 平台约束
 
-advisory
-= 有价值的建议，但当前 SQL 仍可以可信。
+必须依据输入中明确提供的 SQL dialect 进行判断。
 
-auto_fix
-= 当前上下文已经足够，可以安全自动修改。
+不得把传统关系型数据库的优化机制机械套用于其他数据平台。
 
-context_required
-= 缺少必要上下文，不能猜。
+例如在 MaxCompute 场景：
 
-human_review
-= 存在实质风险，但当前无法安全自动修复。
+- 不得默认建议“创建索引”；
+- 性能分析应优先考虑：
+  - 分区裁剪；
+  - 扫描数据范围；
+  - JOIN 规模与方式；
+  - 数据倾斜；
+  - 重复扫描；
+  - 不必要的中间结果；
+- 如果上下文不足以确认性能问题，应输出 advisory 或 uncertainty，
+  不得虚构平台能力。
 
-禁止输出 block。
-BLOCK 只允许由确定性安全边界产生。
+### action 约束
+
+LLM 只能输出以下 action：
+
+- advisory
+- auto_fix
+- context_required
+- human_review
+
+禁止输出：
+
+- block
+- ignore
+
+BLOCK 只允许 Deterministic Guardrail 产生。
+
+如果认为问题严重但无法由确定性规则证明，
+必须使用 human_review。
+
+### auto_fixable
+
+- action=auto_fix 时必须为 true；
+- 其他所有 action 必须为 false。
+不要输出 auto_fixable。
+是否可以自动修复由系统根据 action=auto_fix 自动派生。
 
 禁止编造：
 
@@ -139,31 +167,28 @@ BLOCK 只允许由确定性安全边界产生。
 
 
 REPAIR_SYSTEM_PROMPT = """
-你负责修复上一轮 SQL Review JSON。
+你负责修复上一轮 SQL Review 返回结果的 JSON Contract。
 
-只修复 JSON Contract，
-不要重新执行 SQL Review。
+上一轮已经完成 SQL Review。
+本次不要重新审查 SQL，
+不要新增问题，
+不要删除问题，
+不要改变 Issue 的业务含义。
 
-最终只能返回：
+你的唯一任务是：
 
-{
-  "issues": [
-    {
-      "rule_id": "LLM_EXAMPLE",
-      "title": "问题标题",
-      "severity": "medium",
-      "message": "问题说明",
-      "suggestion": "修改建议",
-      "evidence": "证据",
-      "category": "semantic",
-      "confidence": 0.8,
-      "action": "advisory",
-      "auto_fixable": false
-    }
-  ]
-}
+- 按本次调用提供的 JSON Schema 修复结构；
+- 补齐 required 字段；
+- 修正错误字段名；
+- 修正字段层级；
+- 修正字段类型；
+- 删除 Schema 不允许的多余字段。
 
-禁止增加其他字段。
+必须严格遵守本次调用提供的 JSON Schema。
+
+只返回 JSON object。
+不要返回 Markdown code fence。
+不要返回任何解释文字。
 """.strip()
 
 

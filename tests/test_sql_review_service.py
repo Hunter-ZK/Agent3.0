@@ -6,7 +6,7 @@ from sql_pilot_engine.schemas.sql_review import (
     SQLReviewInput,
 )
 from sql_pilot_engine.capabilities.sql_review import (
-    SQLReviewService,
+    SQLReviewCapability,
 )
 
 
@@ -103,10 +103,11 @@ def test_normal_sql_returns_trusted_sql():
             success=True,
             final_status="no_issue",
             sql=sql,
+            trusted_sql=sql,
         )
     )
 
-    service = SQLReviewService(
+    service = SQLReviewCapability(
         workflow=workflow
     )
 
@@ -158,7 +159,7 @@ def test_blocked_sql_has_no_trusted_sql():
         )
     )
 
-    service = SQLReviewService(
+    service = SQLReviewCapability(
         workflow=workflow
     )
 
@@ -223,7 +224,7 @@ def test_metadata_required_is_not_review_failed():
         )
     )
 
-    service = SQLReviewService(
+    service = SQLReviewCapability(
         workflow=workflow
     )
 
@@ -277,20 +278,15 @@ def test_fixed_sql_becomes_trusted_sql():
     workflow = FakeWorkflow(
         result=make_result(
             success=True,
-            final_status=(
-                "fix_verified"
-            ),
+            final_status="fix_verified",
             sql=original_sql,
-            fix_response=(
-                fix_response
-            ),
-            re_review_response=(
-                re_review_response
-            ),
+            fix_response=fix_response,
+            re_review_response=re_review_response,
+            trusted_sql=fixed_sql,
         )
     )
 
-    service = SQLReviewService(
+    service = SQLReviewCapability(
         workflow=workflow
     )
 
@@ -319,7 +315,7 @@ def test_fixed_sql_becomes_trusted_sql():
 
 
 def test_internal_error_maps_to_review_failed():
-    service = SQLReviewService(
+    service = SQLReviewCapability(
         workflow=FakeWorkflow(
             error=RuntimeError(
                 "unexpected failure"
@@ -379,7 +375,7 @@ def test_issue_is_projected_to_public_contract():
         )
     )
 
-    service = SQLReviewService(
+    service = SQLReviewCapability(
         workflow=workflow
     )
 

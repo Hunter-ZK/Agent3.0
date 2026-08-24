@@ -63,7 +63,7 @@ class FakePlannerModel:
         return """
         {
         "tables": [
-            "odps_prd_dwd.dwd_hd_101_cldwdk"
+            "odps_prd_dwd.ods_hd_100_cldkxx"
         ],
         "dimensions": [
             "dt"
@@ -72,7 +72,7 @@ class FakePlannerModel:
             "tech_loan_balance"
         ],
         "filters": [
-            "is_high_tech_ent_loan_code = '1'",
+            "is_high_tech_mfg_loan_code = '1'",
             "dt = '${p_month_yyyymm}'"
         ],
         "group_by": [
@@ -93,8 +93,8 @@ class FakeSQLModel:
         SELECT
             SUM(loan_bal_rmb) AS loan_bal_rmb,
             dt
-        FROM odps_prd_dwd.dwd_hd_101_cldwdk
-        WHERE is_high_tech_ent_loan_code = '1'
+        FROM odps_prd_dwd.ods_hd_100_cldkxx
+        WHERE is_high_tech_mfg_loan_code = '1'
         AND dt = '${p_month_yyyymm}'
         GROUP BY dt
         """

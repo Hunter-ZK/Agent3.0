@@ -38,6 +38,7 @@ class TextToSQLResult:
     trusted_sql: str | None
     success: bool
     validation_status: str
+    validation_error_message: str | None = None
     semantic_validation_status: (
         str | None
     ) = None
@@ -49,7 +50,6 @@ class TextToSQLResult:
     semantic_issues: (
         tuple[str, ...]
     ) = ()
-
 
 @dataclass(frozen=True)
 class TextToSQLClarification:

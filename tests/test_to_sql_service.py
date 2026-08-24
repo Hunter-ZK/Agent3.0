@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sql_pilot_engine.app.text_to_sql_factory import (
-    build_text_to_sql_service,
+    build_text_to_sql_capability,
 )
 from sql_pilot_engine.context.models import (
     ContextDocument,
@@ -85,7 +85,7 @@ def build_service(
         ),
     )
 
-    return build_text_to_sql_service(
+    return build_text_to_sql_capability(
         semantic_model_path=semantic_model_path,
         context_documents=documents,
         planner_model=FakePlannerModel(),
@@ -108,7 +108,7 @@ def test_text_to_sql_pipeline_returns_trusted_sql():
 
 
     assert result.success is True
-    assert result.validation_status == "no_issue"
+    assert result.validation_status == "trusted_with_advisories"
     assert result.query_plan.tables == (
         "dwd_order_detail",
     )

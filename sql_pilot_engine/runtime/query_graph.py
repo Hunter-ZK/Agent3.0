@@ -455,19 +455,22 @@ class QueryAgentGraph:
         )
 
         return {
-            "validation_result":(
-                validation
-            ),
-            "validation_status":(
+            "validation_status": (
                 validation.final_status
             ),
+
+            "validation_error_message": (
+                validation.error_message
+            ),
+
             "candidate_sql": (
                 validation.final_sql
             ),
+
             "trusted_sql": None,
+
             "success": False,
         }
-
     
     # ========================================================
     # Node 5
@@ -497,12 +500,22 @@ class QueryAgentGraph:
         )
         
         updates: dict = {
-                "semantic_result": result,
+            "semantic_validation_status": (
+                result.status.value
+            ),
 
-                "semantic_validation_status": (
-                    result.status.value
-                ),
-            }
+            "semantic_missing_requirements": (
+                tuple(
+                    result.missing_requirements
+                )
+            ),
+
+            "semantic_issues": (
+                tuple(
+                    result.issues
+                )
+            ),
+        }
 
         if result.passed:
             updates.update(
@@ -606,23 +619,26 @@ class QueryAgentGraph:
         state: QueryAgentState,
     ) -> str:
 
-        semantic_result = state.get(
-            "semantic_result"
+        status = state.get(
+            "semantic_validation_status"
         )
 
-        if semantic_result is None:
+        if status is None:
             return "end"
 
         if (
-            semantic_result.status
-            is SemanticValidationStatus.PASS
+            status
+            == SemanticValidationStatus.PASS.value
         ):
             return "end"
 
         if (
-            semantic_result.status
-            is SemanticValidationStatus
-            .NEED_CLARIFICATION
+            status
+            == (
+                SemanticValidationStatus
+                .NEED_CLARIFICATION
+                .value
+            )
         ):
             return "clarify"
 
@@ -636,12 +652,7 @@ class QueryAgentGraph:
             0,
         )
 
-        # attempt=1表示第一次Generation。
-        # max_retries=1时，最多允许attempt=2。
-        if (
-            attempt
-            <= max_retries
-        ):
+        if attempt <= max_retries:
             return "retry"
 
         return "end"
@@ -714,14 +725,15 @@ class QueryAgentGraph:
                 self.max_semantic_retries
             ),
 
-            # Deterministic Validation
-            "validation_result": None,
-            "candidate_sql": None,
             "validation_status": None,
+            "validation_error_message": None,
 
-            # Semantic Validation
-            "semantic_result": None,
+            "candidate_sql": None,
+            "trusted_sql": None,
+
             "semantic_validation_status": None,
+            "semantic_missing_requirements": (),
+            "semantic_issues": (),
 
             # Final
             "trusted_sql": None,

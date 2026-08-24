@@ -1,7 +1,7 @@
 import sql_pilot_engine.app.sql_review_factory as factory_module
 
 from sql_pilot_engine.capabilities.sql_review import (
-    SQLReviewService,
+    SQLReviewCapability,
 )
 
 
@@ -29,18 +29,18 @@ def test_factory_disables_metadata_without_provider(
 
     monkeypatch.setattr(
         factory_module,
-        "build_workflow",
+        "build_sql_review_capability",
         fake_build_workflow,
     )
 
     service = (
         factory_module
-        .build_sql_review_service()
+        .build_sql_review_capability()
     )
 
     assert isinstance(
         service,
-        SQLReviewService,
+        SQLReviewCapability,
     )
 
     assert (
@@ -83,7 +83,7 @@ def test_factory_enables_metadata_with_provider(
 
     service = (
         factory_module
-        .build_sql_review_service(
+        .build_sql_review_capability(
             metadata_provider_factory=(
                 provider_factory
             )
@@ -92,7 +92,7 @@ def test_factory_enables_metadata_with_provider(
 
     assert isinstance(
         service,
-        SQLReviewService,
+        SQLReviewCapability,
     )
 
     assert (
