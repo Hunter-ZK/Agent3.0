@@ -85,7 +85,7 @@ def test_clarification_stops_sql_generation():
         context_builder=QueryContextBuilder(),
         planner=NeedClarificationPlanner(),
         sql_generator=ShouldNotGenerateSQL(),
-        validation_workflow=ShouldNotValidateWorkflow(),
+        trusted_sql_workflow=ShouldNotValidateWorkflow(),
         checkpoint_store=MemoryCheckpointStore(),
         semantic_validator=None,
         max_semantic_retries=1,

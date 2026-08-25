@@ -5,7 +5,7 @@ from sql_pilot_engine.capabilities.sql_review import (
 )
 
 
-class DummyWorkflow:
+class DummyTrustedSQLWorkflow:
     pass
 
 
@@ -25,11 +25,11 @@ def test_factory_disables_metadata_without_provider(
             kwargs
         )
 
-        return DummyWorkflow()
+        return DummyTrustedSQLWorkflow()
 
     monkeypatch.setattr(
         factory_module,
-        "build_sql_review_capability",
+        "build_trusted_sql_workflow",
         fake_build_workflow,
     )
 
@@ -70,11 +70,11 @@ def test_factory_enables_metadata_with_provider(
             kwargs
         )
 
-        return DummyWorkflow()
+        return DummyTrustedSQLWorkflow()
 
     monkeypatch.setattr(
         factory_module,
-        "build_sql_agent_workflow",
+        "build_trusted_sql_workflow",
         fake_build_workflow,
     )
 

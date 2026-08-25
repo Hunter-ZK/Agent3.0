@@ -32,7 +32,7 @@ from sql_pilot_engine.metadata.sqlite_repository import (
     SQLiteMetadataRepository,
 )
 from sql_pilot_engine.app.sql_core_factory import (
-    build_sql_agent_workflow,
+    build_trusted_sql_workflow,
 )
 
 from sql_pilot_engine.context.builder import (
@@ -180,8 +180,8 @@ def build_demo_service(
 
     metadata_provider_factory = build_metadata_provider
 
-    validation_workflow = (
-        build_sql_agent_workflow(
+    trusted_sql_workflow = (
+        build_trusted_sql_workflow(
             metadata_provider_factory=(
                 metadata_provider_factory
             ),
@@ -237,7 +237,7 @@ def build_demo_service(
 
         max_semantic_retries=1,
         
-        validation_workflow=validation_workflow,
+        trusted_sql_workflow=trusted_sql_workflow,
     )
 
 def parse_args() -> argparse.Namespace:

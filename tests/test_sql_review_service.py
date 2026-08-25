@@ -10,7 +10,8 @@ from sql_pilot_engine.capabilities.sql_review import (
 )
 
 
-class FakeWorkflow:
+
+class FakeTrustedSQLWorkflow:
 
     def __init__(
         self,
@@ -98,7 +99,7 @@ def test_normal_sql_returns_trusted_sql():
     FROM user_table
     """.strip()
 
-    workflow = FakeWorkflow(
+    trusted_sql_workflow = FakeTrustedSQLWorkflow(
         result=make_result(
             success=True,
             final_status="no_issue",
@@ -108,7 +109,7 @@ def test_normal_sql_returns_trusted_sql():
     )
 
     service = SQLReviewCapability(
-        workflow=workflow
+        trusted_sql_workflow=trusted_sql_workflow
     )
 
     result = service.review(
@@ -148,7 +149,7 @@ def test_blocked_sql_has_no_trusted_sql():
         "auto_fixable": False,
     }
 
-    workflow = FakeWorkflow(
+    trusted_sql_workflow = FakeTrustedSQLWorkflow(
         result=make_result(
             success=False,
             final_status="blocked",
@@ -160,7 +161,7 @@ def test_blocked_sql_has_no_trusted_sql():
     )
 
     service = SQLReviewCapability(
-        workflow=workflow
+        trusted_sql_workflow=trusted_sql_workflow
     )
 
     result = service.review(
@@ -207,7 +208,7 @@ def test_metadata_required_is_not_review_failed():
         "auto_fixable": False,
     }
 
-    workflow = FakeWorkflow(
+    trusted_sql_workflow = FakeTrustedSQLWorkflow(
         result=make_result(
             success=False,
             final_status=(
@@ -225,7 +226,7 @@ def test_metadata_required_is_not_review_failed():
     )
 
     service = SQLReviewCapability(
-        workflow=workflow
+        trusted_sql_workflow=trusted_sql_workflow
     )
 
     result = service.review(
@@ -275,7 +276,7 @@ def test_fixed_sql_becomes_trusted_sql():
         )
     )
 
-    workflow = FakeWorkflow(
+    trusted_sql_workflow = FakeTrustedSQLWorkflow(
         result=make_result(
             success=True,
             final_status="fix_verified",
@@ -287,7 +288,7 @@ def test_fixed_sql_becomes_trusted_sql():
     )
 
     service = SQLReviewCapability(
-        workflow=workflow
+        trusted_sql_workflow=trusted_sql_workflow
     )
 
     result = service.review(
@@ -316,7 +317,7 @@ def test_fixed_sql_becomes_trusted_sql():
 
 def test_internal_error_maps_to_review_failed():
     service = SQLReviewCapability(
-        workflow=FakeWorkflow(
+        trusted_sql_workflow=FakeTrustedSQLWorkflow(
             error=RuntimeError(
                 "unexpected failure"
             )
@@ -364,7 +365,7 @@ def test_issue_is_projected_to_public_contract():
         "auto_fixable": True,
     }
 
-    workflow = FakeWorkflow(
+    trusted_sql_workflow = FakeTrustedSQLWorkflow(
         result=make_result(
             success=False,
             final_status="blocked",
@@ -376,7 +377,7 @@ def test_issue_is_projected_to_public_contract():
     )
 
     service = SQLReviewCapability(
-        workflow=workflow
+        trusted_sql_workflow=trusted_sql_workflow
     )
 
     result = service.review(

@@ -45,9 +45,8 @@ from sql_pilot_engine.services.semantic_validation_service import (
     SemanticValidationStatus,
 )
 
-from sql_pilot_engine.workflow.sql_agent_workflow import (
-    SQLAgentWorkflow,
-    SQLAgentWorkflowResult,
+from sql_pilot_engine.workflow.protocols import (
+    TrustedSQLWorkflowPort,
 )
 
 from langgraph.types import (
@@ -68,7 +67,7 @@ class QueryAgentGraph:
     - Context Retriever
     - QueryPlanner
     - SQLGenerator
-    - SQLAgentWorkflow
+    - TrustedSQLWorkflow
     - SemanticSQLValidator
     """
     
@@ -85,8 +84,8 @@ class QueryAgentGraph:
         context_builder: QueryContextBuilder,
         planner: QueryPlanner,
         sql_generator: SQLGenerator,
-        validation_workflow: (
-            SQLAgentWorkflow
+        trusted_sql_workflow: (
+            TrustedSQLWorkflowPort
         ),
         checkpoint_store: CheckpointStore,
         semantic_validator: (
@@ -126,7 +125,7 @@ class QueryAgentGraph:
 
         self.planner = planner
         self.sql_generator = sql_generator
-        self.validation_workflow = validation_workflow
+        self.trusted_sql_workflow = trusted_sql_workflow
         
         self.semantic_validator = (
             semantic_validator
@@ -176,8 +175,8 @@ class QueryAgentGraph:
         )
 
         builder.add_node(
-            "validate_sql",
-            self._validate_sql,
+            "trust_sql",
+            self._trust_sql,
         )
         
         builder.add_node(
@@ -221,7 +220,7 @@ class QueryAgentGraph:
 
         builder.add_edge(
             "generate_sql",
-            "validate_sql",
+            "trust_sql",
         )
         
         # ----------------------------------------------------
@@ -229,14 +228,19 @@ class QueryAgentGraph:
         # ----------------------------------------------------
 
         builder.add_conditional_edges(
-            "validate_sql",
-            self._route_after_validation,
+            "trust_sql",
+            self._route_after_trust,
             {
                 "semantic_validate": (
                     "semantic_validate"
                 ),
+
+                "clarify": (
+                    "request_clarification"
+                ),
+
                 "end": END,
-            },
+            }
         )
         
         # ----------------------------------------------------
@@ -437,9 +441,10 @@ class QueryAgentGraph:
 
     # ========================================================
     # Node 4
-    # Deterministic SQL Validation
+    # Trusted SQL Workflow
     # ========================================================
-    def _validate_sql(
+
+    def _trust_sql(
         self,
         state: QueryAgentState,
     ) -> dict:
@@ -451,7 +456,7 @@ class QueryAgentGraph:
         if query_context is None:
             raise RuntimeError(
                 "QueryContext is missing "
-                "before SQL validation."
+                "before Trusted SQL workflow."
             )
 
         generated_sql = state.get(
@@ -461,11 +466,11 @@ class QueryAgentGraph:
         if not generated_sql:
             raise RuntimeError(
                 "Generated SQL is missing "
-                "before SQL validation."
+                "before Trusted SQL workflow."
             )
 
-        validation = (
-            self.validation_workflow.run(
+        trust_result = (
+            self.trusted_sql_workflow.run(
                 generated_sql,
                 dialect=state.get(
                     "dialect",
@@ -474,24 +479,74 @@ class QueryAgentGraph:
                 query_context=query_context,
             )
         )
+        
+        
+        validation_missing_context = tuple(
+            trust_result.missing_context
+            or ()
+        )
 
-        return {
+        if (
+            trust_result.success
+            and not trust_result.trusted_sql
+        ):
+            raise RuntimeError(
+                "TrustedSQLWorkflow succeeded "
+                "without trusted_sql."
+            )
+
+        updates = {
+            # 暂时保留现有 public/state 字段名，
+            # Phase 2 TrustLevel 重构时统一处理。
             "validation_status": (
-                validation.final_status
+                trust_result.final_status
             ),
 
             "validation_error_message": (
-                validation.error_message
+                trust_result.error_message
             ),
 
+            "validation_missing_context": (
+                validation_missing_context
+            ),
+
+            # 这里只表示：
+            # SQL Trust Workflow 已接受，
+            # 但仍等待 Semantic Validator
+            # 判断是否真正满足 QueryPlan。
             "candidate_sql": (
-                validation.final_sql
+                trust_result.trusted_sql
             ),
 
             "trusted_sql": None,
 
             "success": False,
         }
+        
+        if trust_result.final_status == "context_required":
+            updates.update(
+                {
+                    "clarification_question": (
+                        self
+                        ._build_validation_clarification(
+                            validation_missing_context
+                        )
+                    ),
+
+                    "missing_context": (
+                        validation_missing_context
+                    ),
+
+                    "clarification_reason": (
+                        trust_result.error_message
+                        or (
+                            "Trusted SQL 审查发现"
+                            "仍缺少必要业务上下文。"
+                        )
+                    ),
+                }
+            )
+        return updates
     
     # ========================================================
     # Node 5
@@ -620,7 +675,7 @@ class QueryAgentGraph:
 
         return "generate"
 
-    def _route_after_validation(
+    def _route_after_trust(
         self,
         state: QueryAgentState,
     ) -> str:
@@ -689,6 +744,33 @@ class QueryAgentGraph:
             return "end"
 
         return "continue"
+
+
+    @staticmethod
+    def _route_after_validation(
+        state: QueryAgentState,
+    ) -> str:
+
+        if (
+            state.get(
+                "validation_status"
+            )
+            == "context_required"
+            and state.get(
+                "clarification_question"
+            )
+        ):
+            return "clarify"
+
+        if (
+            state.get(
+                "candidate_sql"
+            )
+            is None
+        ):
+            return "end"
+
+        return "semantic_validate"
 
     # ========================================================
     # Helpers
@@ -814,6 +896,27 @@ class QueryAgentGraph:
         return (
             "当前上下文不足以可靠完成查询，"
             "请补充必要的业务信息。"
+        )
+
+    @staticmethod
+    def _build_validation_clarification(
+        missing_context: tuple[str, ...],
+    ) -> str:
+
+        if not missing_context:
+            raise RuntimeError(
+                "context_required must provide "
+                "missing_context."
+            )
+
+        details = "；".join(
+            missing_context
+        )
+
+        return (
+            "为了继续完成当前查询，"
+            "还需要确认以下信息："
+            f"{details}"
         )
 
     def _request_clarification(

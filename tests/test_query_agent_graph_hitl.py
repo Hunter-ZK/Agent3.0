@@ -69,27 +69,32 @@ class FakeSQLGenerator:
 
 
 @dataclass(frozen=True)
-class FakeValidationResult:
+class FakeTrustedSQLResult:
     success: bool
     final_status: str
     final_sql: str | None = None
+    trusted_sql: str | None = None
+    
     error_message: str | None = None
     fix_response: object | None = None
+    missing_context: tuple[str, ...] = ()
 
 
-class PassingValidationWorkflow:
+class PassingTrustedSQLWorkflow:
     def run(
         self,
         sql: str,
         *,
         dialect: str = "maxcompute",
+        query_context = None,
     ):
         _ = dialect
 
-        return FakeValidationResult(
+        return FakeTrustedSQLResult(
             success=True,
             final_status="no_issue",
             final_sql=sql,
+            trusted_sql=sql,
         )
 
 def build_semantic_model() -> SemanticModel:
@@ -128,7 +133,7 @@ def build_graph(
         context_builder=QueryContextBuilder(),
         planner=planner,
         sql_generator=FakeSQLGenerator(),
-        validation_workflow=PassingValidationWorkflow(),
+        trusted_sql_workflow=PassingTrustedSQLWorkflow(),
         checkpoint_store=MemoryCheckpointStore(),
         semantic_validator=None,
         max_semantic_retries=1,

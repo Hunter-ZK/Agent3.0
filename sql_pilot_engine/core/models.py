@@ -47,6 +47,23 @@ class Issue:
         IssueAction.HUMAN_REVIEW
     )
 
+    # 只有 action == CONTEXT_REQUIRED 时使用。
+    #
+    # 描述为了继续完成当前任务，
+    # 还缺少哪些“用户 / 业务上下文”。
+    #
+    # 例如：
+    # (
+    #     "贷款业务主题：科技贷款或绿色贷款",
+    #     "同比统计口径",
+    # )
+    #
+    # 它不是：
+    # - Metadata 缺失清单
+    # - 技术错误列表
+    # - Reviewer 推理过程
+    missing_context: tuple[str, ...] = ()
+
     auto_fixable: bool = False
     requires_metadata: bool = False
     requires_knowledge: bool = False

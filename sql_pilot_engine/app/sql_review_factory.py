@@ -5,7 +5,7 @@ from collections.abc import (
 )
 
 from sql_pilot_engine.app.sql_core_factory import (
-    build_sql_agent_workflow,
+    build_trusted_sql_workflow,
 )
 from sql_pilot_engine.metadata.provider import (
     MetadataProvider,
@@ -38,7 +38,7 @@ def build_sql_review_capability(
     所有依赖统一在 app 层装配。
     """
 
-    workflow = build_sql_agent_workflow(
+    trusted_sql_workflow = build_trusted_sql_workflow(
         max_retries=(
             max_sql_retries
         ),
@@ -52,5 +52,5 @@ def build_sql_review_capability(
     )
 
     return SQLReviewCapability(
-        workflow=workflow
+        trusted_sql_workflow=trusted_sql_workflow
     )

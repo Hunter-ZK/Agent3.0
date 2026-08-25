@@ -10,8 +10,8 @@ from sql_pilot_engine.schemas.sql_review import (
     SQLReviewInput,
     SQLReviewResult,
 )
-from sql_pilot_engine.workflow.sql_agent_workflow import (
-    SQLAgentWorkflow,
+from sql_pilot_engine.workflow.trusted_sql_workflow import (
+    TrustedSQLWorkflow,
 )
 
 
@@ -29,14 +29,14 @@ class SQLReviewCapability:
     - Re-review
     - Critic
 
-    上述能力全部由现有 SQLAgentWorkflow 负责。
+    上述能力全部由现有 TrustedSQLWorkflow 负责。
     """
 
     def __init__(
         self,
-        workflow: SQLAgentWorkflow,
+        trusted_sql_workflow: TrustedSQLWorkflow,
     ) -> None:
-        self._workflow = workflow
+        self._trusted_sql_workflow = trusted_sql_workflow
 
     def review(
         self,
@@ -47,8 +47,8 @@ class SQLReviewCapability:
         """
 
         try:
-            workflow_result = (
-                self._workflow.run(
+            trusted_sql_workflow_result = (
+                self._trusted_sql_workflow.run(
                     request.sql,
                 )
             )
@@ -73,7 +73,7 @@ class SQLReviewCapability:
             )
 
         review_response = (
-            workflow_result.review_response
+            trusted_sql_workflow_result.review_response
         )
 
         issues = self._map_issues(
@@ -87,31 +87,31 @@ class SQLReviewCapability:
         )
 
         fix_applied = (
-            workflow_result.success
-            and workflow_result.final_status
+            trusted_sql_workflow_result.success
+            and trusted_sql_workflow_result.final_status
             == "fix_verified"
         )
 
         trusted_sql = (
-            workflow_result.trusted_sql
+            trusted_sql_workflow_result.trusted_sql
         )
 
         if (
-            workflow_result.success
+            trusted_sql_workflow_result.success
             and not trusted_sql
         ):
             raise RuntimeError(
-                "Successful SQLAgentWorkflow "
+                "Successful TrustedSQLWorkflow "
                 "must provide trusted_sql."
             )
 
         review_status = (
             self._map_status(
                 success=(
-                    workflow_result.success
+                    trusted_sql_workflow_result.success
                 ),
                 final_status=(
-                    workflow_result
+                    trusted_sql_workflow_result
                     .final_status
                 ),
                 fix_applied=(
@@ -128,7 +128,7 @@ class SQLReviewCapability:
 
         return SQLReviewResult(
             trace_id=getattr(
-                workflow_result,
+                trusted_sql_workflow_result,
                 "trace_id",
                 None,
             ),
@@ -136,19 +136,19 @@ class SQLReviewCapability:
             reviewed_sql=reviewed_sql,
             trusted_sql=trusted_sql,
             success=(
-                workflow_result.success
+                trusted_sql_workflow_result.success
             ),
             review_status=review_status,
             risk_level=risk_level,
             issues=issues,
             fix_applied=fix_applied,
             route_history=tuple(
-                workflow_result
+                trusted_sql_workflow_result
                 .route_history
                 or ()
             ),
             error_message=(
-                workflow_result.error_message
+                trusted_sql_workflow_result.error_message
                 if review_status == "review_failed"
                 else None
             ),

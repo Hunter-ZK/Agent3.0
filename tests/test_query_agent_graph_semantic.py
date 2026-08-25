@@ -63,35 +63,53 @@ class RecordingSQLGenerator:
 
 
 @dataclass(frozen=True)
-class FakeValidationResult:
+class FakeTrustedSQLResult:
     success: bool
     final_status: str
     final_sql: str | None = None
+    trusted_sql: str | None = None
     error_message: str | None = None
     fix_response: object | None = None
+    missing_context: tuple[str, ...] = ()
 
 
-class PassingValidationWorkflow:
+class FailingTrustedSQLWorkflow:
     def run(
         self,
         sql: str,
         *,
         dialect: str = "maxcompute",
+        query_context=None,
     ):
+        _ = sql
         _ = dialect
 
-        return FakeValidationResult(
-            success=True,
-            final_status="no_issue",
-            final_sql=sql,
-        )
+        assert query_context is not None
 
-class FailingValidationWorkflow:
-    def run(self, sql: str):
-        return FakeValidationResult(
+        return FakeTrustedSQLResult(
             success=False,
             final_status="blocked",
         )
+        
+        
+class PassingTrustedSQLWorkflow:
+    def run(
+        self,
+        sql: str,
+        *,
+        dialect: str = "maxcompute",
+        query_context = None,
+    ):
+        _ = dialect
+
+        return FakeTrustedSQLResult(
+            success=True,
+            final_status="no_issue",
+            final_sql=sql,
+            trusted_sql=sql,
+            
+        )
+
 
 
 class SequenceSemanticValidator:
@@ -139,7 +157,7 @@ def build_graph(
     *,
     generator,
     semantic_validator,
-    validation_workflow=None,
+    trusted_sql_workflow=None,
     max_semantic_retries: int = 1,
 ) -> QueryAgentGraph:
     return QueryAgentGraph(
@@ -149,9 +167,9 @@ def build_graph(
         context_builder=QueryContextBuilder(),
         planner=ReadyPlanner(),
         sql_generator=generator,
-        validation_workflow=(
-            validation_workflow
-            or PassingValidationWorkflow()
+        trusted_sql_workflow=(
+            trusted_sql_workflow
+            or FailingTrustedSQLWorkflow()
         ),
         checkpoint_store=MemoryCheckpointStore(),
         semantic_validator=semantic_validator,
@@ -208,7 +226,7 @@ def test_semantic_fail_retries_then_passes():
 
     state = graph.start(
         thread_id="semantic-retry",
-        question="统计本期绿色贷款余额",
+        question="统计本期科技贷款余额",
     )
 
     assert state["success"] is True
@@ -231,12 +249,12 @@ def test_deterministic_block_stops_before_semantic_validation():
     graph = build_graph(
         generator=generator,
         semantic_validator=validator,
-        validation_workflow=FailingValidationWorkflow(),
+        trusted_sql_workflow=FailingTrustedSQLWorkflow(),
     )
 
     state = graph.start(
         thread_id="deterministic-block",
-        question="统计本期绿色贷款余额",
+        question="统计本期科技贷款余额",
     )
 
     assert state["success"] is False

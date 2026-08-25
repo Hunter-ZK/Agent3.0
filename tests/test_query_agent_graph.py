@@ -73,8 +73,11 @@ class FakeValidationResult:
     success: bool
     final_status: str
     final_sql: str | None = None
+    trusted_sql: str | None = None
+    
     error_message: str | None = None
     fix_response: object | None = None
+    missing_context: tuple[str, ...] = ()
 
 
 class PassingValidationWorkflow:
@@ -95,6 +98,8 @@ class PassingValidationWorkflow:
             success=True,
             final_status="no_issue",
             final_sql=sql,
+            trusted_sql=sql,
+            
         )
 
 def build_semantic_model() -> SemanticModel:
@@ -129,7 +134,7 @@ def build_graph(*, planner, generator) -> QueryAgentGraph:
         context_builder=QueryContextBuilder(),
         planner=planner,
         sql_generator=generator,
-        validation_workflow=PassingValidationWorkflow(),
+        trusted_sql_workflow=PassingValidationWorkflow(),
         checkpoint_store=MemoryCheckpointStore(),
         semantic_validator=None,
         max_semantic_retries=1,

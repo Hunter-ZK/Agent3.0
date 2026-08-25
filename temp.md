@@ -20,9 +20,9 @@
 
 3. 这个__init__.py起到了什么作用，如果没有它会怎么样
 
-4. TypeError: SQLAgentWorkflow.__init__() got an unexpected keyword argument 'explain_agent'
+4. TypeError: TrustedSQLWorkflow.__init__() got an unexpected keyword argument 'explain_agent'
 
-class SQLAgentWorkflow:
+class TrustedSQLWorkflow:
 
     def __init__(self, engine: SQLPilotEngine, critic_service: CriticService, max_retries: int = 1):
         self.engine = engine
@@ -39,7 +39,7 @@ class SQLAgentWorkflow:
         return route_signals
     
 
-    def run(self, sql: str, file_path: str = "<memory>") -> SQLAgentWorkflowResult:
+    def run(self, sql: str, file_path: str = "<memory>") -> TrustedSQLWorkflowResult:
         trace_id = str(uuid4())
         route_history: list[str] = []
 
@@ -50,7 +50,7 @@ class SQLAgentWorkflow:
         route_history.append("explain")
 
         if not explain_response.success:
-            return SQLAgentWorkflowResult(
+            return TrustedSQLWorkflowResult(
                 success=False,
                 trace_id=trace_id,
                 final_status="explain_failed",
@@ -64,7 +64,7 @@ class SQLAgentWorkflow:
         need_review = route_signals.get("need_review",True)
 
         if not need_review:
-            return SQLAgentWorkflow(
+            return TrustedSQLWorkflow(
                 success=False,
                 trace_id=trace_id,
                 final_status="explained",
@@ -78,7 +78,7 @@ class SQLAgentWorkflow:
         route_history.append("review")
 
         if not review_response.success:
-            return SQLAgentWorkflowResult(
+            return TrustedSQLWorkflowResult(
                 success=False,
                 trace_id=trace_id,
                 final_status="review_failed",
@@ -89,7 +89,7 @@ class SQLAgentWorkflow:
             )
         
         if review_response.issue_count == 0:
-            return SQLAgentWorkflowResult(
+            return TrustedSQLWorkflowResult(
                 success=True,
                 trace_id=trace_id,
                 final_status="no_issue",
@@ -110,7 +110,7 @@ class SQLAgentWorkflow:
         )
 
         if need_metadata or need_rag:
-            return SQLAgentWorkflowResult(
+            return TrustedSQLWorkflowResult(
                 success=False,
                 trace_id=trace_id,
                 final_status="context_required",
@@ -120,7 +120,7 @@ class SQLAgentWorkflow:
             )
 
         if need_human_confirm or can_auto_fix is not True:
-            return SQLAgentWorkflowResult(
+            return TrustedSQLWorkflowResult(
                 success=False,
                 trace_id=trace_id,
                 final_status="need_human_confirm",
@@ -158,7 +158,7 @@ class SQLAgentWorkflow:
             route_history.append("critic")
 
             if critic_response.passed:
-                return SQLAgentWorkflowResult(
+                return TrustedSQLWorkflowResult(
                     success=True,
                     trace_id=trace_id,
                     final_status="fix_verified",
@@ -175,7 +175,7 @@ class SQLAgentWorkflow:
             )
     
             if not can_retry:
-                return SQLAgentWorkflowResult(
+                return TrustedSQLWorkflowResult(
                     success=False,
                     trace_id=trace_id,
                     final_status="need_human_confirm",
@@ -200,7 +200,7 @@ class SQLAgentWorkflow:
             )
 
             route_history.append(f"fix_retry_{retry_count}")
-我现在其实不太能理解我的sql_agent_workflow里的流程了，为什么有的参数是agent、有的是egine,之前还有service，互相都是什么关系。
+我现在其实不太能理解我的trusted_sql_workflow里的流程了，为什么有的参数是agent、有的是egine,之前还有service，互相都是什么关系。
 
 
 4. explain和critic为什么用agent，fix和review用的都是service
@@ -2696,7 +2696,7 @@ MetadataValidator
 FixService
 Re-review
 CriticService
-SQLAgentWorkflow
+TrustedSQLWorkflow
 <<<<<<< Updated upstream
 ```
 
@@ -2945,7 +2945,7 @@ QueryPlanner
 ↓
 SQLGenerator
 ↓
-SQLAgentWorkflow
+TrustedSQLWorkflow
 ↓
 Trusted SQL
 ```
@@ -3048,7 +3048,7 @@ VerifiedSQLRetriever
 QueryContextBuilder
 QueryPlanner
 SQLGenerator
-SQLAgentWorkflow
+TrustedSQLWorkflow
 ```
 
 不应该：
@@ -5304,7 +5304,7 @@ state["query_context"]
 
 ---
 
-## 7.4 为什么 SQLAgentWorkflow 可以接 QueryContext
+## 7.4 为什么 TrustedSQLWorkflow 可以接 QueryContext
 
 这是本轮讨论后最终确认：
 
@@ -5312,14 +5312,14 @@ state["query_context"]
 QueryAgentState
 属于 Text-to-SQL Runtime
 
-SQLAgentWorkflow
+TrustedSQLWorkflow
 属于独立 Trusted SQL 子工作流
 ```
 
 所以不能：
 
 ```text
-SQLAgentWorkflow
+TrustedSQLWorkflow
 直接依赖 QueryAgentState
 ```
 
@@ -5328,7 +5328,7 @@ SQLAgentWorkflow
 正确：
 
 ```python
-validation_workflow.run(
+trusted_sql_workflow.run(
     generated_sql,
     query_context=state["query_context"],
 )
@@ -5457,7 +5457,7 @@ Critic
 所以它使用：
 
 ```text
-SQLAgentWorkflow
+TrustedSQLWorkflow
 ```
 
 是合理的。
@@ -5469,7 +5469,7 @@ QueryAgentGraph
     │
     ├─ Planner
     ├─ Generator
-    ├─ SQLAgentWorkflow
+    ├─ TrustedSQLWorkflow
     │    ├─ Explain
     │    ├─ Review
     │    ├─ Fix
@@ -5647,7 +5647,7 @@ Planner
  ↓
 Generator
  ↓
-SQLAgentWorkflow
+TrustedSQLWorkflow
  ↓
 Semantic Validator
  ↓
@@ -5680,7 +5680,7 @@ max_sql_retries
 SQL Core 内部构造
 ```
 
-`validation_workflow` 应作为已经组装好的依赖注入。
+`trusted_sql_workflow` 应作为已经组装好的依赖注入。
 
 即：
 
@@ -5693,7 +5693,7 @@ SQL Core Factory
 → Trusted SQL Workflow
 
 Text-to-SQL Factory
-→ 注入 validation_workflow
+→ 注入 trusted_sql_workflow
 ```
 
 最新 `20260824-7` 已实施这一减肥方向，`20260824-8` 在此基础上继续修复 Review Context。
@@ -5904,7 +5904,7 @@ LLM Reviewer
 
 ```text
 QueryAgentState
-→ SQLAgentWorkflow
+→ TrustedSQLWorkflow
 → SQLReviewRequest
 → SQLExecutionContext
 → ReviewService
@@ -6371,7 +6371,7 @@ ERROR
 
 6. QueryAgentState 持有 QueryContext。
 
-7. SQLAgentWorkflow 可在边界接受 QueryContext，但不能依赖 QueryAgentState。
+7. TrustedSQLWorkflow 可在边界接受 QueryContext，但不能依赖 QueryAgentState。
 
 8. SQLExecutionContext 是运行容器，不是第二套业务 Context。
 
@@ -6435,11 +6435,11 @@ ERROR
    `Text-to-SQL → Trusted SQL`
    `Warehouse Development → Trusted SQL`
    `SQL Optimization → Trusted SQL`
-   都复用同一个 SQL Core，而不是各写一套 Validator。当前 `SQLAgentWorkflow` 已基本符合这个方向。
+   都复用同一个 SQL Core，而不是各写一套 Validator。当前 `TrustedSQLWorkflow` 已基本符合这个方向。
    如果你同意，我会把这作为正式冻结原则。
 
 6. **生产态 Trusted SQL 中，Physical Metadata 到底是不是强制依赖？**
-   这是一个必须现在确定的架构决策。当前 `build_sql_agent_workflow()` 默认是 `default_enable_metadata=False`。
+   这是一个必须现在确定的架构决策。当前 `build_trusted_sql_workflow()` 默认是 `default_enable_metadata=False`。
    但如果我们宣称“可信 SQL”，我认为生产 Text-to-SQL 下至少涉及真实业务表时，**Metadata 应当默认启用**。否则字段是否存在、数据类型等物理事实无法真正验证。测试和纯 SQL Review 可以显式关闭。
    你是否接受这个方向？
 
@@ -6576,15 +6576,15 @@ ERROR
     **当前 HEAD 的最新 `pytest -q` 完整结果**，以及那条“本期高新技术企业贷款余额”的**最新真实运行输出，尤其 `reviewer.response`**。
     这两个不是让你现在解释原因，只是后续代码审计完成后用于和 Runtime Reality 对齐。
 
-1. github为最新；2. C; 3. 先面对我自己；4. 以dataworks为主导；5. 我考虑agent的主要产出是trusted\_sql，但是应该还有其他更多样式才对；6. llm和metadat默认开启；7. 建立多态吧；8. 我觉得本来这两部分内容就不应该冲突，如果冲突的话我觉得进入clarify，有session确定；9. 这就在于怎么定义querycontext了，我之前对它的定义就只是固定的业务知识，包含semantic\_model knowledge fix\_rule session\_text等，它只跟用户的提问内容有关，跟哪个环节和能力无关。你是怎么考虑的呢？10. 命名不规范的，你提出方案修改就行；11.我认同你的分工，但是你需要再确认下；12. 设立；13. 我觉得都允许发起clarify，我觉得humaninloop非常重要；14. 我觉得这个步骤还是太长了，先放到最后面实现，但是所有步骤我觉得都要做到，形成端到端；15. 所有代码目前都不考虑执行；16. 我觉得smantic\_model应该是人机协同整理的资产，你觉得呢？17. 先考虑只读吧；18. 不，我的业务非常多，但目前我更需要的是稳定我的dataagent产品，而不是业务和数据；19. 对核心case做重复测试；20. 按你的建议来；21. 同意；22. 按你倾向来，你如果不确定，参考业界常用架构；23. 这部分先不考虑，我后面再补充需求；24. 可替换；25. 这部分不着急吧，等建设完整再设立？26. 一起处理吧；27. 长期提交git；28. 继续采用；29. 我觉得旧架构要清理了，就只保留干净的新架构；30. FAILED tests/test\_query\_agent\_graph\_hitl.py::test\_graph\_interrupts\_and\_resumes - TypeError: PassingValidationWorkflow\.run() got an unexpected keyword argument 'query\_context'
+1. github为最新；2. C; 3. 先面对我自己；4. 以dataworks为主导；5. 我考虑agent的主要产出是trusted\_sql，但是应该还有其他更多样式才对；6. llm和metadat默认开启；7. 建立多态吧；8. 我觉得本来这两部分内容就不应该冲突，如果冲突的话我觉得进入clarify，有session确定；9. 这就在于怎么定义querycontext了，我之前对它的定义就只是固定的业务知识，包含semantic\_model knowledge fix\_rule session\_text等，它只跟用户的提问内容有关，跟哪个环节和能力无关。你是怎么考虑的呢？10. 命名不规范的，你提出方案修改就行；11.我认同你的分工，但是你需要再确认下；12. 设立；13. 我觉得都允许发起clarify，我觉得humaninloop非常重要；14. 我觉得这个步骤还是太长了，先放到最后面实现，但是所有步骤我觉得都要做到，形成端到端；15. 所有代码目前都不考虑执行；16. 我觉得smantic\_model应该是人机协同整理的资产，你觉得呢？17. 先考虑只读吧；18. 不，我的业务非常多，但目前我更需要的是稳定我的dataagent产品，而不是业务和数据；19. 对核心case做重复测试；20. 按你的建议来；21. 同意；22. 按你倾向来，你如果不确定，参考业界常用架构；23. 这部分先不考虑，我后面再补充需求；24. 可替换；25. 这部分不着急吧，等建设完整再设立？26. 一起处理吧；27. 长期提交git；28. 继续采用；29. 我觉得旧架构要清理了，就只保留干净的新架构；30. FAILED tests/test\_query\_agent\_graph\_hitl.py::test\_graph\_interrupts\_and\_resumes - TypeError: PassingTrustedSQLWorkflow\.run() got an unexpected keyword argument 'query\_context'
 
-   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_semantic\_pass\_produces\_trusted\_sql - TypeError: PassingValidationWorkflow\.run() got an unexpectedkeyword argument 'query\_context'
+   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_semantic\_pass\_produces\_trusted\_sql - TypeError: PassingTrustedSQLWorkflow\.run() got an unexpectedkeyword argument 'query\_context'
 
-   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_semantic\_fail\_retries\_then\_passes - TypeError: PassingValidationWorkflow\.run() got an unexpected keyword argument 'query\_context'
+   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_semantic\_fail\_retries\_then\_passes - TypeError: PassingTrustedSQLWorkflow\.run() got an unexpected keyword argument 'query\_context'
 
-   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_deterministic\_block\_stops\_before\_semantic\_validation - TypeError: FailingValidationWorkflow\.run()got an unexpected keyword argument 'dialect'
+   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_deterministic\_block\_stops\_before\_semantic\_validation - TypeError: FailingTrustedSQLWorkflow\.run()got an unexpected keyword argument 'dialect'
 
-   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_semantic\_need\_clarification\_interrupts - TypeError: PassingValidationWorkflow\.run() got an unexpected keyword argument 'query\_context'
+   FAILED tests/test\_query\_agent\_graph\_semantic.py::test\_semantic\_need\_clarification\_interrupts - TypeError: PassingTrustedSQLWorkflow\.run() got an unexpected keyword argument 'query\_context'
 
    FAILED tests/test\_sql\_review\_factory.py::test\_factory\_disables\_metadata\_without\_provider - assert False
 
@@ -6641,3 +6641,18 @@ E. 工作方式
 你觉得重要吗？重要的话我完全可以提供，excel基本就是最真实的，semantic是我编造的；
 
 我不仅仅希望你停留在这些方面，我希望你能够充分评价我的项目架构、技术路线和后续的实现情况，为我描述一份完整的技术文档，内容要充分，既要考虑到我自身对产品的需求和定义，也要跟进市场目前dataagent的技术路线，最好还能参考目前pi-agent、harness、claude code等agent的设计俩年。让我能够开展后续工作。
+
+
+
+
+
+
+
+
+
+
+
+
+python examples/text_to_sql_eval_v2.py --case explicit_high_tech_month --case high_tech_yoy --repeat 1
+
+

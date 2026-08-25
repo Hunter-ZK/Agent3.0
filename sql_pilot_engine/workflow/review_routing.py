@@ -148,102 +148,18 @@ def decide_review_route(
     # Missing Context
     # --------------------------------------------------------
 
-    needs_metadata = any(
-        bool(
-            issue.get(
-                "requires_metadata"
-            )
-        )
-        for issue
-        in actionable_issues
-    )
-
-    needs_knowledge = any(
-        bool(
-            issue.get(
-                "requires_knowledge"
-            )
-        )
-        for issue
-        in actionable_issues
-    )
-
     has_context_action = any(
         _read_action(issue)
-        == (
-            IssueAction
-            .CONTEXT_REQUIRED
-            .value
-        )
+        == IssueAction.CONTEXT_REQUIRED.value
         for issue
         in actionable_issues
     )
-
-    if (
-        needs_metadata
-        and needs_knowledge
-    ):
-        return ReviewRouteDecision(
-            route=(
-                ReviewRoute
-                .CONTEXT_REQUIRED
-            ),
-            reason=(
-                "Metadata and knowledge "
-                "context are both required."
-            ),
-            actionable_issue_count=len(
-                actionable_issues
-            ),
-            final_status=(
-                "context_required"
-            ),
-        )
-
-    if needs_metadata:
-        return ReviewRouteDecision(
-            route=(
-                ReviewRoute
-                .METADATA_REQUIRED
-            ),
-            reason=(
-                "Metadata context "
-                "is required."
-            ),
-            actionable_issue_count=len(
-                actionable_issues
-            ),
-            final_status=(
-                "metadata_required"
-            ),
-        )
-
-    if needs_knowledge:
-        return ReviewRouteDecision(
-            route=(
-                ReviewRoute
-                .KNOWLEDGE_REQUIRED
-            ),
-            reason=(
-                "Knowledge context "
-                "is required."
-            ),
-            actionable_issue_count=len(
-                actionable_issues
-            ),
-            final_status=(
-                "knowledge_required"
-            ),
-        )
 
     if has_context_action:
         return ReviewRouteDecision(
-            route=(
-                ReviewRoute
-                .CONTEXT_REQUIRED
-            ),
+            route=ReviewRoute.CONTEXT_REQUIRED,
             reason=(
-                "Additional context "
+                "User or business context "
                 "is required."
             ),
             actionable_issue_count=len(

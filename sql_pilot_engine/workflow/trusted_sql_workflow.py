@@ -27,13 +27,18 @@ from sql_pilot_engine.core.execution_context import (
     SQLExecutionContext,
 )
 
+from sql_pilot_engine.core.models import (
+    IssueAction,
+)
+
 @dataclass
-class SQLAgentWorkflowResult:
+class TrustedSQLWorkflowResult:
     success: bool
     trace_id: str
     final_status: str
 
-
+    missing_context: tuple[str, ...] = ()
+    
     explain_response: (
         SQLExplainResponse | None
     ) = None
@@ -73,7 +78,7 @@ class SQLAgentWorkflowResult:
 
     optimization_applied: bool = False
 
-class SQLAgentWorkflow:
+class TrustedSQLWorkflow:
     """SQL Agent模式的端到端流程。"""
 
     def __init__(
@@ -123,7 +128,7 @@ class SQLAgentWorkflow:
         enable_llm: bool | None = None,
         llm_provider: str | None = None,
         fix_provider: str | None = None,
-    ) -> SQLAgentWorkflowResult:
+    ) -> TrustedSQLWorkflowResult:
 
 
         trace_id = str(uuid4())
@@ -210,7 +215,7 @@ class SQLAgentWorkflow:
         route_history.append("review")
 
         if not review_response.success:
-            return SQLAgentWorkflowResult(
+            return TrustedSQLWorkflowResult(
                 success=False,
                 trace_id=trace_id,
                 final_status="review_failed",
@@ -222,10 +227,120 @@ class SQLAgentWorkflow:
                 ),
             )
 
+        print("\n" + "=" * 80)
+        print("[TRUST DEBUG] SQL")
+        print("=" * 80)
+        print(sql)
+
+        print("\n[TRUST DEBUG] QUERY CONTEXT")
+
+        if query_context is None:
+            print("query_context = None")
+        else:
+            print(
+                "question =",
+                query_context.question,
+            )
+
+            print(
+                "\nsemantic_context ="
+            )
+            print(
+                query_context.semantic_context
+            )
+
+            print(
+                "\nbusiness_knowledge ="
+            )
+            for item in (
+                query_context.business_knowledge
+            ):
+                print("-", item)
+
+            print(
+                "\nsession_context ="
+            )
+            for item in (
+                query_context.session_context
+            ):
+                print("-", item)
+
+        print("\n[TRUST DEBUG] REVIEW")
+
+        print(
+            "review_success =",
+            review_response.success,
+        )
+
+        print(
+            "risk_level =",
+            review_response.risk_level,
+        )
+
+        print(
+            "issue_count =",
+            review_response.issue_count,
+        )
+
+        for index, issue in enumerate(
+            review_response.issues,
+            start=1,
+        ):
+            print(
+                f"\n--- issue {index} ---"
+            )
+
+            for key in (
+                "rule_id",
+                "title",
+                "source",
+                "severity",
+                "action",
+                "requires_metadata",
+                "requires_knowledge",
+                "blocking",
+                "confidence",
+                "message",
+                "suggestion",
+                "evidence",
+                "metadata",
+            ):
+                print(
+                    f"{key} =",
+                    issue.get(key),
+                )
+
+
         decision = decide_review_route(review_response)
         
+        print(
+            "\n[TRUST DEBUG] ROUTE"
+        )
+
+        print(
+            "route =",
+            decision.route.value,
+        )
+
+        print(
+            "final_status =",
+            decision.final_status,
+        )
+
+        print(
+            "reason =",
+            decision.reason,
+        )
+
+        print(
+            "actionable_issue_count =",
+            decision.actionable_issue_count,
+        )
+
+        print("=" * 80 + "\n")
+        
         if decision.route == ReviewRoute.COMPLETE:
-            return SQLAgentWorkflowResult(
+            return TrustedSQLWorkflowResult(
                 success=True,
                 trace_id=trace_id,
                 final_status=decision.final_status or "completed",
@@ -244,20 +359,30 @@ class SQLAgentWorkflow:
             )
 
 
-        if decision.route != ReviewRoute.AUTO_FIX:
-            if decision.final_status is None:
-                raise RuntimeError(
-                    "Terminal review route must "
-                    "provide final_status."
+        missing_context = ()
+
+        if (
+            decision.route
+            is ReviewRoute.CONTEXT_REQUIRED
+        ):
+            missing_context = (
+                self._collect_missing_context(
+                    review_response
                 )
-            return SQLAgentWorkflowResult(
+            )
+
+            return TrustedSQLWorkflowResult(
                 success=False,
                 trace_id=trace_id,
-                final_status=decision.final_status,
+                final_status=(
+                    decision.final_status
+                    or "review_failed"
+                ),
                 explain_response=explain_response,
                 review_response=review_response,
                 route_history=route_history,
                 error_message=decision.reason,
+                missing_context=missing_context,
             )
         
         route_history.append(
@@ -333,6 +458,207 @@ class SQLAgentWorkflow:
                         f"re_review_retry_{attempt}"
                     )
                 )
+                
+            if (
+                re_review_response is not None
+                and re_review_response.success
+            ):
+                re_review_decision = (
+                    decide_review_route(
+                        re_review_response
+                    )
+                )
+
+                if (
+                    re_review_decision.route
+                    is ReviewRoute.CONTEXT_REQUIRED
+                ):
+                    return TrustedSQLWorkflowResult(
+                        success=False,
+                        trace_id=trace_id,
+                        final_status=(
+                            "context_required"
+                        ),
+                        explain_response=(
+                            explain_response
+                        ),
+                        review_response=(
+                            review_response
+                        ),
+                        fix_response=(
+                            fix_response
+                        ),
+                        re_review_response=(
+                            re_review_response
+                        ),
+                        route_history=(
+                            route_history
+                        ),
+                        error_message=(
+                            re_review_decision.reason
+                        ),
+                        missing_context=(
+                            self._collect_missing_context(
+                                re_review_response
+                            )
+                        ),
+                    )
+
+                if (
+                    re_review_decision.route
+                    is ReviewRoute.BLOCK
+                ):
+                    return TrustedSQLWorkflowResult(
+                        success=False,
+                        trace_id=trace_id,
+                        final_status="blocked",
+                        explain_response=explain_response,
+                        review_response=review_response,
+                        fix_response=fix_response,
+                        re_review_response=(
+                            re_review_response
+                        ),
+                        route_history=route_history,
+                        error_message=(
+                            re_review_decision.reason
+                        ),
+                    )
+
+                if (
+                    re_review_decision.route
+                    is ReviewRoute.HUMAN_REVIEW
+                ):
+                    return TrustedSQLWorkflowResult(
+                        success=False,
+                        trace_id=trace_id,
+                        final_status=(
+                            "need_human_confirm"
+                        ),
+                        explain_response=explain_response,
+                        review_response=review_response,
+                        fix_response=fix_response,
+                        re_review_response=(
+                            re_review_response
+                        ),
+                        route_history=route_history,
+                        error_message=(
+                            re_review_decision.reason
+                        ),
+                    )
+
+            print("\n" + "=" * 80)
+            print("[TRUST DEBUG] FIX RESULT")
+            print("=" * 80)
+
+            print(
+                "fix_success =",
+                fix_response.success,
+            )
+
+            print(
+                "\nfixed_sql ="
+            )
+
+            print(
+                fix_response.fixed_sql
+            )
+
+            print(
+                "\napplied_fixes =",
+                fix_response.applied_fixes,
+            )
+
+            print(
+                "manual_notes =",
+                fix_response.manual_notes,
+            )
+
+            print(
+                "fix_source =",
+                fix_response.fix_source,
+            )
+
+
+            print(
+                "\n[TRUST DEBUG] RE-REVIEW"
+            )
+
+            if re_review_response is None:
+
+                print(
+                    "re_review_response = None"
+                )
+
+            else:
+
+                print(
+                    "success =",
+                    re_review_response.success,
+                )
+
+                print(
+                    "risk_level =",
+                    re_review_response.risk_level,
+                )
+
+                print(
+                    "issue_count =",
+                    re_review_response.issue_count,
+                )
+
+                for index, issue in enumerate(
+                    re_review_response.issues,
+                    start=1,
+                ):
+
+                    print(
+                        f"\n--- re-review issue {index} ---"
+                    )
+
+                    for key in (
+                        "rule_id",
+                        "title",
+                        "source",
+                        "severity",
+                        "action",
+                        "requires_metadata",
+                        "requires_knowledge",
+                        "blocking",
+                        "confidence",
+                        "message",
+                        "suggestion",
+                        "evidence",
+                        "metadata",
+                    ):
+                        print(
+                            f"{key} =",
+                            issue.get(key),
+                        )
+
+                if re_review_response.success:
+
+                    re_review_decision = (
+                        decide_review_route(
+                            re_review_response
+                        )
+                    )
+
+                    print(
+                        "\nre_review_route =",
+                        re_review_decision.route.value,
+                    )
+
+                    print(
+                        "re_review_final_status =",
+                        re_review_decision.final_status,
+                    )
+
+                    print(
+                        "re_review_reason =",
+                        re_review_decision.reason,
+                    )
+
+            print("=" * 80 + "\n")
 
             critic_response = (
                 self.engine.critique(
@@ -355,6 +681,42 @@ class SQLAgentWorkflow:
                 else f"critic_retry_{attempt}"
             )
 
+            print(
+                "\n[TRUST DEBUG] CRITIC"
+            )
+
+            print(
+                "passed =",
+                critic_response.passed,
+            )
+
+            print(
+                "status =",
+                critic_response.status,
+            )
+
+            print(
+                "need_retry =",
+                critic_response.need_retry,
+            )
+
+            print(
+                "reason =",
+                critic_response.reason,
+            )
+
+            print(
+                "error_message =",
+                critic_response.error_message,
+            )
+
+            print(
+                "retry_instructions =",
+                critic_response.retry_instructions,
+            )
+
+            print("=" * 80 + "\n")
+
             if critic_response.passed:
 
                 trusted_sql = (
@@ -367,7 +729,7 @@ class SQLAgentWorkflow:
                         "is missing."
                     )
 
-                return SQLAgentWorkflowResult(
+                return TrustedSQLWorkflowResult(
                     success=True,
                     trace_id=trace_id,
                     final_status="fix_verified",
@@ -403,7 +765,7 @@ class SQLAgentWorkflow:
             )
 
             if not can_retry:
-                return SQLAgentWorkflowResult(
+                return TrustedSQLWorkflowResult(
                     success=False,
                     trace_id=trace_id,
                     final_status=(
@@ -446,3 +808,54 @@ class SQLAgentWorkflow:
         raise RuntimeError(
             "Workflow reached an invalid state."
         )
+        
+            
+    @staticmethod
+    def _collect_missing_context(
+        response: SQLReviewResponse,
+    ) -> tuple[str, ...]:
+
+        result: list[str] = []
+
+        for issue in response.issues:
+
+            action = issue.get(
+                "action"
+            )
+
+            if isinstance(
+                action,
+                IssueAction,
+            ):
+                action = action.value
+
+            if (
+                action
+                != IssueAction
+                .CONTEXT_REQUIRED
+                .value
+            ):
+                continue
+
+            for item in (
+                issue.get(
+                    "missing_context",
+                    (),
+                )
+                or ()
+            ):
+
+                value = str(
+                    item
+                ).strip()
+
+                if (
+                    value
+                    and value
+                    not in result
+                ):
+                    result.append(
+                        value
+                    )
+
+        return tuple(result)

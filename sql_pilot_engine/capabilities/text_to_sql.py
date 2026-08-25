@@ -245,25 +245,6 @@ class TextToSQLCapability:
                 "or clarification."
             )
 
-        semantic_missing_requirements=(
-            tuple(
-                state.get(
-                    "semantic_missing_requirements",
-                    (),
-                )
-                or ()
-            )
-        ),
-
-        semantic_issues=(
-            tuple(
-                state.get(
-                    "semantic_issues",
-                    (),
-                )
-                or ()
-            )
-        ),
 
         return TextToSQLResult(
             question=question,
@@ -310,22 +291,24 @@ class TextToSQLCapability:
                     )
                 )
             ),
-
+            
             semantic_missing_requirements=(
                 tuple(
-                    getattr(
-                        semantic_missing_requirements,
-                        "missing_requirements",
+                    state.get(
+                        "semantic_missing_requirements",
                         (),
                     )
+                    or ()
                 )
             ),
 
-            semantic_issues=tuple(
-                getattr(
-                    semantic_issues,
-                    "issues",
-                    (),
+            semantic_issues=(
+                tuple(
+                    state.get(
+                        "semantic_issues",
+                        (),
+                    )
+                    or ()
                 )
             ),
         )

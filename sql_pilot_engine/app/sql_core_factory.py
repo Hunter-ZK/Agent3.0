@@ -19,8 +19,8 @@ from sql_pilot_engine.services.critic_service import (
 from sql_pilot_engine.services.optimize_service import (
     OptimizeService,
 )
-from sql_pilot_engine.workflow.sql_agent_workflow import (
-    SQLAgentWorkflow,
+from sql_pilot_engine.workflow.trusted_sql_workflow import (
+    TrustedSQLWorkflow,
 )
  
 
@@ -88,14 +88,14 @@ def build_sql_pilot_engine(
     )
 
 
-def build_sql_agent_workflow(
+def build_trusted_sql_workflow(
     max_retries: int = 1,
     *,
     metadata_provider_factory=None,
     default_enable_metadata: bool = False,
     enable_llm: bool = True,
     llm_provider: str = "deepseek",
-) -> SQLAgentWorkflow:
+) -> TrustedSQLWorkflow:
 
     engine = build_sql_pilot_engine(
         enable_llm=enable_llm,
@@ -105,7 +105,7 @@ def build_sql_agent_workflow(
         ),
     )
 
-    return SQLAgentWorkflow(
+    return TrustedSQLWorkflow(
         engine=engine,
         max_retries=max_retries,
         default_enable_metadata=(

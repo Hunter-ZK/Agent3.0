@@ -60,8 +60,8 @@ from sql_pilot_engine.capabilities.text_to_sql import (
     TextToSQLCapability,
 )
 
-from sql_pilot_engine.workflow.sql_agent_workflow import (
-    SQLAgentWorkflow,
+from sql_pilot_engine.workflow.protocols import (
+    TrustedSQLWorkflowPort,
 )
 
 
@@ -77,7 +77,7 @@ def build_text_to_sql_capability(
 
     sql_model: TextGenerationModel,
 
-    validation_workflow: SQLAgentWorkflow,
+    trusted_sql_workflow: TrustedSQLWorkflowPort,
 
     context_builder: (
         QueryContextBuilder | None
@@ -259,8 +259,8 @@ def build_text_to_sql_capability(
             sql_generator
         ),
 
-        validation_workflow=(
-            validation_workflow
+        trusted_sql_workflow=(
+            trusted_sql_workflow
         ),
 
         checkpoint_store=(

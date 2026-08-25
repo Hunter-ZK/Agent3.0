@@ -12,7 +12,12 @@ from sql_pilot_engine.context.models import (
 from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLRequest,
 )
-
+from sql_pilot_engine.app.sql_core_factory import (
+    build_trusted_sql_workflow,
+)
+from sql_pilot_engine.app.sql_core_factory import (
+    build_trusted_sql_workflow,
+)
 
 class FakePlannerModel:
     def generate(self, prompt: str) -> str:
@@ -85,17 +90,33 @@ def build_service(
         ),
     )
 
-    return build_text_to_sql_capability(
-        semantic_model_path=semantic_model_path,
-        context_documents=documents,
-        planner_model=FakePlannerModel(),
-        sql_model=sql_model or FakeSQLModel(),
-        semantic_validator_model=None,
-        collection_name="text_to_sql_service_test",
-        max_sql_retries=0,
-        max_semantic_retries=1,
+    trusted_sql_workflow = (
+        build_trusted_sql_workflow(
+            max_retries=0,
+            default_enable_metadata=False,
+            enable_llm=False,
+        )
     )
 
+    return build_text_to_sql_capability(
+        semantic_model_path=(
+            semantic_model_path
+        ),
+        context_documents=documents,
+        planner_model=FakePlannerModel(),
+        sql_model=(
+            sql_model
+            or FakeSQLModel()
+        ),
+        trusted_sql_workflow=(
+            trusted_sql_workflow
+        ),
+        semantic_validator_model=None,
+        collection_name=(
+            "text_to_sql_service_test"
+        ),
+        max_semantic_retries=1,
+    )
 
 def test_text_to_sql_pipeline_returns_trusted_sql():
     service = build_service()
@@ -108,7 +129,7 @@ def test_text_to_sql_pipeline_returns_trusted_sql():
 
 
     assert result.success is True
-    assert result.validation_status == "trusted_with_advisories"
+    assert result.validation_status == "no_issue"
     assert result.query_plan.tables == (
         "dwd_order_detail",
     )

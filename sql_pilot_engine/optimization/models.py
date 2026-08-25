@@ -37,7 +37,7 @@ class OptimizationResult:
     OptimizeService 的内部 Domain Result。
 
     candidate_sql 只是候选 SQL。
-    是否采纳由 SQLAgentWorkflow 决定。
+    是否采纳由 TrustedSQLWorkflow 决定。
     """
 
     original_sql: str

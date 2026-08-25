@@ -118,7 +118,10 @@ class QueryAgentState(TypedDict):
     validation_error_message: NotRequired[
         str | None
     ]
-
+    
+    validation_missing_context: NotRequired[
+        tuple[str, ...]
+    ]
 
     # ========================================================
     # Semantic Validation

@@ -370,20 +370,34 @@ def build_metadata_context_text(
             f"{table.description}"
         )
 
-        lines.append(
-            "  Is Partitioned: "
-            f"{table.is_partitioned}"
-        )
+        # 当前 Metadata Context 只输出
+        # Metadata Source 实际拥有的物理事实。
+        #
+        # partition_fields 非空：
+        #   可以确认至少存在这些分区字段。
+        #
+        # partition_fields 为空：
+        #   当前 Runtime 无法区分：
+        #   1. 表明确不是分区表；
+        #   2. 当前 Metadata Source 未采集分区信息。
+        #
+        # 因此不得输出：
+        # Is Partitioned: False
+        #
+        # 避免把“未提供”伪造成“明确为否”。
 
-        lines.append(
-            "  Partition Fields: "
-            + (
-                ", ".join(
+        if table.partition_fields:
+
+            lines.append(
+                "  Is Partitioned: True"
+            )
+
+            lines.append(
+                "  Partition Fields: "
+                + ", ".join(
                     table.partition_fields
                 )
-                or "None"
             )
-        )
 
         lines.append(
             "  Columns:"

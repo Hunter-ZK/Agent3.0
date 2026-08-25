@@ -63,6 +63,7 @@ REQUIRED_ISSUE_FIELDS = frozenset(
         "category",
         "confidence",
         "action",
+        "missing_context",
     }
 )
 
@@ -251,6 +252,8 @@ class LLMReviewer:
             raise LLMResponseValidationError(
                 "issues 必须是数组。"
             )
+            
+
 
         return [
             self._parse_single_issue(
@@ -304,6 +307,32 @@ class LLMReviewer:
             )
         )
 
+        missing_context = (
+            self._parse_missing_context(
+                item["missing_context"]
+            )
+        )
+
+        if (
+            action
+            is IssueAction.CONTEXT_REQUIRED
+            and not missing_context
+        ):
+            raise LLMResponseValidationError(
+                "action=context_required 时，"
+                "missing_context 不能为空。"
+            )
+
+        if (
+            action
+            is not IssueAction.CONTEXT_REQUIRED
+            and missing_context
+        ):
+            raise LLMResponseValidationError(
+                "只有 action=context_required "
+                "才能携带 missing_context。"
+            )
+
         return Issue(
             rule_id=rule_id,
             title=self._read_text(
@@ -332,7 +361,7 @@ class LLMReviewer:
             source=IssueSource.LLM,
             confidence=confidence,
             action=action,
-
+            missing_context=missing_context,
             # action 是唯一事实源。
             auto_fixable=(
                 action
@@ -623,3 +652,42 @@ class LLMReviewer:
             )
 
         return value
+        
+    @staticmethod
+    def _parse_missing_context(
+        raw_value: Any,
+    ) -> tuple[str, ...]:
+
+        if not isinstance(
+            raw_value,
+            list,
+        ):
+            raise LLMResponseValidationError(
+                "missing_context 必须是 array。"
+            )
+
+        normalized: list[str] = []
+
+        for item in raw_value:
+
+            if not isinstance(
+                item,
+                str,
+            ):
+                raise LLMResponseValidationError(
+                    "missing_context "
+                    "中的每一项必须是 string。"
+                )
+
+            value = item.strip()
+
+            if not value:
+                raise LLMResponseValidationError(
+                    "missing_context "
+                    "不能包含空字符串。"
+                )
+
+            if value not in normalized:
+                normalized.append(value)
+
+        return tuple(normalized)
