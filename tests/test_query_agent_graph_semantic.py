@@ -89,6 +89,7 @@ class FailingTrustedSQLWorkflow:
         return FakeTrustedSQLResult(
             success=False,
             final_status="blocked",
+            trusted_sql=None,
         )
         
         
@@ -105,7 +106,6 @@ class PassingTrustedSQLWorkflow:
         return FakeTrustedSQLResult(
             success=True,
             final_status="no_issue",
-            final_sql=sql,
             trusted_sql=sql,
             
         )

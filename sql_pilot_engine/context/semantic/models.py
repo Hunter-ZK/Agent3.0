@@ -50,3 +50,25 @@ class SemanticModel:
                 return table
         
         return None
+
+    
+    def get_metric(
+        self,
+        metric_name: str,
+    ) -> SemanticMetric | None:
+
+        normalized = (
+            metric_name
+            .strip()
+            .lower()
+        )
+
+        for metric in self.metrics:
+
+            if (
+                metric.name.lower()
+                == normalized
+            ):
+                return metric
+
+        return None

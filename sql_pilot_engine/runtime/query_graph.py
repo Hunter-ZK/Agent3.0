@@ -382,9 +382,13 @@ class QueryAgentGraph:
         return {
             "query_plan": outcome,
 
-            "clarification_question": (
-                None
-            ),
+            "clarification_question": None,
+
+            "missing_context": (),
+
+            "clarification_reason": "",
+
+            "success": False,
         }
 
 
@@ -546,6 +550,15 @@ class QueryAgentGraph:
                     ),
                 }
             )
+        else:
+            updates.update(
+                {
+                    "missing_context": (),
+                    "clarification_question": None,
+                    "clarification_reason": "",
+                }
+            )
+        
         return updates
     
     # ========================================================
@@ -675,10 +688,28 @@ class QueryAgentGraph:
 
         return "generate"
 
+    @staticmethod
     def _route_after_trust(
-        self,
         state: QueryAgentState,
     ) -> str:
+
+        if (
+            state.get(
+                "validation_status"
+            )
+            == "context_required"
+        ):
+
+            if not state.get(
+                "missing_context"
+            ):
+                raise RuntimeError(
+                    "Trusted SQL returned "
+                    "context_required without "
+                    "missing_context."
+                )
+
+            return "clarify"
 
         if (
             state.get(
