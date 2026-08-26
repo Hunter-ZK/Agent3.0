@@ -19,6 +19,9 @@ from sql_pilot_engine.generation.prompts import (
     build_sql_prompt,
 )
 
+from sql_pilot_engine.linking.models import (
+    LinkedSchema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,7 @@ class SQLGenerator:
         self,
         *,
         plan: QueryPlan,
+        linked_schema: LinkedSchema,
         query_context: QueryContext,
         dialect: str = "maxcompute",
         revision_feedback: tuple[
@@ -44,8 +48,15 @@ class SQLGenerator:
         ] = (),
     ) -> GeneratedSQL:
 
+        if not linked_schema.resolved:
+            raise ValueError(
+                "SQLGenerator cannot use "
+                "an unresolved LinkedSchema."
+            )
+
         prompt = build_sql_prompt(
             plan=plan,
+            linked_schema=linked_schema,
             query_context=query_context,
             dialect=dialect,
             revision_feedback=(

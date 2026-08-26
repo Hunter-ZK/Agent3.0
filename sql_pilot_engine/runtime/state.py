@@ -16,6 +16,10 @@ from sql_pilot_engine.generation.models import (
 from sql_pilot_engine.runtime.event import (
     RuntimeEventType,
 )
+
+from sql_pilot_engine.linking.models import (
+    LinkedSchema,
+)
     
 
 class QueryAgentState(TypedDict):
@@ -86,6 +90,19 @@ class QueryAgentState(TypedDict):
     clarification_round: NotRequired[int]
 
     max_clarification_rounds: NotRequired[int]
+    
+    # ========================================================
+    # Schema Linking
+    # ========================================================
+
+    linked_schema: NotRequired[
+        LinkedSchema | None
+    ]
+
+    linking_error_message: NotRequired[
+        str | None
+    ]
+        
 
     # ========================================================
     # Generation

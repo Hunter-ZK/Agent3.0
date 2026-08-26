@@ -58,6 +58,11 @@ from sql_pilot_engine.runtime.checkpoint import (
     CheckpointStore,
 )
 
+from sql_pilot_engine.linking.schema_linker import (
+    SchemaLinker,
+    SchemaLinkingError,
+)
+
 class QueryAgentGraph:
     """Agent3.0 Text-to-SQL LangGraph Runtime V0.1.
 
@@ -83,6 +88,7 @@ class QueryAgentGraph:
         ),
         context_builder: QueryContextBuilder,
         planner: QueryPlanner,
+        schema_linker: SchemaLinker,
         sql_generator: SQLGenerator,
         trusted_sql_workflow: (
             TrustedSQLWorkflowPort
@@ -124,6 +130,7 @@ class QueryAgentGraph:
         )
 
         self.planner = planner
+        self.schema_linker = schema_linker
         self.sql_generator = sql_generator
         self.trusted_sql_workflow = trusted_sql_workflow
         
@@ -170,6 +177,11 @@ class QueryAgentGraph:
         )
 
         builder.add_node(
+            "link_schema",
+            self._link_schema,
+        )
+
+        builder.add_node(
             "generate_sql",
             self._generate_sql,
         )
@@ -210,10 +222,19 @@ class QueryAgentGraph:
             "plan_query",
             self._route_after_plan,
             {
-                "generate": "generate_sql",
+                "link": "link_schema",
                 "clarify": (
                     "request_clarification"
                 ),
+                "end": END,
+            },
+        )
+        
+        builder.add_conditional_edges(
+            "link_schema",
+            self._route_after_linking,
+            {
+                "generate": "generate_sql",
                 "end": END,
             },
         )
@@ -389,11 +410,84 @@ class QueryAgentGraph:
             "clarification_reason": "",
 
             "success": False,
+            
+            "linked_schema": None,
+            "linking_error_message": None,
         }
-
 
     # ========================================================
     # Node 3
+    # Schema Linking
+    # ========================================================
+    
+    def _link_schema(
+        self,
+        state: QueryAgentState,
+    ) -> dict:
+        
+        plan = state.get(
+            "query_plan"
+        )
+        
+        if plan is None:
+            raise RuntimeError(
+                "QueryPlan is missing "
+                "before schema linking."
+            )
+
+        try:
+            linked_schema = (
+                self.schema_linker.link(
+                    plan=plan
+                )
+            )
+        
+        except SchemaLinkingError as error:
+            
+            message = str(error)
+            
+            return {
+                "linked_schema": None,
+                "linking_error_message": (
+                    message
+                ),
+                "error_message": message,
+                "success": False,
+            }
+            
+        if not linked_schema.resolved:
+            
+            unresolved = ", ".join(
+                linked_schema.unresolved_terms
+                
+            )
+
+            return {
+                "linked_schema": (
+                    linked_schema
+                ),
+
+                "linking_error_message": (
+                    message
+                ),
+
+                "error_message": message,
+
+                "success": False,
+            }
+
+        return {
+            "linked_schema": (
+                linked_schema
+            ),
+
+            "linking_error_message": None,
+
+            "error_message": None,
+        }
+
+    # ========================================================
+    # Node 4
     # SQL Generation
     # ========================================================
     
@@ -413,6 +507,10 @@ class QueryAgentGraph:
             "query_context"
         )
 
+        linked_schema = state.get(
+            "linked_schema"
+        )
+
         plan = state.get(
             "query_plan"
         )
@@ -428,10 +526,17 @@ class QueryAgentGraph:
                 "QueryPlan is missing "
                 "before SQL generation."
             )
- 
+            
+        if linked_schema is None:
+            raise RuntimeError(
+                "LinkedSchema is missing "
+                "before SQL generation."
+            )
+        
         result = (
             self.sql_generator.generate(
                 plan=plan,
+                linked_schema=linked_schema,
                 query_context=query_context,
                 dialect=state.get("dialect","maxcompute"),
                 revision_feedback=state.get("revision_feedback",(),),
@@ -686,6 +791,28 @@ class QueryAgentGraph:
         ):
             return "clarify"
 
+        return "link"
+
+    @staticmethod
+    def _route_after_linking(
+        state: QueryAgentGraph,
+    ) -> str:
+        
+        linked_schema = state.get(
+            "linked_schema"
+        )
+        
+        if state.get(
+            "error_message"
+        ):
+            return "end"
+        
+        if linked_schema is None:
+            return "end"
+        
+        if not linked_schema.resolved:
+            return "end"
+        
         return "generate"
 
     @staticmethod
@@ -850,6 +977,10 @@ class QueryAgentGraph:
             "max_clarification_rounds": (
                 self.max_clarification_rounds
             ),
+            
+            # Linking
+            "linked_schema": None,
+            "linking_error_message": None,
 
             # Generation
             "generated_sql": None,

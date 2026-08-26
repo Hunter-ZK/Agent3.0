@@ -8,6 +8,9 @@ from sql_pilot_engine.generation.models import (
     QueryPlan,
 )
 
+from sql_pilot_engine.linking.models import (
+    LinkedSchema,
+)
 
 def render_query_context(
     context: QueryContext,
@@ -49,11 +52,78 @@ def render_query_context(
     return "\n\n".join(sections)
 
 
+def render_linked_schema(
+    linked_schema: LinkedSchema,
+) -> str:
+    
+    lines: list[str] = []
+
+    for linked_table in (
+        linked_schema.tables
+    ):
+        table = (
+            linked_table.metadata
+        )
+        
+        lines.append(
+            f"TABLE {table.full_name}"
+        )
+        
+        if table.description:
+            lines.append(
+                "Description: "
+                f"{table.description}"
+            )
+
+        if table.partition_fields:
+            lines.append(
+                "Partition fields: "
+                + ", ".join(
+                    table.partition_fields
+                )
+            )
+            
+        lines.append(
+            "Columns:"
+        )
+        
+        for column in table.columns.values():
+            line = (
+                f"- {column.name}"
+            )
+            
+            if column.data_type:
+                line += (
+                    f" [{column.data_type}]"
+                )
+            
+            if column.description:
+                line += (
+                    f": {column.description}"
+                )
+            
+            lines.append(line)
+            
+    if linked_schema.omitted_column_count > 0:
+        lines.append(
+            "OMITTED PHYSICAL COLUMNS: "
+            f"{linked_schema.omitted_column_count}"
+        )
+
+    return "\n".join(lines)
+
 
 def build_planner_prompt(
     *,
+    linked_schema: LinkedSchema,
     query_context: QueryContext,
 ) -> str:
+    
+    physical_schema = (
+        render_linked_schema(
+            linked_schema
+        )
+    )
     
     rag_context = render_query_context(
         query_context
@@ -71,6 +141,28 @@ User question:
 
 Semantic model:
 {query_context.semantic_context}
+
+Physical schema for this task:
+{physical_schema}
+
+Physical Schema rules:
+
+- Use only physical tables and columns explicitly
+  present in the supplied LinkedSchema.
+
+- Do not invent table names or column names.
+
+- The Semantic Model defines business meaning.
+
+- LinkedSchema defines physical existence
+  and the physical schema available to this task.
+
+- If Semantic Model and Physical Schema disagree
+  about whether a physical table or column exists,
+  do not invent a replacement.
+
+- Use the fully qualified physical table name
+  from LinkedSchema when available.
 
 Retrieved context:
 {rag_context}

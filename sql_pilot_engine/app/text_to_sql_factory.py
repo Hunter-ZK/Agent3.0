@@ -64,6 +64,14 @@ from sql_pilot_engine.workflow.protocols import (
     TrustedSQLWorkflowPort,
 )
 
+from sql_pilot_engine.linking.schema_linker import(
+    SchemaLinker,
+)
+
+from sql_pilot_engine.metadata.provider import (
+    MetadataProvider,
+)
+
 
 def build_text_to_sql_capability(
     *,
@@ -76,6 +84,8 @@ def build_text_to_sql_capability(
     planner_model: TextGenerationModel,
 
     sql_model: TextGenerationModel,
+    
+    metadata_provider: MetadataProvider,
 
     trusted_sql_workflow: TrustedSQLWorkflowPort,
 
@@ -105,15 +115,17 @@ def build_text_to_sql_capability(
     """
     Text-to-SQL Composition Root。
 
-    只负责：
+    只负责组装：
 
     Context Infrastructure
     → Planner
+    → SchemaLinker
     → Generator
     → QueryAgentGraph
     → TextToSQLCapability
 
-    SQL Core / Metadata / Trusted SQL Workflow
+    SQL Core / MetadataProvider /
+    Trusted SQL Workflow
     由调用方提前组装后注入。
     """
 
@@ -197,6 +209,7 @@ def build_text_to_sql_capability(
             )
         )
     )
+    
 
     # ========================================================
     # Planning / Generation
@@ -204,6 +217,11 @@ def build_text_to_sql_capability(
 
     planner = QueryPlanner(
         model=planner_model
+    )
+    
+    schema_linker = SchemaLinker(
+        metadata_provider=metadata_provider,
+        semantic_model=semantic_model,
     )
 
     sql_generator = SQLGenerator(
@@ -255,6 +273,8 @@ def build_text_to_sql_capability(
 
         planner=planner,
 
+        schema_linker=schema_linker,
+        
         sql_generator=(
             sql_generator
         ),
