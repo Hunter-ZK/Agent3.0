@@ -17,6 +17,48 @@ from sql_pilot_engine.services.semantic_validation_service import (
     SemanticValidationResult,
     SemanticValidationStatus,
 )
+from sql_pilot_engine.linking.models import (
+    LinkedSchema,
+    LinkedTable,
+)
+
+from sql_pilot_engine.metadata.models import (
+    TableMetadata,
+)
+
+class PassingSchemaLinker:
+    """
+    Graph 单测只验证 Runtime 编排，
+    不重复测试真实 SchemaLinker。
+
+    SchemaLinker 本身由
+    tests/test_schema_linker.py
+    单独负责测试。
+    """
+
+    def link(
+        self,
+        *,
+        plan,
+    ) -> LinkedSchema:
+
+        return LinkedSchema(
+            tables=tuple(
+                LinkedTable(
+                    metadata=(
+                        TableMetadata(
+                            full_name=(
+                                table_name
+                            ),
+                            columns={},
+                        )
+                    )
+                )
+                for table_name
+                in plan.tables
+            ),
+        )
+
 
 
 class EmptyRetriever:
@@ -166,6 +208,7 @@ def build_graph(
         verified_sql_retriever=EmptyRetriever(),
         context_builder=QueryContextBuilder(),
         planner=ReadyPlanner(),
+        schema_linker=PassingSchemaLinker(),
         sql_generator=generator,
         trusted_sql_workflow=(
             trusted_sql_workflow

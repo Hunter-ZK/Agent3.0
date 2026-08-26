@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Callable
 from pathlib import Path
 
 from sql_pilot_engine.context.builder import (
@@ -84,8 +84,12 @@ def build_text_to_sql_capability(
     planner_model: TextGenerationModel,
 
     sql_model: TextGenerationModel,
+
     
-    metadata_provider: MetadataProvider,
+    metadata_provider_factory: Callable[
+        [],
+        MetadataProvider,
+    ],
 
     trusted_sql_workflow: TrustedSQLWorkflowPort,
 
@@ -220,7 +224,9 @@ def build_text_to_sql_capability(
     )
     
     schema_linker = SchemaLinker(
-        metadata_provider=metadata_provider,
+        metadata_provider=(
+            metadata_provider_factory()
+        ),
         semantic_model=semantic_model,
     )
 

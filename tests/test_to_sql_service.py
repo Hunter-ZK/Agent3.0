@@ -15,8 +15,8 @@ from sql_pilot_engine.schemas.text_to_sql import (
 from sql_pilot_engine.app.sql_core_factory import (
     build_trusted_sql_workflow,
 )
-from sql_pilot_engine.app.sql_core_factory import (
-    build_trusted_sql_workflow,
+from sql_pilot_engine.metadata.mock_provider import (
+    MockMetadataProvider,
 )
 
 class FakePlannerModel:
@@ -90,9 +90,15 @@ def build_service(
         ),
     )
 
+    def metadata_provider_factory():
+        return MockMetadataProvider()
+
     trusted_sql_workflow = (
         build_trusted_sql_workflow(
             max_retries=0,
+            metadata_provider_factory = (
+                metadata_provider_factory
+            ),
             default_enable_metadata=False,
             enable_llm=False,
         )
@@ -108,6 +114,11 @@ def build_service(
             sql_model
             or FakeSQLModel()
         ),
+
+        metadata_provider_factory=(
+            metadata_provider_factory
+        ),
+
         trusted_sql_workflow=(
             trusted_sql_workflow
         ),

@@ -16,6 +16,47 @@ from sql_pilot_engine.runtime.checkpoint_memory import (
     MemoryCheckpointStore,
 )
 from sql_pilot_engine.runtime.query_graph import QueryAgentGraph
+from sql_pilot_engine.linking.models import (
+    LinkedSchema,
+    LinkedTable,
+)
+
+from sql_pilot_engine.metadata.models import (
+    TableMetadata,
+)
+
+class PassingSchemaLinker:
+    """
+    Graph 单测只验证 Runtime 编排，
+    不重复测试真实 SchemaLinker。
+
+    SchemaLinker 本身由
+    tests/test_schema_linker.py
+    单独负责测试。
+    """
+
+    def link(
+        self,
+        *,
+        plan,
+    ) -> LinkedSchema:
+
+        return LinkedSchema(
+            tables=tuple(
+                LinkedTable(
+                    metadata=(
+                        TableMetadata(
+                            full_name=(
+                                table_name
+                            ),
+                            columns={},
+                        )
+                    )
+                )
+                for table_name
+                in plan.tables
+            ),
+        )
 
 
 class EmptyRetriever:
@@ -133,6 +174,7 @@ def build_graph(*, planner, generator) -> QueryAgentGraph:
         verified_sql_retriever=EmptyRetriever(),
         context_builder=QueryContextBuilder(),
         planner=planner,
+        schema_linker=PassingSchemaLinker(),
         sql_generator=generator,
         trusted_sql_workflow=PassingValidationWorkflow(),
         checkpoint_store=MemoryCheckpointStore(),

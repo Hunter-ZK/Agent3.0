@@ -18,6 +18,47 @@ from sql_pilot_engine.schemas.text_to_sql import (
 from sql_pilot_engine.capabilities.text_to_sql import (
     TextToSQLCapability,
 )
+from sql_pilot_engine.linking.models import (
+    LinkedSchema,
+    LinkedTable,
+)
+
+from sql_pilot_engine.metadata.models import (
+    TableMetadata,
+)
+
+class PassingSchemaLinker:
+    """
+    Graph 单测只验证 Runtime 编排，
+    不重复测试真实 SchemaLinker。
+
+    SchemaLinker 本身由
+    tests/test_schema_linker.py
+    单独负责测试。
+    """
+
+    def link(
+        self,
+        *,
+        plan,
+    ) -> LinkedSchema:
+
+        return LinkedSchema(
+            tables=tuple(
+                LinkedTable(
+                    metadata=(
+                        TableMetadata(
+                            full_name=(
+                                table_name
+                            ),
+                            columns={},
+                        )
+                    )
+                )
+                for table_name
+                in plan.tables
+            ),
+        )
 
 
 class EmptyRetriever:
@@ -84,6 +125,7 @@ def test_clarification_stops_sql_generation():
         verified_sql_retriever=EmptyRetriever(),
         context_builder=QueryContextBuilder(),
         planner=NeedClarificationPlanner(),
+        schema_linker=PassingSchemaLinker(),
         sql_generator=ShouldNotGenerateSQL(),
         trusted_sql_workflow=ShouldNotValidateWorkflow(),
         checkpoint_store=MemoryCheckpointStore(),

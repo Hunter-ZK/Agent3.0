@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from collections.abc import Mapping
+
 from sql_pilot_engine.metadata.models import (
     TableMetadata,
 )

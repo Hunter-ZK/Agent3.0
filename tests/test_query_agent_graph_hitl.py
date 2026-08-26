@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sql_pilot_engine.linking.models import (
+    LinkedSchema,
+    LinkedTable,
+)
+
+from sql_pilot_engine.metadata.models import (
+    TableMetadata,
+)
+
 from sql_pilot_engine.context.builder import QueryContextBuilder
 from sql_pilot_engine.context.semantic.models import (
     SemanticColumn,
@@ -17,6 +26,38 @@ from sql_pilot_engine.runtime.checkpoint_memory import (
 )
 from sql_pilot_engine.runtime.query_graph import QueryAgentGraph
 
+class PassingSchemaLinker:
+    """
+    Graph 单测只验证 Runtime 编排，
+    不重复测试真实 SchemaLinker。
+
+    SchemaLinker 本身由
+    tests/test_schema_linker.py
+    单独负责测试。
+    """
+
+    def link(
+        self,
+        *,
+        plan,
+    ) -> LinkedSchema:
+
+        return LinkedSchema(
+            tables=tuple(
+                LinkedTable(
+                    metadata=(
+                        TableMetadata(
+                            full_name=(
+                                table_name
+                            ),
+                            columns={},
+                        )
+                    )
+                )
+                for table_name
+                in plan.tables
+            ),
+        )
 
 class EmptyRetriever:
     def retrieve(self, *, question: str, top_k: int):
@@ -132,6 +173,7 @@ def build_graph(
         verified_sql_retriever=EmptyRetriever(),
         context_builder=QueryContextBuilder(),
         planner=planner,
+        schema_linker=PassingSchemaLinker(),
         sql_generator=FakeSQLGenerator(),
         trusted_sql_workflow=PassingTrustedSQLWorkflow(),
         checkpoint_store=MemoryCheckpointStore(),

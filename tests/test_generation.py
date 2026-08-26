@@ -2,6 +2,15 @@ from sql_pilot_engine.context.builder import QueryContext
 from sql_pilot_engine.generation.planner import QueryPlanner
 from sql_pilot_engine.generation.sql_generator import SQLGenerator
 
+from sql_pilot_engine.linking.models import (
+    LinkedSchema,
+    LinkedTable,
+)
+
+from sql_pilot_engine.metadata.models import (
+    ColumnMetadata,
+    TableMetadata,
+)
 
 class FakePlannerModel:
     def generate(self, prompt: str) -> str:
@@ -35,6 +44,40 @@ def build_context() -> QueryContext:
         verified_sql=(),
     )
 
+def build_linked_schema(
+) -> LinkedSchema:
+
+    table = TableMetadata(
+        full_name=(
+            "dwd_order_detail"
+        ),
+
+        columns={
+            "user_id": (
+                ColumnMetadata(
+                    name="user_id",
+                    data_type="STRING",
+                    description="用户ID",
+                )
+            ),
+
+            "order_amount": (
+                ColumnMetadata(
+                    name="order_amount",
+                    data_type="DECIMAL(18,2)",
+                    description="订单金额",
+                )
+            ),
+        },
+    )
+
+    return LinkedSchema(
+        tables=(
+            LinkedTable(
+                metadata=table
+            ),
+        ),
+    )
 
 def test_query_planner_builds_plan():
     context = build_context()
@@ -59,6 +102,9 @@ def test_sql_generator_generates_sql():
 
     result = generator.generate(
         plan=plan,
+        linked_schema=(
+            build_linked_schema()
+        ),
         query_context=context,
     )
 
@@ -101,6 +147,7 @@ def test_sql_generator_strips_outer_sql_fence():
 
     result = generator.generate(
         plan=plan,
+        linked_schema=(build_linked_schema()),
         query_context=context,
     )
 
@@ -149,6 +196,7 @@ def test_sql_generator_keeps_internal_backticks():
 
     result = generator.generate(
         plan=plan,
+        linked_schema=(build_linked_schema()),
         query_context=context,
     )
 

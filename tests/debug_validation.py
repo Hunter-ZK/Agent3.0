@@ -1,30 +1,61 @@
-from sql_pilot_engine.app.factory import (
-    build_workflow,
+from langgraph.checkpoint.serde.jsonplus import (
+    JsonPlusSerializer,
+)
+
+from sql_pilot_engine.linking.models import (
+    LinkedSchema,
+    LinkedTable,
+)
+
+from sql_pilot_engine.metadata.models import (
+    ColumnMetadata,
+    TableMetadata,
 )
 
 
-sql = """
-SELECT
-    user_id,
-    SUM(order_amount) AS total_order_amount
-FROM dwd_order_detail
-GROUP BY user_id
-"""
-
-
-workflow = build_workflow(
-    max_retries=0
+column = ColumnMetadata(
+    name="loan_bal_rmb",
+    data_type="DECIMAL(22,2)",
 )
 
-
-result = workflow.run(
-    sql
+table = TableMetadata(
+    full_name="test_table",
+    columns={
+        "loan_bal_rmb": column,
+    },
 )
 
-
-print(result)
-print(
-    vars(result)
-    if hasattr(result, "__dict__")
-    else result
+linked_table = LinkedTable(
+    metadata=table,
 )
+
+linked_schema = LinkedSchema(
+    tables=(
+        linked_table,
+    ),
+)
+
+serializer = JsonPlusSerializer()
+
+
+objects = {
+    "ColumnMetadata": column,
+    "columns": table.columns,
+    "columns_as_dict": dict(table.columns),
+    "TableMetadata": table,
+    "LinkedTable": linked_table,
+    "LinkedSchema": linked_schema,
+}
+
+
+for name, value in objects.items():
+    try:
+        serializer.dumps_typed(value)
+        print(name, "PASS")
+    except Exception as exc:
+        print(
+            name,
+            "FAIL",
+            type(exc).__name__,
+            str(exc),
+        )

@@ -87,9 +87,7 @@ class TableMetadata:
         object.__setattr__(
             self,
             "columns",
-            MappingProxyType(
-                normalized_columns
-            ),
+            normalized_columns,
         )
 
         object.__setattr__(

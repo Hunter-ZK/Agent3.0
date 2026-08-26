@@ -462,6 +462,11 @@ class QueryAgentGraph:
                 
             )
 
+            message = (
+                "Schema linking unresolved: "
+                f"{unresolved}"
+            )
+
             return {
                 "linked_schema": (
                     linked_schema
@@ -590,7 +595,7 @@ class QueryAgentGraph:
         )
         
         
-        validation_missing_context = tuple(
+        missing_context = tuple(
             trust_result.missing_context
             or ()
         )
@@ -615,8 +620,8 @@ class QueryAgentGraph:
                 trust_result.error_message
             ),
 
-            "validation_missing_context": (
-                validation_missing_context
+            "missing_context": (
+                missing_context
             ),
 
             # 这里只表示：
@@ -638,12 +643,12 @@ class QueryAgentGraph:
                     "clarification_question": (
                         self
                         ._build_validation_clarification(
-                            validation_missing_context
+                            missing_context
                         )
                     ),
 
                     "missing_context": (
-                        validation_missing_context
+                        missing_context
                     ),
 
                     "clarification_reason": (

@@ -115,15 +115,9 @@ def render_linked_schema(
 
 def build_planner_prompt(
     *,
-    linked_schema: LinkedSchema,
     query_context: QueryContext,
 ) -> str:
-    
-    physical_schema = (
-        render_linked_schema(
-            linked_schema
-        )
-    )
+  
     
     rag_context = render_query_context(
         query_context
@@ -141,28 +135,6 @@ User question:
 
 Semantic model:
 {query_context.semantic_context}
-
-Physical schema for this task:
-{physical_schema}
-
-Physical Schema rules:
-
-- Use only physical tables and columns explicitly
-  present in the supplied LinkedSchema.
-
-- Do not invent table names or column names.
-
-- The Semantic Model defines business meaning.
-
-- LinkedSchema defines physical existence
-  and the physical schema available to this task.
-
-- If Semantic Model and Physical Schema disagree
-  about whether a physical table or column exists,
-  do not invent a replacement.
-
-- Use the fully qualified physical table name
-  from LinkedSchema when available.
 
 Retrieved context:
 {rag_context}
@@ -295,10 +267,17 @@ If context is insufficient:
 def build_sql_prompt(
     *,
     plan: QueryPlan,
+    linked_schema: LinkedSchema,
     query_context: QueryContext,
     dialect: str,
     revision_feedback: tuple[str, ...] = (),
 ) -> str:
+
+    physical_schema = (
+        render_linked_schema(
+            linked_schema
+        )
+    )
     
     rag_context = render_query_context(
         query_context
@@ -314,6 +293,28 @@ def build_sql_prompt(
 
         feedback_text = f"""
         Previous SQL was rejected.
+
+      Physical schema for this task:
+      {physical_schema}
+
+      Physical Schema rules:
+
+      - Use only physical tables and columns explicitly
+        present in the supplied LinkedSchema.
+
+      - Do not invent table names or column names.
+
+      - The Semantic Model defines business meaning.
+
+      - LinkedSchema defines physical existence
+        and the physical schema available to this task.
+
+      - If Semantic Model and Physical Schema disagree
+        about whether a physical table or column exists,
+        do not invent a replacement.
+
+      - Use the fully qualified physical table name
+        from LinkedSchema when available.
 
         Revision feedback:
         {feedback_lines}
@@ -342,6 +343,28 @@ requirements={plan.requirements}
 
 Semantic model:
 {query_context.semantic_context}
+
+Physical schema for this task:
+{physical_schema}
+
+Physical Schema rules:
+
+- Use only physical tables and columns explicitly
+  present in the supplied LinkedSchema.
+
+- Do not invent physical table names or column names.
+
+- The Semantic Model defines business meaning.
+
+- LinkedSchema defines the physical schema available
+  to this task.
+
+- If Semantic Model and Physical Schema disagree
+  about whether a physical table or column exists,
+  do not invent a replacement.
+
+- Prefer the fully qualified physical table name
+  supplied by LinkedSchema.
 
 Retrieved context:
 {rag_context}

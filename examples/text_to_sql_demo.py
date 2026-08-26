@@ -227,6 +227,8 @@ def build_demo_service(
             sql_model
         ),
 
+        metadata_provider_factory=metadata_provider_factory,
+
         semantic_validator_model=(
             semantic_validator_model
         ),
