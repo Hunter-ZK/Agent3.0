@@ -72,6 +72,9 @@ from sql_pilot_engine.linking.schema_linker import(
 from sql_pilot_engine.metadata.provider import (
     MetadataProvider,
 )
+from sql_pilot_engine.services.text_to_sql_stage_service import (
+    TextToSQLStageService,
+)
 
 
 def build_text_to_sql_capability(
@@ -111,6 +114,10 @@ def build_text_to_sql_capability(
     ),
 
     embedding_dimensions: int = 128,
+    
+    knowledge_top_k: int = 5,
+    
+    verified_sql_top_k: int = 3,
 
     max_semantic_retries: int = 1,
 
@@ -263,40 +270,59 @@ def build_text_to_sql_capability(
         else MemoryCheckpointStore()
     )
 
+    stage_service = (
+        TextToSQLStageService(
+            semantic_model=(
+                semantic_model
+            ),
+
+            knowledge_retriever=(
+                knowledge_retriever
+            ),
+
+            verified_sql_retriever=(
+                verified_sql_retriever
+            ),
+
+            context_builder=(
+                active_context_builder
+            ),
+
+            planner=planner,
+
+            schema_linker=(
+                schema_linker
+            ),
+
+            sql_generator=(
+                sql_generator
+            ),
+
+            trusted_sql_workflow=(
+                trusted_sql_workflow
+            ),
+
+            semantic_validator=(
+                semantic_validator
+            ),
+
+            knowledge_top_k=(
+                knowledge_top_k
+            ),
+
+            verified_sql_top_k=(
+                verified_sql_top_k
+            ),
+        )
+    )
+
     graph = QueryAgentGraph(
-        semantic_model=semantic_model,
-
-        knowledge_retriever=(
-            knowledge_retriever
-        ),
-
-        verified_sql_retriever=(
-            verified_sql_retriever
-        ),
-
-        context_builder=(
-            active_context_builder
-        ),
-
-        planner=planner,
-
-        schema_linker=schema_linker,
-        
-        sql_generator=(
-            sql_generator
-        ),
-
-        trusted_sql_workflow=(
-            trusted_sql_workflow
-        ),
-
+        stage_service=stage_service,
+      
         checkpoint_store=(
             runtime_checkpoint_store
         ),
 
-        semantic_validator=(
-            semantic_validator
-        ),
 
         max_semantic_retries=(
             max_semantic_retries

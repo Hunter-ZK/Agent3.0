@@ -401,12 +401,3 @@ class DeepSeekLLMClient():
             return json.loads(content)
         except json.JSONDecodeError as error:
             raise LLMResponseParseError(f"LLM 返回不是合法 JSON：{content}") from error
-
-
-def create_llm_client(provider: str) -> StructuredGenerationModel:
-    provider = provider.lower()
-    if provider == "mock":
-        return MockLLMClient()
-    if provider == "deepseek":
-        return DeepSeekLLMClient()
-    raise LLMAPIError(f"不支持的 LLM provider：{provider}")

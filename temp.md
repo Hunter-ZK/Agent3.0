@@ -6661,3 +6661,6 @@ python examples/text_to_sql_demo.py --use-real-llm --question "统计2026年7月
 
 
 python examples/text_to_sql_demo.py --use-real-llm --question "统计2026年7月高新技术企业的贷款余额" --dialect maxcompute --log-level INFO
+
+
+我已将代码git到云端，你可以扫描一遍代码，然后进入下一环节，确保内容要符合我的代码和技术方案

@@ -8,46 +8,20 @@ from langgraph.graph import (
     StateGraph,
 )
 
-from sql_pilot_engine.context.builder import (
-    QueryContextBuilder,
-)
-
-from sql_pilot_engine.context.retriever import (
-    KnowledgeRetriever,
-    VerifiedSQLRetriever,
-)
-
-from sql_pilot_engine.context.semantic.models import (
-    SemanticModel,
-)
-
-from sql_pilot_engine.context.semantic.renderer import (
-    SemanticModelRenderer,
-)
-
-from sql_pilot_engine.generation.planner import (
-    QueryPlanner,
-)
 from sql_pilot_engine.generation.models import (
     PlanningClarification,
 )
-from sql_pilot_engine.generation.sql_generator import (
-    SQLGenerator,
-)
+
 
 from sql_pilot_engine.runtime.state import (
     QueryAgentState,
 )
 
 from sql_pilot_engine.services.semantic_validation_service import (
-    SemanticSQLValidator,
     SemanticValidationResult,
     SemanticValidationStatus,
 )
 
-from sql_pilot_engine.workflow.protocols import (
-    TrustedSQLWorkflowPort,
-)
 
 from langgraph.types import (
     Command,
@@ -59,8 +33,10 @@ from sql_pilot_engine.runtime.checkpoint import (
 )
 
 from sql_pilot_engine.linking.schema_linker import (
-    SchemaLinker,
     SchemaLinkingError,
+)
+from sql_pilot_engine.services.text_to_sql_stage_service import (
+    TextToSQLStageService,
 )
 
 class QueryAgentGraph:
@@ -79,24 +55,10 @@ class QueryAgentGraph:
     def __init__(
         self,
         *,
-        semantic_model: SemanticModel,
-        knowledge_retriever:(
-            KnowledgeRetriever
-        ),
-        verified_sql_retriever: (
-            VerifiedSQLRetriever
-        ),
-        context_builder: QueryContextBuilder,
-        planner: QueryPlanner,
-        schema_linker: SchemaLinker,
-        sql_generator: SQLGenerator,
-        trusted_sql_workflow: (
-            TrustedSQLWorkflowPort
+        stage_service: (
+            TextToSQLStageService
         ),
         checkpoint_store: CheckpointStore,
-        semantic_validator: (
-            SemanticSQLValidator | None
-        ) = None,
         max_semantic_retries: int = 1,
         max_clarification_rounds: int = 3,
     ) -> None:
@@ -112,31 +74,6 @@ class QueryAgentGraph:
                 "max_clarification_rounds "
                 "must be greater than 0"
             )
-
-        self.semantic_model = (
-            semantic_model
-        )
-
-        self.knowledge_retriever = (
-            knowledge_retriever
-        )
-
-        self.verified_sql_retriever = (
-            verified_sql_retriever
-        )
-
-        self.context_builder = (
-            context_builder
-        )
-
-        self.planner = planner
-        self.schema_linker = schema_linker
-        self.sql_generator = sql_generator
-        self.trusted_sql_workflow = trusted_sql_workflow
-        
-        self.semantic_validator = (
-            semantic_validator
-        )
         
         self.max_semantic_retries = (
             max_semantic_retries
@@ -150,9 +87,7 @@ class QueryAgentGraph:
             checkpoint_store.get_backend()
         )
 
-        self.semantic_renderer = (
-            SemanticModelRenderer()
-        )
+        self.stage_service = stage_service
 
         self.graph = self._build_graph()
 
@@ -309,36 +244,10 @@ class QueryAgentGraph:
 
         question = state["question"]
         
-        semantic_context = (
-            self.semantic_renderer.render(
-                self.semantic_model
-            )
-        )
-
-        business_knowledge = (
-            self.knowledge_retriever.retrieve(
-                question=question,
-                top_k=5,
-            )
-        )
-
-        verified_sql = (
-            self.verified_sql_retriever.retrieve(
-                question=question,
-                top_k=3,
-            )
-        )
 
         query_context = (
-            self.context_builder.build(
+            self.stage_service.build_query_context(
                 question=question,
-                semantic_context=semantic_context,
-                business_knowledge=(
-                    business_knowledge
-                ),
-                verified_sql=(
-                    verified_sql
-                ),
                 session_context=(
                     state.get(
                         "session_context",
@@ -373,7 +282,7 @@ class QueryAgentGraph:
                 "before planning."
             )
         
-        outcome = self.planner.plan(
+        outcome = self.stage_service.plan(
             query_context=(
                 query_context
             ),
@@ -437,7 +346,7 @@ class QueryAgentGraph:
 
         try:
             linked_schema = (
-                self.schema_linker.link(
+                self.stage_service.link_schema(
                     plan=plan
                 )
             )
@@ -539,7 +448,7 @@ class QueryAgentGraph:
             )
         
         result = (
-            self.sql_generator.generate(
+            self.stage_service.generate_sql(
                 plan=plan,
                 linked_schema=linked_schema,
                 query_context=query_context,
@@ -584,8 +493,8 @@ class QueryAgentGraph:
             )
 
         trust_result = (
-            self.trusted_sql_workflow.run(
-                generated_sql,
+            self.stage_service.trust_sql(
+                generated_sql=generated_sql,
                 dialect=state.get(
                     "dialect",
                     "maxcompute",
@@ -682,21 +591,41 @@ class QueryAgentGraph:
         state: QueryAgentState,
     ) -> dict:
         
-        if self.semantic_validator is None:
-            return {
-                "semantic_result": None,
-                "semantic_validation_status": None,
-                "trusted_sql":state.get("candidate_sql",""),
-                "success":state.get("candidate_sql") is not None,
-            }
+        # if self.stage_service is None:
+        #     return {
+        #         "semantic_result": None,
+        #         "semantic_validation_status": None,
+        #         "trusted_sql":state.get("candidate_sql",""),
+        #         "success":state.get("candidate_sql") is not None,
+        #     }
             
         result = (
-            self.semantic_validator.validate(
+            self.stage_service.validate_semantics(
                 sql=state["candidate_sql"],
                 plan=state["query_plan"],
                 query_context=state["query_context"],
             )
         )
+        
+        if result is None:
+            return {
+                "semantic_result": None,
+                "semantic_validation_status": None,
+
+                "trusted_sql": (
+                    state.get(
+                        "candidate_sql",
+                        "",
+                    )
+                ),
+
+                "success": (
+                    state.get(
+                        "candidate_sql"
+                    )
+                    is not None
+                ),
+            }
         
         updates: dict = {
             "semantic_validation_status": (

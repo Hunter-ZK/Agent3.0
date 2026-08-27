@@ -209,6 +209,12 @@ def build_demo_service(
         )
 
         semantic_validator_model = None
+        
+        structured_model = (
+            MockLLMClient()
+        )
+
+        llm_provider_name = "mock"
 
     metadata_provider_factory = build_metadata_provider
 

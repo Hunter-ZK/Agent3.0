@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from enum import Enum
 
-from collections.abc import Mapping
 
 from sql_pilot_engine.metadata.models import (
     TableMetadata,
@@ -162,7 +161,7 @@ class LinkedSchema:
     def get_binding(
         self,
         *,
-        kind: SchemaBinding,
+        kind: SchemaBindingKind,
         logical_name: str,
     ) -> SchemaBinding | None:
         
@@ -195,6 +194,8 @@ class LinkedSchema:
                 linked_table
                 .metadata
                 .full_name
+                .strip()
+                .lower()
             )
 
             if (
