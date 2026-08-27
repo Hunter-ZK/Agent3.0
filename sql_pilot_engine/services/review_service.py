@@ -3,7 +3,9 @@
 from sql_pilot_engine.core.context import ReviewContext
 from sql_pilot_engine.core.enums import IssueSource, Severity, IssueAction
 from sql_pilot_engine.core.models import Issue, ReviewResult
-from sql_pilot_engine.llm.clients import BaseLLMClient
+from sql_pilot_engine.llm.protocols import (
+    StructuredGenerationModel,
+)
 from sql_pilot_engine.llm.context_builder import build_analysis_context_text, build_metadata_context_text
 from sql_pilot_engine.llm.errors import LLMAPIError, LLMError, LLMResponseParseError, LLMResponseValidationError
 from sql_pilot_engine.llm.review_prompts import build_issues_text
@@ -23,7 +25,7 @@ class ReviewService:
     def __init__(
             self, 
             rule_registry: RuleRegistry | None = None, 
-            llm_client: BaseLLMClient | None = None,
+            llm_client: StructuredGenerationModel | None = None,
             analysis_adapter: SQLAnalysisAdapter | None = None,
             metadata_validator: (MetadataValidator | None) = None,
         ) -> None:

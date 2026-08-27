@@ -9,8 +9,8 @@ from sql_pilot_engine.core.enums import (
     Severity,
 )
 from sql_pilot_engine.core.models import Issue
-from sql_pilot_engine.llm.clients import (
-    BaseLLMClient,
+from sql_pilot_engine.llm.protocols import (
+    StructuredGenerationModel,
 )
 from sql_pilot_engine.llm.errors import (
     LLMResponseValidationError,
@@ -101,7 +101,7 @@ class LLMReviewer:
 
     def __init__(
         self,
-        client: BaseLLMClient,
+        client: StructuredGenerationModel,
     ) -> None:
         self.client = client
 

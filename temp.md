@@ -6655,4 +6655,9 @@ E. 工作方式
 
 python examples/text_to_sql_eval_v2.py --case explicit_high_tech_month --case high_tech_yoy --repeat 1
 
+python examples/text_to_sql_demo.py --use-real-llm --question "统计2026年7月高新技术企业的贷款余额" --dialect maxcompute --log-level INFO
 
+
+
+
+python examples/text_to_sql_demo.py --use-real-llm --question "统计2026年7月高新技术企业的贷款余额" --dialect maxcompute --log-level INFO

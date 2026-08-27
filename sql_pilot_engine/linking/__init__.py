@@ -3,9 +3,11 @@ from sql_pilot_engine.linking.models import (
     LinkedTable,
 )
 
-from sql_pilot_engine.linking.schema_linker import (
-    SchemaLinker,
-    SchemaLinkingError,
+from sql_pilot_engine.linking.models import (
+    LinkedSchema,
+    LinkedTable,
+    SchemaBinding,
+    SchemaBindingKind,
 )
 
 
@@ -14,4 +16,6 @@ __all__ = [
     "LinkedTable",
     "SchemaLinker",
     "SchemaLinkingError",
+    "SchemaBinding",
+    "SchemaBindingKind",
 ]

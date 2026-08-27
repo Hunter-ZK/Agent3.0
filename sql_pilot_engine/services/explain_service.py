@@ -3,8 +3,8 @@ from __future__ import annotations
 from sql_pilot_engine.core.execution_context import (
     SQLExecutionContext,
 )
-from sql_pilot_engine.llm.clients import (
-    BaseLLMClient,
+from sql_pilot_engine.llm.protocols import (
+    StructuredGenerationModel,
 )
 from sql_pilot_engine.schemas.responses import (
     SQLExplainResponse,
@@ -17,7 +17,7 @@ class ExplainService:
 
     def __init__(
         self,
-        llm_client: BaseLLMClient,
+        llm_client: StructuredGenerationModel,
     ) -> None:
         self._explainer = LLMExplainer(client=llm_client)
 

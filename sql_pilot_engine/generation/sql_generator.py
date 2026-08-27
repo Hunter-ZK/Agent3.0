@@ -6,7 +6,7 @@ from sql_pilot_engine.context.builder import (
     QueryContext,
 )
 
-from sql_pilot_engine.generation.llm import (
+from sql_pilot_engine.llm.protocols import (
     TextGenerationModel,
 )
 

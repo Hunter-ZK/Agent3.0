@@ -1,35 +1,21 @@
 # sql_review_agent/llm/clients.py
+from sql_pilot_engine.llm.protocols import (
+    StructuredGenerationModel,
+)
 
-import json
-import os
-from abc import ABC, abstractmethod
-from typing import Any
-from dataclasses import dataclass
-
-
-from dotenv import load_dotenv
-
-from openai import OpenAI
-from openai import APIConnectionError, APIStatusError, APITimeoutError
+from sql_pilot_engine.llm.transport import (
+    OpenAICompatibleTransport,
+)
 
 from sql_pilot_engine.llm.errors import LLMAPIError, LLMResponseParseError
 
+from sql_pilot_engine.config.llm import LLMRequestConfig
 
-@dataclass(frozen=True, slots=True)
-class OpenAICompatibleConfig:
-    api_key: str
-    model: str
-    base_url: str | None = None
-    timeout_seconds: float = 60.0
+import json
+from typing import Any
 
-class BaseLLMClient(ABC):
-    """LLM Client 抽象。"""
 
-    @abstractmethod
-    def generate_json(self, system_prompt: str, user_prompt: str, json_schema: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError
-
-class MockLLMClient(BaseLLMClient):
+class MockLLMClient():
     """用于测试和离线开发的 Mock LLM。"""
 
     def generate_json(
@@ -86,6 +72,20 @@ class MockLLMClient(BaseLLMClient):
                 self
                 ._generate_mock_explain_result()
             )
+            
+        if {
+            "status",
+            "missing_requirements",
+            "issues",
+        } <= required:
+
+            return {
+                "status": "pass",
+
+                "missing_requirements": [],
+
+                "issues": [],
+            }
 
         return (
             self._generate_mock_review_result(
@@ -290,22 +290,19 @@ class MockLLMClient(BaseLLMClient):
         )
 
 
-class DeepSeekLLMClient(BaseLLMClient):
+class DeepSeekLLMClient():
     """DeepSeek JSON Output Client。"""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        transport: OpenAICompatibleTransport,
+        request_config: LLMRequestConfig,
+    ) -> None:
 
-        load_dotenv()
-
-        self.api_key = os.getenv("DEEPSEEK_API_KEY")
-        self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-        self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-
-        if not self.api_key:
-            raise LLMAPIError("未配置 DEEPSEEK_API_KEY。")
-
-        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-
+        self._transport = transport
+        
+        self._request_config = request_config
 
     @staticmethod
     def _build_structured_system_prompt(
@@ -370,35 +367,33 @@ class DeepSeekLLMClient(BaseLLMClient):
         )
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            structured_system_prompt
-                        ),
+            content = (
+                self._transport.complete(
+                    messages=(
+                        {
+                            "role":"system",
+                            "content":(
+                                structured_system_prompt
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content":(
+                                user_prompt
+                            ),
+                        },
+                    ),
+                
+                    request_config = self._request_config,
+                    
+                    response_format = {
+                        "type": "json_object",
                     },
-                    {
-                        "role": "user",
-                        "content": user_prompt,
-                    },
-                ],
-
-                # DeepSeek 当前这里仍使用 JSON Object 模式。
-                # 字段级 Contract 通过本次调用传入的
-                # json_schema 注入 Prompt。
-                response_format={
-                    "type": "json_object"
-                },
-
-                temperature=0,
-                max_tokens=4096,
+                )
             )
         except Exception as error:
             raise LLMAPIError(str(error)) from error
 
-        content = response.choices[0].message.content
         if not content:
             raise LLMResponseParseError("LLM 返回内容为空。")
 
@@ -408,7 +403,7 @@ class DeepSeekLLMClient(BaseLLMClient):
             raise LLMResponseParseError(f"LLM 返回不是合法 JSON：{content}") from error
 
 
-def create_llm_client(provider: str) -> BaseLLMClient:
+def create_llm_client(provider: str) -> StructuredGenerationModel:
     provider = provider.lower()
     if provider == "mock":
         return MockLLMClient()

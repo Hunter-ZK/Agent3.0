@@ -12,51 +12,52 @@ from sql_pilot_engine.linking.models import (
     LinkedSchema,
 )
 
-def render_query_context(
-    context: QueryContext,
-) -> str:
-
-    sections: list[str] = []
-
-    if context.session_context:
-        sections.append(
-            "## Session Context"
-        )
-
-        sections.extend(
-            context.session_context
-        )
-
-    if context.business_knowledge:
-        sections.append(
-            "## Business Knowledge"
-        )
-
-        sections.extend(
-            item.document.text
-            for item
-            in context.business_knowledge
-        )
-
-    if context.verified_sql:
-        sections.append(
-            "## Verified SQL Examples"
-        )
-
-        sections.extend(
-            item.document.text
-            for item
-            in context.verified_sql
-        )
-
-    return "\n\n".join(sections)
+from sql_pilot_engine.context.query_context_renderer import (
+    render_query_context,
+)
 
 
 def render_linked_schema(
     linked_schema: LinkedSchema,
 ) -> str:
     
+    
+    
     lines: list[str] = []
+
+
+    if linked_schema.bindings:
+
+        lines.append(
+            "Resolved bindings:"
+        )
+
+        for binding in (
+            linked_schema.bindings
+        ):
+
+            target = (
+                binding.physical_table
+            )
+
+            if binding.physical_columns:
+
+                target += (
+                    "."
+                    + ", ".join(
+                        binding
+                        .physical_columns
+                    )
+                )
+
+            lines.append(
+                "- "
+                f"{binding.kind.value}: "
+                f"{binding.logical_name} "
+                f"-> {target}"
+            )
+
+        lines.append("")
 
     for linked_table in (
         linked_schema.tables
@@ -119,7 +120,7 @@ def build_planner_prompt(
 ) -> str:
   
     
-    rag_context = render_query_context(
+    context_text = render_query_context(
         query_context
     )
     
@@ -130,14 +131,9 @@ Your first responsibility is to determine whether
 the supplied context is sufficient to plan a
 reliable SQL query.
 
-User question:
-{query_context.question}
+Task Context:
 
-Semantic model:
-{query_context.semantic_context}
-
-Retrieved context:
-{rag_context}
+{context_text}
 
 Rules:
 
@@ -279,7 +275,7 @@ def build_sql_prompt(
         )
     )
     
-    rag_context = render_query_context(
+    context_text = render_query_context(
         query_context
     )
     
@@ -293,28 +289,6 @@ def build_sql_prompt(
 
         feedback_text = f"""
         Previous SQL was rejected.
-
-      Physical schema for this task:
-      {physical_schema}
-
-      Physical Schema rules:
-
-      - Use only physical tables and columns explicitly
-        present in the supplied LinkedSchema.
-
-      - Do not invent table names or column names.
-
-      - The Semantic Model defines business meaning.
-
-      - LinkedSchema defines physical existence
-        and the physical schema available to this task.
-
-      - If Semantic Model and Physical Schema disagree
-        about whether a physical table or column exists,
-        do not invent a replacement.
-
-      - Use the fully qualified physical table name
-        from LinkedSchema when available.
 
         Revision feedback:
         {feedback_lines}
@@ -330,8 +304,9 @@ Generate one SQL statement.
 Dialect:
 {dialect}
 
-Question:
-{query_context.question}
+Task Context:
+
+{context_text}
 
 Query Plan:
 tables={plan.tables}
@@ -340,9 +315,6 @@ metrics={plan.metrics}
 filters={plan.filters}
 group_by={plan.group_by}
 requirements={plan.requirements}
-
-Semantic model:
-{query_context.semantic_context}
 
 Physical schema for this task:
 {physical_schema}
@@ -365,10 +337,6 @@ Physical Schema rules:
 
 - Prefer the fully qualified physical table name
   supplied by LinkedSchema.
-
-Retrieved context:
-{rag_context}
-
 
 {feedback_text}
 

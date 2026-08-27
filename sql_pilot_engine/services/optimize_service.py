@@ -8,8 +8,8 @@ from sql_pilot_engine.analysis.sql_analysis import (
 from sql_pilot_engine.core.execution_context import (
     SQLExecutionContext,
 )
-from sql_pilot_engine.llm.clients import (
-    BaseLLMClient,
+from sql_pilot_engine.llm.protocols import (
+    StructuredGenerationModel,
 )
 from sql_pilot_engine.llm.context_builder import (
     build_analysis_context_text,
@@ -44,7 +44,7 @@ class OptimizeService:
 
     def __init__(
         self,
-        llm_client: BaseLLMClient,
+        llm_client: StructuredGenerationModel,
         analysis_adapter: (
             SQLAnalysisAdapter | None
         ) = None,

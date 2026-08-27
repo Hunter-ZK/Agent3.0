@@ -10,7 +10,9 @@ from sql_pilot_engine.core.models import (
 from sql_pilot_engine.fixing.auto_fixer import (
     generate_fixed_sql,
 )
-from sql_pilot_engine.llm.clients import BaseLLMClient
+from sql_pilot_engine.llm.protocols import (
+    StructuredGenerationModel,
+)
 from sql_pilot_engine.llm.context_builder import (
     build_analysis_context_text,
     build_metadata_context_text,
@@ -39,7 +41,7 @@ class FixService:
     def __init__(
         self,
         review_service: ReviewService,
-        llm_client: BaseLLMClient | None = None,
+        llm_client: StructuredGenerationModel | None = None,
         analysis_adapter: SQLAnalysisAdapter | None = None,
     ) -> None:
         self.review_service = review_service

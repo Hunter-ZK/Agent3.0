@@ -3,7 +3,7 @@
 from typing import Any
 
 from sql_pilot_engine.core.models import FixedSqlResult
-from sql_pilot_engine.llm.clients import BaseLLMClient
+from sql_pilot_engine.llm.protocols import StructuredGenerationModel
 from sql_pilot_engine.llm.errors import LLMResponseValidationError
 from sql_pilot_engine.llm.fix_prompts import (
     FIX_JSON_SCHEMA,
@@ -20,7 +20,7 @@ from sql_pilot_engine.context.builder import (
 class LLMFixer:
     """LLM SQL 修复器。"""
 
-    def __init__(self, client: BaseLLMClient) -> None:
+    def __init__(self, client: StructuredGenerationModel) -> None:
         self.client = client
 
     def fix(

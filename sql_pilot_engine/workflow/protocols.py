@@ -20,6 +20,8 @@ class TrustedSQLWorkflowResultView(Protocol):
     trusted_sql: str | None
 
     error_message: str | None
+    
+    missing_context: tuple[str, ...] 
 
 
 class TrustedSQLWorkflowPort(Protocol):

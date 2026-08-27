@@ -166,8 +166,3 @@ class QueryAgentState(TypedDict):
         str | None
     ]
 
-    validation_error_message: (
-        str | None
-    )
-
-        

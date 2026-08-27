@@ -28,8 +28,9 @@ from sql_pilot_engine.context.semantic.loader import (
     SemanticModelLoader,
 )
 
-from sql_pilot_engine.generation.llm import (
+from sql_pilot_engine.llm.protocols import (
     TextGenerationModel,
+    StructuredGenerationModel,
 )
 
 from sql_pilot_engine.generation.planner import (
@@ -98,7 +99,7 @@ def build_text_to_sql_capability(
     ) = None,
 
     semantic_validator_model: (
-        TextGenerationModel | None
+        StructuredGenerationModel | None
     ) = None,
 
     checkpoint_store: (

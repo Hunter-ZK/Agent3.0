@@ -27,18 +27,9 @@ from sql_pilot_engine.workflow.trusted_sql_workflow import (
 
 def build_sql_pilot_engine(
     *,
-    enable_llm: bool = True,
-    llm_provider: str = "deepseek",
+    llm_client=None,
     metadata_provider_factory=None,
 ) -> SQLPilotEngine:
-
-    llm_client = (
-        create_llm_client(
-            llm_provider
-        )
-        if enable_llm
-        else None
-    )
 
     review_service = ReviewService(
         rule_registry=RuleRegistry(),
@@ -93,13 +84,16 @@ def build_trusted_sql_workflow(
     *,
     metadata_provider_factory=None,
     default_enable_metadata: bool = False,
-    enable_llm: bool = True,
-    llm_provider: str = "deepseek",
+    llm_client = None,
+    llm_provider_name: str = "none",
 ) -> TrustedSQLWorkflow:
+    
+    enable_llm = (
+        llm_client is not None
+    )
 
     engine = build_sql_pilot_engine(
-        enable_llm=enable_llm,
-        llm_provider=llm_provider,
+        llm_client=llm_client,
         metadata_provider_factory=(
             metadata_provider_factory
         ),
@@ -115,7 +109,7 @@ def build_trusted_sql_workflow(
             enable_llm
         ),
         default_llm_provider=(
-            llm_provider
+            llm_provider_name
         ),
         default_fix_provider=(
             "llm"

@@ -42,6 +42,19 @@ from sql_pilot_engine.context.builder import (
 from sql_pilot_engine.context.mandatory_rules import (
     MandatoryRuleMatcher,
 )
+from sql_pilot_engine.config.llm import (
+    load_deepseek_settings,
+)
+
+from sql_pilot_engine.llm.transport import (
+    OpenAICompatibleTransport,
+)
+
+from sql_pilot_engine.llm.clients import (
+    DeepSeekLLMClient,
+    MockLLMClient,
+)
+
 
 # ============================================================
 # 1. Demo专用Fake模型
@@ -153,18 +166,37 @@ def build_demo_service(
     )
 
     if use_real_llm:
+        
+        llm_settings = load_deepseek_settings()
+        
+        transport = OpenAICompatibleTransport(llm_settings.provider)
 
-        model = (
-            DeepSeekTextGenerationModel
-            .from_env()
+        text_model = (
+            DeepSeekTextGenerationModel(
+                transport=transport,
+                request_config=(
+                    llm_settings.text_request
+                ),
+            )
+        )
+        
+        structured_model = (
+            DeepSeekLLMClient(
+                transport=transport,
+                request_config=(
+                    llm_settings.structured_request
+                ),
+            )
         )
 
-        planner_model = model
-        sql_model = model
+        planner_model = text_model
+        sql_model = text_model
 
         semantic_validator_model = (
-            model
+            structured_model
         )
+        
+        llm_provider_name = llm_settings.provider.name
 
     else:
 
@@ -189,11 +221,11 @@ def build_demo_service(
                 metadata_provider_factory
                 is not None
             ),
-            enable_llm=True,
-            llm_provider=(
-                "deepseek"
-                if use_real_llm
-                else "mock"
+            llm_client=(
+                structured_model
+            ),
+            llm_provider_name=(
+                llm_provider_name
             ),
         )
     )

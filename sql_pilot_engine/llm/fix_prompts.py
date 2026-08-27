@@ -7,8 +7,8 @@ from sql_pilot_engine.context.builder import (
     QueryContext,
 )
 
-from sql_pilot_engine.llm.context_builder import (
-    build_query_context_text,
+from sql_pilot_engine.context.query_context_renderer import (
+    render_query_context,
 )
 
 FIX_JSON_SCHEMA = {
@@ -92,7 +92,7 @@ def build_fix_user_prompt(
 
 ## Query Context
 
-{build_query_context_text(query_context)}
+{render_query_context(query_context)}
 
 ## Review Issues
 

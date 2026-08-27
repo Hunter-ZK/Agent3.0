@@ -23,6 +23,8 @@ from sql_pilot_engine.generation.models import (
 from sql_pilot_engine.linking.models import (
     LinkedSchema,
     LinkedTable,
+    SchemaBinding,
+    SchemaBindingKind,
 )
 
 from sql_pilot_engine.metadata.models import (
@@ -96,6 +98,8 @@ class SchemaLinker:
             
         linked_tables: list[LinkedTable] = []
         
+        bindings: list[SchemaBinding] = []
+        
         unresolved_terms: list[str] = []
         
         resolved_units = 0
@@ -144,6 +148,18 @@ class SchemaLinker:
             
             resolved_units += 1
             
+            bindings.append(
+                SchemaBinding(
+                    kind=(
+                        SchemaBindingKind.TABLE
+                    ),
+                    logical_name=table_name,
+                    physical_table=(
+                        result.table.full_name
+                    ),
+                )
+            )
+            
         # ====================================================
         # 2. Metric Linking
         # ====================================================
@@ -170,17 +186,23 @@ class SchemaLinker:
                 
                 continue
             
-            if not self._metric_resolves(
-                metric = metric,
-                linked_tables=(
-                    linked_tables
-                ),
-            ):
+            metric_binding = (
+                self._link_metric(
+                    metric = metric,
+                    linked_tables=(
+                        linked_tables
+                    ),
+                )
+            )
+            
+            if metric_binding is None:
                 self._append_unique(
                     unresolved_terms,
                     metric_name,
                 )
                 continue
+            
+            bindings.append(metric_binding)
             
             resolved_units += 1
             
@@ -201,19 +223,24 @@ class SchemaLinker:
             
             total_units += 1
             
-            if self._column_exists(
-                column_name = column_name,
-                linked_tables = (
-                    linked_tables
-                ),
-            ):
-                resolved_units += 1
-                continue
-            
-            self._append_unique(
-                unresolved_terms,
-                column_name,
+            column_binding = (
+                self._link_column(
+                    column_name=column_name,
+                    linked_tables=linked_tables,
+                )
             )
+            
+            if column_binding is None:
+                self._append_unique(
+                    unresolved_terms,
+                    column_name,
+                )
+            
+                continue
+
+            resolved_units += 1
+            bindings.append(column_binding)
+
 
         # ====================================================
         # 4. Linking Confidence
@@ -232,6 +259,10 @@ class SchemaLinker:
                 linked_tables
             ),
 
+            bindings=tuple(
+                bindings
+            ),
+            
             unresolved_terms=tuple(
                 unresolved_terms
             ),
@@ -249,14 +280,14 @@ class SchemaLinker:
     # Metric Resolution
     # ========================================================
 
-    def _metric_resolves(
+    def _link_metric(
         self,
         *,
         metric: SemanticMetric,
         linked_tables: list[
             LinkedTable
         ],
-    ) -> bool:
+    ) -> SchemaBinding | None:
 
         linked_table = (
             self._find_linked_table(
@@ -293,9 +324,22 @@ class SchemaLinker:
                 )
                 is None
             ):
-                return False
+                return None
 
-        return True
+        return SchemaBinding(
+            kind=(
+                SchemaBindingKind.METRIC
+            ),
+            logical_name=(
+                metric.name
+            ),
+            physical_table=(
+                physical_table.full_name
+            ),
+            physical_columns=(
+                required_columns
+            ),
+        )
 
     @staticmethod
     def _extract_metric_columns(
@@ -342,14 +386,18 @@ class SchemaLinker:
     # ========================================================
 
     @staticmethod
-    def _column_exists(
+    def _link_column(
         *,
         column_name: str,
         linked_tables: list[
             LinkedTable
         ],
-    ) -> bool:
+    ) -> SchemaBinding | None:
+        
+        normalized = column_name.strip().lower()
 
+        matches: list[LinkedTable] = []
+        
         for linked_table in (
             linked_tables
         ):
@@ -362,9 +410,21 @@ class SchemaLinker:
                 )
                 is not None
             ):
-                return True
-
-        return False
+                matches.append(
+                    linked_table
+                )
+                
+        if len(matches) != 1:
+            return None
+        
+        physical_table = (matches[0].metadata)
+        
+        return SchemaBinding(
+            kind=(SchemaBindingKind.COLUMN),
+            logical_name=(column_name),
+            physical_table=(physical_table.full_name),
+            physical_columns=(normalized),
+        )
 
     # ========================================================
     # Table Resolution

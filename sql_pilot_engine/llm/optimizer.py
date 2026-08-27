@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sql_pilot_engine.llm.clients import (
-    BaseLLMClient,
+from sql_pilot_engine.llm.protocols import (
+    StructuredGenerationModel,
 )
 from sql_pilot_engine.llm.errors import (
     LLMResponseValidationError,
@@ -33,7 +33,7 @@ class LLMOptimizer:
 
     def __init__(
         self,
-        client: BaseLLMClient,
+        client: StructuredGenerationModel,
     ) -> None:
         self.client = client
 

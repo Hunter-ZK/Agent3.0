@@ -2,12 +2,46 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from enum import Enum
+
 from collections.abc import Mapping
 
 from sql_pilot_engine.metadata.models import (
     TableMetadata,
 )
 
+class SchemaBindingKind(
+    str,
+    Enum,
+):
+    """
+    Schema Linking 当前支持的逻辑对象类型
+    """
+    
+    TABLE = "table"
+    METRIC = "metric"
+    COLUMN = "column"
+
+
+@dataclass(frozen=True)
+class SchemaBinding:
+    """
+    一个逻辑对象在当前任务中的
+    确定性 Physical Binding。
+
+    这里只记录“映射关系”，
+    不复制 Physical Metadata。
+    """
+    
+    kind: SchemaBindingKind
+    
+    logical_name: str
+    
+    physical_table: str
+    
+    physical_columns: tuple[str, ...] = ()
+    
+    
 
 @dataclass(frozen=True)
 class LinkedTable:
@@ -62,6 +96,11 @@ class LinkedSchema:
         LinkedTable,
         ...
     ]
+    
+    bindings: tuple[
+        SchemaBinding,
+        ...
+    ] = ()
 
     unresolved_terms: tuple[
         str,
@@ -119,6 +158,25 @@ class LinkedSchema:
         """
 
         return not self.unresolved_terms
+
+    def get_binding(
+        self,
+        *,
+        kind: SchemaBinding,
+        logical_name: str,
+    ) -> SchemaBinding | None:
+        
+        normalized = (logical_name.strip().lower())
+        
+        for binding in self.bindings:
+            
+            if binding.kind is not kind:
+                continue
+            
+            if (binding.logical_name.strip().lower() == normalized):
+                return binding
+        
+        return None
 
     def get_table(
         self,
