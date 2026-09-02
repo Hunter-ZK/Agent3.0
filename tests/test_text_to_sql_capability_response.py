@@ -158,7 +158,33 @@ def test_result_preserves_semantic_diagnostics():
             "SQL 未落实高新技术企业筛选条件",
         )
     )
-    
+
+    assert (
+        len(
+            result.validation_issues
+        )
+        == 1
+    )
+
+    issue = (
+        result
+        .validation_issues[0]
+    )
+
+    assert (
+        issue.rule_id
+        == "METRIC_AGGREGATION"
+    )
+
+    assert (
+        issue.action
+        == "advisory"
+    )
+
+    assert (
+        issue.source
+        == "rule"
+    )
 
 def test_result_preserves_schema_linking_diagnostics():
 
@@ -240,30 +266,7 @@ def test_result_preserves_schema_linking_diagnostics():
         == "not_run"
     )
     
-
     assert (
-        len(
-            result.validation_issues
-        )
-        == 1
-    )
-
-    issue = (
-        result
-        .validation_issues[0]
-    )
-
-    assert (
-        issue.rule_id
-        == "METRIC_AGGREGATION"
-    )
-
-    assert (
-        issue.action
-        == "advisory"
-    )
-
-    assert (
-        issue.source
-        == "rule"
+        result.validation_issues
+        == ()
     )

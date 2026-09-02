@@ -32,6 +32,9 @@ from sql_pilot_engine.metadata.models import (
     TableMetadata,
 )
 
+from sql_pilot_engine.dialects.sqlglot import (
+    resolve_sqlglot_dialect,
+)
 
 class MetricSQLCompiler:
     """
@@ -108,6 +111,12 @@ class MetricSQLCompiler:
 
                 "QueryPlan contains no metric.",
             )
+            
+        sqlglot_dialect = (
+            resolve_sqlglot_dialect(
+                dialect
+            )
+        )
 
         if (
             len(plan.tables) != 1
@@ -188,7 +197,7 @@ class MetricSQLCompiler:
 
             table=table,
 
-            dialect=dialect,
+            dialect=sqlglot_dialect,
         )
 
         if metric_error is not None:
@@ -197,6 +206,8 @@ class MetricSQLCompiler:
         predicates: list[
             exp.Expression
         ] = []
+        
+
 
         # ====================================================
         # Metric Fixed Filters
@@ -249,7 +260,7 @@ class MetricSQLCompiler:
                 ._parse_plan_filter(
                     filter_text=filter_text,
 
-                    dialect=dialect,
+                    dialect=sqlglot_dialect,
 
                     table=table,
                 )
@@ -275,7 +286,7 @@ class MetricSQLCompiler:
         predicates = (
             self._dedupe_predicates(
                 predicates=predicates,
-                dialect=dialect,
+                dialect=sqlglot_dialect,
             )
         )
 
@@ -362,12 +373,12 @@ class MetricSQLCompiler:
             )
 
         sql = query.sql(
-            dialect=dialect
+            dialect=sqlglot_dialect
         )
 
         filter_expressions = tuple(
             predicate.sql(
-                dialect=dialect
+                dialect=sqlglot_dialect
             )
             for predicate
             in predicates

@@ -6,17 +6,9 @@ from sqlglot import exp, parse
 
 from sqlglot.errors import ParseError
 
-DIALECT_MAPPING = {
-    "maxcompute": "hive",
-    "odps": "hive",
-    "dataworks": "hive",
-    "hive": "hive",
-    "spark": "spark",
-    "duckdb": "duckdb",
-    "mysql": "mysql",
-    "postgres": "postgres",
-}
-
+from sql_pilot_engine.dialects.sqlglot import (
+    resolve_sqlglot_dialect,
+)
 
 @dataclass
 class SQLParseResult:
@@ -58,7 +50,11 @@ class SQLParser:
                 error_message="SQL cannot be empty",
             )
 
-        read_dialect = self._resolve_dialect(dialect)
+        read_dialect = (
+            resolve_sqlglot_dialect(
+                dialect=dialect
+            )
+        )
 
         try:
             statements = parse(
@@ -77,11 +73,4 @@ class SQLParser:
                 dialect=dialect,
                 error_message=str(error),
             )
-
-    @staticmethod
-    def _resolve_dialect(
-        dialect: str,
-    ) -> str:
-        normalized = dialect.strip().lower()
-        return DIALECT_MAPPING.get(normalized,normalized,)
 

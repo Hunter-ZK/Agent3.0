@@ -11,20 +11,20 @@
 | Layer | Rate |
 | --- | ---: |
 | Clarification | 100.0% |
-| Planning | 0.0% |
+| Planning | 100.0% |
 | Schema Link | 100.0% |
 | Generation | 100.0% |
 | Gate | 100.0% |
 | Semantic | 100.0% |
-| Final | 0.0% |
+| Final | 100.0% |
 | System Error | 0.0% |
 
 ## Stability
 
 - Stable outcome cases: 1/1
-- Stable PASS cases: 0/1
+- Stable PASS cases: 1/1
 - Unstable cases: 0
-- Stable PASS rate: 0.0%
+- Stable PASS rate: 100.0%
 
 ## Redline
 
@@ -34,9 +34,7 @@
 
 ## Failure Classification
 
-| Failure Type | Count |
-| --- | ---: |
-| planning_error | 1 |
+No classified failures.
 
 ## Evidence Rule Hits
 
@@ -51,7 +49,7 @@
 
 | Case | PASS | Runs | Stable Outcome | Stable PASS | Failure Types | Evidence Rules |
 | --- | ---: | ---: | :---: | :---: | --- | --- |
-| explicit_high_tech_month | 0 | 1 | True | False | planning_error | - |
+| explicit_high_tech_month | 1 | 1 | True | True | - | - |
 
 ## PASS with Evidence Advisories
 

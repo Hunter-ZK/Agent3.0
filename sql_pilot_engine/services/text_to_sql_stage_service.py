@@ -367,7 +367,9 @@ class TextToSQLStageService:
                 rule_packs=("text_to_sql",),
                 
                 enable_llm = (
-                    generation_source is not (GenerationSource.COMPILED)
+                    False
+                    if (generation_source is GenerationSource.COMPILED)
+                    else None
                 )
             )
         )

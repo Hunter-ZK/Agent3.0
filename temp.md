@@ -6706,3 +6706,7 @@ git rm -r --cached --ignore-unmatch __pycache__ sqlpilot_review_agent.egg-info
 
 
 python examples/text_to_sql_eval_v2.py --case explicit_high_tech_month --repeat 1
+
+
+
+你以后提供代码，要给非常详细的注释，参考我给你的样例，甚至要比这个还要详细；2. 你提供代码内容要准确，不要模糊，也不要脱离之前的代码进行修改；3. 你应该要准确解释，为什么添加这个功能要对应修改、按顺序修改这几处地方，而不是只说明修改内容；4. 按之前技术方案继续往下。

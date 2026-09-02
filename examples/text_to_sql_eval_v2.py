@@ -197,6 +197,26 @@ def main() -> None:
                     else None
                 ),
             )
+            
+            print(
+                "reason:",
+                result.reason,
+            )
+
+            print(
+                "generation_source:",
+                result.generation_source,
+            )
+
+            print(
+                "compilation_status:",
+                result.compilation_status,
+            )
+
+            print(
+                "compilation_fallback_reason:",
+                result.compilation_fallback_reason,
+            )
 
             print(
                 "evidence_rule_hits:",

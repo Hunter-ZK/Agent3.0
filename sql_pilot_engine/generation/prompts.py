@@ -140,6 +140,29 @@ Rules:
 - Use the Semantic Model, Retrieved Context and
   Session Context together.
 
+- The original User Question is the highest-priority
+  source for task-specific constraints explicitly
+  stated by the user.
+
+- Explicit values stated in the User Question must
+  override default conventions from Semantic Model,
+  Retrieved Context, Verified SQL examples or Session
+  Context when those defaults refer to a different
+  condition.
+
+- In particular, if the user explicitly provides a
+  concrete date, month, period, organization, region,
+  category or other filter value, preserve that
+  explicit constraint in the Query Plan.
+
+- Do not replace an explicit user-specified value with
+  a default runtime parameter such as
+  '${{p_month_yyyymm}}'.
+
+- Runtime parameters and default business conventions
+  apply only when the corresponding value is not
+  explicitly specified by the user.
+
 - Do not invent business definitions, table mappings,
   runtime parameters, date conventions or other
   required business knowledge.
@@ -198,9 +221,24 @@ Context sufficiency rules:
 - Treat explicit business rules in Retrieved Context as
   authoritative for the current planning task.
 
-- If the context explicitly defines a runtime convention such as
-  “本期” = dt = 'p_month_yyyymm', apply it directly.
-  Do not ask the user to provide the concrete date again.
+- If the user asks for a relative/default period such as
+  “本期”, “当前期” or “当前统计期”, and the context
+  explicitly defines its runtime convention, apply that
+  convention directly.
+
+- Example:
+  “本期” may resolve to
+  dt = '${{p_month_yyyymm}}'.
+
+- This default convention must NOT override an explicit
+  period stated by the user.
+
+- Example:
+  if the user asks for “2026年7月”, preserve that as
+  the concrete period filter, for example:
+  dt = '202607',
+  rather than replacing it with
+  dt = '${{p_month_yyyymm}}'.
 
 - If a user-facing business term has exactly one clear mapping
   in the Semantic Model, use that mapping directly.
@@ -209,6 +247,14 @@ Context sufficiency rules:
 - Clarification is required only when unresolved alternatives
   would materially change the business meaning or SQL result.
 
+- QueryPlan.filters must represent all task-specific
+  constraints that materially affect the requested
+  result and are already resolved from the User
+  Question and supplied context.
+
+- Do not rely on the downstream SQL Generator to infer
+  or restore a constraint that the Planner has already
+  enough information to represent.
 
 Clarification is only appropriate when the available context
 still leaves two or more materially different interpretations

@@ -257,6 +257,167 @@ def _score_planning(
     )
 
 
+def _failed_result(
+    *,
+    case_id: str,
+    run_index: int,
+    initial_behavior: str,
+    clarification_pass: bool,
+    reason: str,
+
+    failure_type: (
+        EvaluationFailureType
+        | None
+    ),
+
+    system_error: bool = False,
+
+    validation_status: (
+        str | None
+    ) = None,
+
+    semantic_status: (
+        str | None
+    ) = None,
+
+    validation_error: (
+        str | None
+    ) = None,
+
+    generated_sql: (
+        str | None
+    ) = None,
+
+    trusted_sql: (
+        str | None
+    ) = None,
+
+    generation_source: (
+        str | None
+    ) = None,
+
+    compilation_status: (
+        str | None
+    ) = None,
+
+    compilation_fallback_reason: (
+        str | None
+    ) = None,
+
+    planning_pass: bool = False,
+
+    schema_link_pass: bool = False,
+
+    generation_pass: bool = False,
+
+    gate_pass: bool = False,
+
+    semantic_pass: bool = False,
+
+    linking_failure_codes: (
+        tuple[str, ...]
+    ) = (),
+
+    validation_rule_ids: (
+        tuple[str, ...]
+    ) = (),
+
+    evidence_rule_hits: (
+        tuple[str, ...]
+    ) = (),
+) -> TextToSQLEvalResult:
+
+    return TextToSQLEvalResult(
+        case_id=case_id,
+
+        run_index=run_index,
+
+        initial_behavior=(
+            initial_behavior
+        ),
+
+        clarification_pass=(
+            clarification_pass
+        ),
+
+        planning_pass=(
+            planning_pass
+        ),
+
+        schema_link_pass=(
+            schema_link_pass
+        ),
+
+        generation_pass=(
+            generation_pass
+        ),
+
+        gate_pass=(
+            gate_pass
+        ),
+
+        semantic_pass=(
+            semantic_pass
+        ),
+
+        final_pass=False,
+
+        system_error=(
+            system_error
+        ),
+
+        failure_type=(
+            failure_type
+        ),
+
+        validation_status=(
+            validation_status
+        ),
+
+        semantic_status=(
+            semantic_status
+        ),
+
+        validation_error=(
+            validation_error
+        ),
+
+        generated_sql=(
+            generated_sql
+        ),
+
+        trusted_sql=(
+            trusted_sql
+        ),
+
+        reason=reason,
+
+        generation_source=(
+            generation_source
+        ),
+
+        compilation_status=(
+            compilation_status
+        ),
+
+        compilation_fallback_reason=(
+            compilation_fallback_reason
+        ),
+
+        linking_failure_codes=(
+            linking_failure_codes
+        ),
+
+        validation_rule_ids=(
+            validation_rule_ids
+        ),
+
+        evidence_rule_hits=(
+            evidence_rule_hits
+        ),
+    )
+
+
 def _score_final_result(
     *,
     response: TextToSQLResult,
@@ -541,10 +702,13 @@ def evaluate_case(
             ),
             planning_pass=False,
             clarification_pass=False,
-            sql_trust_pass=False,
             semantic_pass=False,
+            schema_link_pass=False,
+            generation_pass=False,
+            gate_pass=False,
             final_pass=False,
             system_error=True,
+            failure_type=None,
             validation_status=None,
             semantic_status=None,
             validation_error=str(error),
@@ -571,28 +735,28 @@ def evaluate_case(
             response,
             TextToSQLClarification,
         ):
-            return TextToSQLEvalResult(
+            return _failed_result(
                 case_id=case.case_id,
+
                 run_index=run_index,
+
                 initial_behavior=(
                     "clarification"
                 ),
-                planning_pass=False,
+
                 clarification_pass=False,
-                sql_trust_pass=False,
-                semantic_pass=False,
-                final_pass=False,
-                system_error=False,
-                validation_status=None,
-                semantic_status=None,
-                validation_error=None,
-                generated_sql=None,
-                trusted_sql=None,
+
+                failure_type=(
+                    EvaluationFailureType
+                    .PLANNING_ERROR
+                ),
+
                 reason=(
                     "unexpected clarification: "
                     f"{response.clarification_question}"
                 ),
             )
+
 
         return _score_final_result(
             response=response,
@@ -610,41 +774,70 @@ def evaluate_case(
         response,
         TextToSQLClarification,
     ):
-        return TextToSQLEvalResult(
+        return _failed_result(
             case_id=case.case_id,
+
             run_index=run_index,
+
             initial_behavior="result",
-            planning_pass=False,
+
             clarification_pass=False,
-            sql_trust_pass=False,
-            semantic_pass=False,
-            final_pass=False,
-            system_error=False,
+
+            failure_type=(
+                EvaluationFailureType
+                .PLANNING_ERROR
+            ),
+
             validation_status=getattr(
                 response,
                 "validation_status",
                 None,
             ),
+
             semantic_status=getattr(
                 response,
                 "semantic_validation_status",
                 None,
             ),
+
             validation_error=getattr(
                 response,
                 "validation_error_message",
                 None,
             ),
+
             generated_sql=getattr(
                 response,
                 "generated_sql",
                 None,
             ),
+
             trusted_sql=getattr(
                 response,
                 "trusted_sql",
                 None,
             ),
+
+            generation_source=getattr(
+                response,
+                "generation_source",
+                None,
+            ),
+
+            compilation_status=getattr(
+                response,
+                "compilation_status",
+                None,
+            ),
+
+            compilation_fallback_reason=(
+                getattr(
+                    response,
+                    "compilation_fallback_reason",
+                    None,
+                )
+            ),
+
             reason=(
                 "expected clarification "
                 "but received result"
@@ -652,25 +845,28 @@ def evaluate_case(
         )
 
     if not response.thread_id:
-        return TextToSQLEvalResult(
+        return _failed_result(
             case_id=case.case_id,
+
             run_index=run_index,
+
             initial_behavior=(
                 "clarification"
             ),
-            planning_pass=False,
+
             clarification_pass=False,
-            sql_trust_pass=False,
-            semantic_pass=False,
-            final_pass=False,
+
             system_error=True,
-            validation_status=None,
-            semantic_status=None,
+
+            failure_type=(
+                EvaluationFailureType
+                .SYSTEM_ERROR
+            ),
+
             validation_error=(
                 "clarification has no thread_id"
             ),
-            generated_sql=None,
-            trusted_sql=None,
+
             reason=(
                 "clarification cannot resume"
             ),
@@ -679,21 +875,41 @@ def evaluate_case(
     if not case.clarification_answer:
         return TextToSQLEvalResult(
             case_id=case.case_id,
+
             run_index=run_index,
+
             initial_behavior=(
                 "clarification"
             ),
-            planning_pass=False,
+
             clarification_pass=True,
-            sql_trust_pass=False,
-            semantic_pass=False,
-            final_pass=False,
+
+            planning_pass=True,
+
+            schema_link_pass=True,
+
+            generation_pass=True,
+
+            gate_pass=True,
+
+            semantic_pass=True,
+
+            final_pass=True,
+
             system_error=False,
+
+            failure_type=None,
+
             validation_status=None,
+
             semantic_status=None,
+
             validation_error=None,
+
             generated_sql=None,
+
             trusted_sql=None,
+
             reason=(
                 "clarification behavior passed; "
                 "no resume answer configured"
@@ -709,25 +925,30 @@ def evaluate_case(
         )
 
     except Exception as error:
-        return TextToSQLEvalResult(
+
+        return _failed_result(
             case_id=case.case_id,
+
             run_index=run_index,
+
             initial_behavior=(
-                "clarification"
+                "exception"
             ),
-            planning_pass=False,
-            clarification_pass=True,
-            sql_trust_pass=False,
-            semantic_pass=False,
-            final_pass=False,
+
+            clarification_pass=False,
+
             system_error=True,
-            validation_status=None,
-            semantic_status=None,
-            validation_error=str(error),
-            generated_sql=None,
-            trusted_sql=None,
+
+            failure_type=(
+                EvaluationFailureType
+                .SYSTEM_ERROR
+            ),
+
+            validation_error=str(
+                error
+            ),
+
             reason=(
-                "resume failed: "
                 f"{type(error).__name__}: "
                 f"{error}"
             ),
@@ -737,23 +958,22 @@ def evaluate_case(
         resumed,
         TextToSQLClarification,
     ):
-        return TextToSQLEvalResult(
+        return _failed_result(
             case_id=case.case_id,
+
             run_index=run_index,
+
             initial_behavior=(
                 "clarification"
             ),
-            planning_pass=False,
+
             clarification_pass=True,
-            sql_trust_pass=False,
-            semantic_pass=False,
-            final_pass=False,
-            system_error=False,
-            validation_status=None,
-            semantic_status=None,
-            validation_error=None,
-            generated_sql=None,
-            trusted_sql=None,
+
+            failure_type=(
+                EvaluationFailureType
+                .PLANNING_ERROR
+            ),
+
             reason=(
                 "clarification answer supplied "
                 "but agent asked again: "

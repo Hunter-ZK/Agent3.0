@@ -3,16 +3,15 @@
     {
       "case_id": "explicit_high_tech_month",
       "evidence_rule_hits": [],
-      "failure_types": [
-        "planning_error"
-      ],
-      "pass_count": 0,
-      "pass_rate": 0.0,
+      "failure_types": [],
+      "pass_count": 1,
+      "pass_rate": 1.0,
       "runs": 1,
       "stable_outcome": true,
-      "stable_pass": false
+      "stable_pass": true
     }
   ],
+  "compilation_fallback_counts": {},
   "configuration": {
     "case_count": 1,
     "repeat": 1,
@@ -25,9 +24,7 @@
     "METRIC_TABLE": 0,
     "PARTITION_CONSTRAINT": 0
   },
-  "failure_counts": {
-    "planning_error": 1
-  },
+  "failure_counts": {},
   "pass_with_evidence_advisory": [],
   "quality_gates": {
     "gate_false_negative_zero": true,
@@ -38,21 +35,21 @@
       "case_id": "explicit_high_tech_month",
       "clarification_pass": true,
       "evidence_rule_hits": [],
-      "failure_type": "planning_error",
-      "final_pass": false,
+      "failure_type": null,
+      "final_pass": true,
       "gate_pass": true,
-      "generated_sql": "SELECT SUM(loan_bal_rmb) AS loan_bal_rmb\nFROM ods_hd_100_cldkxx\nWHERE is_high_tech_mfg_loan_code = '1'\n  AND dt = '202607'",
+      "generated_sql": "SELECT SUM(loan_bal_rmb) AS tech_loan_balance FROM ods_hd_100_cldkxx WHERE is_high_tech_mfg_loan_code = '1' AND dt = '202607'",
       "generation_pass": true,
       "initial_behavior": "result",
       "linking_failure_codes": [],
-      "planning_pass": false,
-      "reason": "required filter missing: ('is_high_tech_mfg_loan_code', '202607'); actual=(\"is_high_tech_mfg_loan_code = '1'\", \"dt = '${p_month_yyyymm}'\")",
+      "planning_pass": true,
+      "reason": "all evaluation layers passed",
       "run_index": 1,
       "schema_link_pass": true,
       "semantic_pass": true,
       "semantic_status": "pass",
       "system_error": false,
-      "trusted_sql": "SELECT SUM(loan_bal_rmb) AS loan_bal_rmb\nFROM ods_hd_100_cldkxx\nWHERE is_high_tech_mfg_loan_code = '1'\n  AND dt = '202607'",
+      "trusted_sql": "SELECT SUM(loan_bal_rmb) AS tech_loan_balance FROM ods_hd_100_cldkxx WHERE is_high_tech_mfg_loan_code = '1' AND dt = '202607'",
       "validation_error": null,
       "validation_rule_ids": [],
       "validation_status": "no_issue"
@@ -61,17 +58,20 @@
   "schema_version": "1",
   "summary": {
     "clarification_rate": 1.0,
-    "final_success_rate": 0.0,
+    "compilation_attempts": 1,
+    "compile_rate": 1.0,
+    "compiled_runs": 1,
+    "final_success_rate": 1.0,
     "gate_false_negative_cases": 0,
     "gate_false_negative_runs": 0,
     "gate_rate": 1.0,
     "generation_rate": 1.0,
-    "planning_rate": 0.0,
+    "planning_rate": 1.0,
     "schema_link_rate": 1.0,
     "semantic_rate": 1.0,
     "stable_outcome_cases": 1,
-    "stable_pass_cases": 0,
-    "stable_pass_rate": 0.0,
+    "stable_pass_cases": 1,
+    "stable_pass_rate": 1.0,
     "system_error_rate": 0.0,
     "unstable_cases": 0
   }

@@ -290,6 +290,41 @@ class TrustedSQLWorkflow:
             )
 
 
+        if (
+            decision.route
+            is ReviewRoute.BLOCK
+        ):
+            route_history.append(
+                "route:block"
+            )
+
+            return TrustedSQLWorkflowResult(
+                success=False,
+
+                trace_id=trace_id,
+
+                final_status=(
+                    decision.final_status
+                    or "blocked"
+                ),
+
+                explain_response=(
+                    explain_response
+                ),
+
+                review_response=(
+                    review_response
+                ),
+
+                route_history=(
+                    route_history
+                ),
+
+                error_message=(
+                    decision.reason
+                ),
+            )
+
         missing_context = ()
 
         if (
@@ -316,6 +351,41 @@ class TrustedSQLWorkflow:
                 missing_context=missing_context,
             )
         
+        if (
+            decision.route
+            is ReviewRoute.HUMAN_REVIEW
+        ):
+            route_history.append(
+                "route:human_review"
+            )
+
+            return TrustedSQLWorkflowResult(
+                success=False,
+
+                trace_id=trace_id,
+
+                final_status=(
+                    decision.final_status
+                    or "need_human_confirm"
+                ),
+
+                explain_response=(
+                    explain_response
+                ),
+
+                review_response=(
+                    review_response
+                ),
+
+                route_history=(
+                    route_history
+                ),
+
+                error_message=(
+                    decision.reason
+                ),
+            )
+        
         route_history.append(
             f"route:{decision.route.value}"
         )
@@ -326,6 +396,16 @@ class TrustedSQLWorkflow:
         current_review_response = review_response
 
         critic_feedback: list[str] = []
+
+        if (
+            decision.route
+            is not ReviewRoute.AUTO_FIX
+        ):
+            raise RuntimeError(
+                "Unsupported review route "
+                "before fix workflow: "
+                f"{decision.route.value}"
+            )
 
         for attempt in range(
             self.max_retries + 1

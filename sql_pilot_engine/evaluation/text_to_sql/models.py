@@ -164,23 +164,23 @@ class TextToSQLEvalResult:
         str | None
     )
 
-    generation_source: (
-        str | None
-    )
-
-    compilation_status: (
-        str | None
-    )
-
-    compilation_fallback_reason: (
-        str | None
-    )
-
     trusted_sql: (
         str | None
     )
 
     reason: str
+
+    generation_source: (
+        str | None
+    ) = None
+
+    compilation_status: (
+        str | None
+    ) = None
+
+    compilation_fallback_reason: (
+        str | None
+    ) = None
 
     linking_failure_codes: (
         tuple[str, ...]

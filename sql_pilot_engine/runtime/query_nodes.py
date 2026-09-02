@@ -638,6 +638,7 @@ class QueryRuntimeNodes:
                 query_context=query_context,
                 plan=plan,
                 linked_schema=linked_schema,
+                generation_source=generation_source,
             )
         )
         
