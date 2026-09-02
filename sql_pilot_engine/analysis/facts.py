@@ -28,6 +28,72 @@ class ColumnReference:
     name: str
     qualifier: str | None = None
 
+SQLLiteralValue = (
+    str
+    | int
+    | float
+    | bool
+    | None
+)
+
+
+@dataclass(frozen=True)
+class AggregateFact:
+    """
+    SQL 中一个能够确定识别的聚合事实。
+
+    function:
+        sum / avg / count /
+        count_distinct 等。
+
+    column:
+        聚合对象是单一物理字段时记录。
+        对复杂表达式，例如：
+            SUM(amount * rate)
+        column=None。
+
+    这是刻意保守的：
+    无法形式化证明时，不假装确定。
+    """
+
+    function: str
+
+    column: (
+        ColumnReference | None
+    ) = None
+
+    distinct: bool = False
+
+
+@dataclass(frozen=True)
+class PredicateFact:
+    """
+    WHERE 中能够确定提取的简单谓词。
+
+    示例：
+
+        dt = '202607'
+
+        PredicateFact(
+            column=ColumnReference(
+                name="dt",
+            ),
+            operator="eq",
+            values=("202607",),
+        )
+
+    当前只负责事实抽取，
+    不判断这个过滤条件业务上是否正确。
+    """
+
+    column: ColumnReference
+
+    operator: str
+
+    values: tuple[
+        SQLLiteralValue,
+        ...
+    ]
 
 @dataclass(frozen=True)
 class SQLFacts:
@@ -59,6 +125,16 @@ class SQLFacts:
     has_truncate: bool
     has_write_operation: bool
     has_partition_clause: bool
+    
+    aggregate_facts: tuple[
+        AggregateFact,
+        ...
+    ] = ()
+
+    predicate_facts: tuple[
+        PredicateFact,
+        ...
+    ] = ()
 
 class SQLFactsExtractor:
     """将SQLGlot AST转换成项目内部的SQLFacts。
@@ -105,6 +181,14 @@ class SQLFactsExtractor:
         table_references: set[TableReference] = set()
         column_references: set[ColumnReference] = set()
         select_aliases: set[str] = set()
+
+        aggregate_facts: set[
+            AggregateFact
+        ] = set()
+
+        predicate_facts: set[
+            PredicateFact
+        ] = set()
         
         has_select_star = False
         
@@ -160,7 +244,19 @@ class SQLFactsExtractor:
             column_references.update(self._extract_column_references(statement))
             
             select_aliases.update(self._extract_select_aliases(statement))
-            
+
+            aggregate_facts.update(
+                self._extract_aggregate_facts(
+                    statement
+                )
+            )
+
+            predicate_facts.update(
+                self._extract_predicate_facts(
+                    statement
+                )
+            )
+
             if self._contains_select_star(statement):
                 has_select_star = True
                 
@@ -227,6 +323,51 @@ class SQLFactsExtractor:
             ),
             select_aliases=tuple(
                 sorted(select_aliases)
+            ),
+            aggregate_facts=tuple(
+                sorted(
+                    aggregate_facts,
+
+                    key=lambda item: (
+                        item.function,
+
+                        (
+                            item.column.qualifier
+                            if (
+                                item.column
+                                and item.column.qualifier
+                            )
+                            else ""
+                        ),
+
+                        (
+                            item.column.name
+                            if item.column
+                            else ""
+                        ),
+                    ),
+                )
+            ),
+
+            predicate_facts=tuple(
+                sorted(
+                    predicate_facts,
+
+                    key=lambda item: (
+                        item.column.qualifier
+                        or "",
+
+                        item.column.name,
+
+                        item.operator,
+
+                        tuple(
+                            str(value)
+                            for value
+                            in item.values
+                        ),
+                    ),
+                )
             ),
             has_select_star=has_select_star,
             has_drop="drop" in statement_type_set,
@@ -408,7 +549,506 @@ class SQLFactsExtractor:
             
         return references
     
-    
+
+    def _extract_aggregate_facts(
+        self,
+        statement: exp.Expression,
+    ) -> set[AggregateFact]:
+        """
+        提取可形式化识别的聚合事实。
+
+        当前只把：
+
+            SUM(column)
+            AVG(column)
+            COUNT(column)
+            COUNT(DISTINCT column)
+
+        这类简单聚合绑定到具体字段。
+
+        对：
+
+            SUM(a * b)
+            SUM(COALESCE(a, 0))
+
+        仍然记录聚合函数，
+        但 column=None。
+
+        后续 Deterministic Rule
+        因此不会对复杂表达式作过度推断。
+        """
+
+        facts: set[
+            AggregateFact
+        ] = set()
+
+        for aggregate in (
+            statement.find_all(
+                exp.AggFunc
+            )
+        ):
+
+            function = (
+                aggregate.key
+                .strip()
+                .lower()
+            )
+
+            argument = (
+                aggregate.args.get(
+                    "this"
+                )
+            )
+
+            distinct = bool(
+                aggregate.args.get(
+                    "distinct"
+                )
+            )
+
+            # SQLGlot 对：
+            #
+            # COUNT(DISTINCT column)
+            #
+            # 可能将 DISTINCT 表示为
+            # argument 本身。
+            if isinstance(
+                argument,
+                exp.Distinct,
+            ):
+
+                distinct = True
+
+                expressions = tuple(
+                    argument.expressions
+                )
+
+                argument = (
+                    expressions[0]
+                    if len(expressions) == 1
+                    else None
+                )
+
+            column = (
+                self._to_column_reference(
+                    argument
+                )
+            )
+
+            normalized_function = (
+                "count_distinct"
+                if (
+                    function == "count"
+                    and distinct
+                )
+                else function
+            )
+
+            facts.add(
+                AggregateFact(
+                    function=(
+                        normalized_function
+                    ),
+
+                    column=column,
+
+                    distinct=distinct,
+                )
+            )
+
+        return facts
+
+    def _extract_predicate_facts(
+        self,
+        statement: exp.Expression,
+    ) -> set[PredicateFact]:
+        """
+        只从 WHERE 中提取能够确定识别的简单谓词。
+
+        当前支持：
+
+            =
+            !=
+            >
+            >=
+            <
+            <=
+            IN
+            BETWEEN
+
+        不处理：
+            JOIN ON
+            任意函数计算
+            column = another_column
+            subquery predicate
+
+        这些后续需要 Scope / Lineage
+        时再扩展，不在 V1 猜测。
+        """
+
+        facts: set[
+            PredicateFact
+        ] = set()
+
+        binary_types = (
+            (exp.EQ, "eq"),
+            (exp.NEQ, "neq"),
+            (exp.GT, "gt"),
+            (exp.GTE, "gte"),
+            (exp.LT, "lt"),
+            (exp.LTE, "lte"),
+        )
+
+        for where in (
+            statement.find_all(
+                exp.Where
+            )
+        ):
+
+            for (
+                expression_type,
+                operator,
+            ) in binary_types:
+
+                for predicate in (
+                    where.find_all(
+                        expression_type
+                    )
+                ):
+
+                    fact = (
+                        self
+                        ._extract_binary_predicate(
+                            predicate=predicate,
+                            operator=operator,
+                        )
+                    )
+
+                    if fact is not None:
+                        facts.add(
+                            fact
+                        )
+
+            for predicate in (
+                where.find_all(
+                    exp.In
+                )
+            ):
+
+                # NOT IN 不能错误记录成 IN。
+                if isinstance(
+                    predicate.parent,
+                    exp.Not,
+                ):
+                    continue
+
+                column = (
+                    self._to_column_reference(
+                        predicate.this
+                    )
+                )
+
+                if column is None:
+                    continue
+
+                expressions = tuple(
+                    predicate.expressions
+                )
+
+                if not expressions:
+                    continue
+
+                values: list[
+                    SQLLiteralValue
+                ] = []
+
+                supported = True
+
+                for expression in (
+                    expressions
+                ):
+
+                    (
+                        is_literal,
+                        value,
+                    ) = self._literal_value(
+                        expression
+                    )
+
+                    if not is_literal:
+                        supported = False
+                        break
+
+                    values.append(
+                        value
+                    )
+
+                if not supported:
+                    continue
+
+                facts.add(
+                    PredicateFact(
+                        column=column,
+                        operator="in",
+                        values=tuple(
+                            values
+                        ),
+                    )
+                )
+
+            for predicate in (
+                where.find_all(
+                    exp.Between
+                )
+            ):
+
+                column = (
+                    self._to_column_reference(
+                        predicate.this
+                    )
+                )
+
+                if column is None:
+                    continue
+
+                low = predicate.args.get(
+                    "low"
+                )
+
+                high = predicate.args.get(
+                    "high"
+                )
+
+                (
+                    low_supported,
+                    low_value,
+                ) = self._literal_value(
+                    low
+                )
+
+                (
+                    high_supported,
+                    high_value,
+                ) = self._literal_value(
+                    high
+                )
+
+                if not (
+                    low_supported
+                    and high_supported
+                ):
+                    continue
+
+                facts.add(
+                    PredicateFact(
+                        column=column,
+
+                        operator="between",
+
+                        values=(
+                            low_value,
+                            high_value,
+                        ),
+                    )
+                )
+
+        return facts
+
+    def _extract_binary_predicate(
+        self,
+        *,
+        predicate: exp.Expression,
+        operator: str,
+    ) -> PredicateFact | None:
+
+        left = predicate.args.get(
+            "this"
+        )
+
+        right = predicate.args.get(
+            "expression"
+        )
+
+        left_column = (
+            self._to_column_reference(
+                left
+            )
+        )
+
+        right_column = (
+            self._to_column_reference(
+                right
+            )
+        )
+
+        (
+            right_is_literal,
+            right_value,
+        ) = self._literal_value(
+            right
+        )
+
+        if (
+            left_column is not None
+            and right_is_literal
+        ):
+
+            return PredicateFact(
+                column=left_column,
+                operator=operator,
+                values=(
+                    right_value,
+                ),
+            )
+
+        (
+            left_is_literal,
+            left_value,
+        ) = self._literal_value(
+            left
+        )
+
+        if (
+            right_column is not None
+            and left_is_literal
+        ):
+
+            reversed_operator = {
+                "eq": "eq",
+                "neq": "neq",
+                "gt": "lt",
+                "gte": "lte",
+                "lt": "gt",
+                "lte": "gte",
+            }[operator]
+
+            return PredicateFact(
+                column=right_column,
+
+                operator=(
+                    reversed_operator
+                ),
+
+                values=(
+                    left_value,
+                ),
+            )
+
+        return None
+
+
+    @staticmethod
+    def _to_column_reference(
+        expression: (
+            exp.Expression | None
+        ),
+    ) -> ColumnReference | None:
+
+        if not isinstance(
+            expression,
+            exp.Column,
+        ):
+            return None
+
+        if expression.name == "*":
+            return None
+
+        return ColumnReference(
+            name=(
+                expression.name
+                .strip()
+                .lower()
+            ),
+
+            qualifier=(
+                expression.table
+                .strip()
+                .lower()
+                if expression.table
+                else None
+            ),
+        )
+
+
+    @staticmethod
+    def _literal_value(
+        expression: (
+            exp.Expression | None
+        ),
+    ) -> tuple[
+        bool,
+        SQLLiteralValue,
+    ]:
+        """
+        第一个返回值说明：
+        当前 Expression 是否真的是
+        可确定识别的 Literal。
+
+        因为 None 本身可以代表 SQL NULL，
+        所以不能用 None 作为“不支持”的标记。
+        """
+
+        if isinstance(
+            expression,
+            exp.Null,
+        ):
+            return (
+                True,
+                None,
+            )
+
+        if isinstance(
+            expression,
+            exp.Boolean,
+        ):
+            return (
+                True,
+                bool(
+                    expression.this
+                ),
+            )
+
+        if not isinstance(
+            expression,
+            exp.Literal,
+        ):
+            return (
+                False,
+                None,
+            )
+
+        raw = str(
+            expression.this
+        )
+
+        if expression.is_string:
+            return (
+                True,
+                raw,
+            )
+
+        try:
+            return (
+                True,
+                int(raw),
+            )
+
+        except ValueError:
+            pass
+
+        try:
+            return (
+                True,
+                float(raw),
+            )
+
+        except ValueError:
+            return (
+                True,
+                raw,
+            )
+
+
     def _extract_select_aliases(
         self,
         statement: exp.Expression,

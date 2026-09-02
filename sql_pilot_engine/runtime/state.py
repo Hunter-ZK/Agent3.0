@@ -11,16 +11,13 @@ from sql_pilot_engine.context.builder import (
 
 from sql_pilot_engine.generation.models import (
     QueryPlan,
-)
-
-from sql_pilot_engine.runtime.event import (
-    RuntimeEventType,
+    CompilationEvidence,
 )
 
 from sql_pilot_engine.linking.models import (
     LinkedSchema,
+    SchemaLinkingFailure,
 )
-    
 
 class QueryAgentState(TypedDict):
     """LangGraph Text-to-SQL Runtime State.
@@ -51,8 +48,6 @@ class QueryAgentState(TypedDict):
 
     thread_id: str
     turn_id: str
-
-    event_type: RuntimeEventType | None
 
     # ========================================================
     # Context Intelligence
@@ -99,15 +94,39 @@ class QueryAgentState(TypedDict):
         LinkedSchema | None
     ]
 
+    linking_failures: NotRequired[
+        tuple[
+            SchemaLinkingFailure,
+            ...
+        ]
+    ]
+
     linking_error_message: NotRequired[
         str | None
     ]
-        
 
     # ========================================================
     # Generation
     # ========================================================
     
+    compilation_status: NotRequired[
+        str | None
+    ]
+
+    compilation_fallback_reason: (
+        NotRequired[
+            str | None
+        ]
+    )
+
+    compilation_evidence: NotRequired[
+        CompilationEvidence | None
+    ]
+
+    generation_source: NotRequired[
+        str | None
+    ]
+        
     generated_sql: NotRequired[
         str | None
     ]
@@ -152,6 +171,12 @@ class QueryAgentState(TypedDict):
         tuple[str, ...]
     ]
 
+    validation_issues: NotRequired[
+        tuple[
+            dict[str, object],
+            ...
+        ]
+    ]
 
     # ========================================================
     # Final Result

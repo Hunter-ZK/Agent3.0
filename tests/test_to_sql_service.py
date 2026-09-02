@@ -100,7 +100,6 @@ def build_service(
                 metadata_provider_factory
             ),
             default_enable_metadata=False,
-            enable_llm=False,
         )
     )
 

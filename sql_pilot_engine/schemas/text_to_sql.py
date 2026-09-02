@@ -6,6 +6,10 @@ from sql_pilot_engine.generation.models import (
     QueryPlan,
 )
 
+from sql_pilot_engine.linking.models import (
+    SchemaLinkingFailure,
+)
+
 
 @dataclass(frozen=True)
 class TextToSQLRequest:
@@ -37,8 +41,41 @@ class TextToSQLResult:
     generated_sql: str
     trusted_sql: str | None
     success: bool
-    validation_status: str
+
+    generation_source: (
+        str | None
+    ) = None
+
+    compilation_status: (
+        str | None
+    ) = None
+
+    compilation_fallback_reason: (
+        str | None
+    ) = None
+
+    compilation_evidence: (
+        TextToSQLCompilationEvidence
+        | None
+    ) = None
+
+    linking_failures: tuple[
+        SchemaLinkingFailure,
+        ...
+    ] = ()
+
+    linking_error_message: (
+        str | None
+    ) = None
+
+    validation_status: str = (
+        "not_run"
+    )
     validation_error_message: str | None = None
+    validation_issues: tuple[
+        TextToSQLValidationIssue,
+        ...
+    ] = ()
     semantic_validation_status: (
         str | None
     ) = None
@@ -50,6 +87,10 @@ class TextToSQLResult:
     semantic_issues: (
         tuple[str, ...]
     ) = ()
+    
+
+    
+    
 
 @dataclass(frozen=True)
 class TextToSQLClarification:
@@ -66,3 +107,74 @@ class TextToSQLClarification:
 TextToSQLResponse = (
     TextToSQLResult | TextToSQLClarification
 )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class TextToSQLValidationIssue:
+    """
+    Text-to-SQL 对 SQL Trust Issue
+    的稳定 Application Projection。
+
+    不直接把内部 ReviewResult /
+    Issue 暴露给 Capability 调用方。
+    """
+
+    rule_id: str
+
+    source: str
+
+    severity: str
+
+    action: str
+
+    category: str
+
+    message: str
+
+    evidence: str
+
+    def __post_init__(
+        self,
+    ) -> None:
+
+        if not self.rule_id.strip():
+            raise ValueError(
+                "rule_id cannot be empty"
+            )
+            
+            
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class TextToSQLCompilationEvidence:
+
+    metric_names: tuple[
+        str,
+        ...
+    ]
+
+    physical_table: str
+
+    metric_expressions: tuple[
+        str,
+        ...
+    ]
+
+    dimension_columns: tuple[
+        str,
+        ...
+    ] = ()
+
+    filter_expressions: tuple[
+        str,
+        ...
+    ] = ()
+
+    group_by_columns: tuple[
+        str,
+        ...
+    ] = ()

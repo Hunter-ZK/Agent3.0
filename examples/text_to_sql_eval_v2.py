@@ -14,6 +14,13 @@ from sql_pilot_engine.evaluation.text_to_sql.evaluator import (
     evaluate_case,
 )
 
+from pathlib import Path
+
+from sql_pilot_engine.evaluation.text_to_sql.reporting import (
+    build_evaluation_report,
+    write_evaluation_report,
+)
+
 
 def parse_args() -> argparse.Namespace:
 
@@ -40,6 +47,27 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help=(
             "每个 Case 重复执行次数。"
+        ),
+    )
+
+    parser.add_argument(
+        "--report-dir",
+        default=(
+            "reports/evaluation/"
+            "text_to_sql"
+        ),
+        help=(
+            "JSON / Markdown "
+            "Evaluation 报告输出目录。"
+        ),
+    )
+
+    parser.add_argument(
+        "--no-report",
+        action="store_true",
+        help=(
+            "只运行 Evaluation，"
+            "不写报告文件。"
         ),
     )
 
@@ -130,27 +158,25 @@ def main() -> None:
             results.append(
                 result
             )
-
-            print()
-            print(
-                f"run={run_index} "
-                f"final="
-                f"{'PASS' if result.final_pass else 'FAIL'}"
-            )
-
+            
             print(
                 "planning:",
                 result.planning_pass,
             )
 
             print(
-                "clarification:",
-                result.clarification_pass,
+                "schema_link:",
+                result.schema_link_pass,
             )
 
             print(
-                "sql_trust:",
-                result.sql_trust_pass,
+                "generation:",
+                result.generation_pass,
+            )
+
+            print(
+                "gate:",
+                result.gate_pass,
             )
 
             print(
@@ -159,159 +185,175 @@ def main() -> None:
             )
 
             print(
-                "system_error:",
-                result.system_error,
+                "final:",
+                result.final_pass,
             )
 
             print(
-                "validation:",
-                result.validation_status,
+                "failure_type:",
+                (
+                    result.failure_type.value
+                    if result.failure_type
+                    else None
+                ),
             )
 
             print(
-                "semantic_status:",
-                result.semantic_status,
+                "evidence_rule_hits:",
+                result.evidence_rule_hits,
             )
 
-            print(
-                "reason:",
-                result.reason,
+            
+        report = (
+            build_evaluation_report(
+                results=tuple(
+                    results
+                ),
+                repeat=args.repeat,
             )
-
-            if result.validation_error:
-                print(
-                    "validation_error:",
-                    result.validation_error,
-                )
-
-    # ========================================================
-    # Aggregate
-    # ========================================================
-
-    total = len(results)
-
-    if total == 0:
-        raise RuntimeError(
-            "No evaluation results."
+        )
+                
+        summary = (
+            report["summary"]
         )
 
-    final_passes = sum(
-        result.final_pass
-        for result in results
-    )
-
-    planning_passes = sum(
-        result.planning_pass
-        for result in results
-    )
-
-    clarification_passes = sum(
-        result.clarification_pass
-        for result in results
-    )
-
-    trust_passes = sum(
-        result.sql_trust_pass
-        for result in results
-    )
-
-    semantic_passes = sum(
-        result.semantic_pass
-        for result in results
-    )
-
-    system_errors = sum(
-        result.system_error
-        for result in results
-    )
-
-    grouped = defaultdict(list)
-
-    for result in results:
-        grouped[
-            result.case_id
-        ].append(
-            result
+        configuration = (
+            report["configuration"]
         )
 
-    stable_cases = sum(
-        all(
-            result.final_pass
-            for result
-            in case_results
+        print()
+        print("=" * 78)
+        print(
+            "Evaluation Summary"
         )
-        for case_results
-        in grouped.values()
-    )
+        print("=" * 78)
 
-    print()
-    print("=" * 78)
-    print("Evaluation Summary")
-    print("=" * 78)
-
-    print(
-        "runs:",
-        total,
-    )
-
-    print(
-        "planning_accuracy:",
-        f"{planning_passes}/{total}",
-        f"({planning_passes / total:.1%})",
-    )
-
-    print(
-        "clarification_accuracy:",
-        f"{clarification_passes}/{total}",
-        f"({clarification_passes / total:.1%})",
-    )
-
-    print(
-        "sql_trust_rate:",
-        f"{trust_passes}/{total}",
-        f"({trust_passes / total:.1%})",
-    )
-
-    print(
-        "semantic_pass_rate:",
-        f"{semantic_passes}/{total}",
-        f"({semantic_passes / total:.1%})",
-    )
-
-    print(
-        "final_success_rate:",
-        f"{final_passes}/{total}",
-        f"({final_passes / total:.1%})",
-    )
-
-    print(
-        "system_error_rate:",
-        f"{system_errors}/{total}",
-        f"({system_errors / total:.1%})",
-    )
-
-    print(
-        "stable_cases:",
-        f"{stable_cases}/{len(grouped)}",
-    )
-
-    print()
-    print("Per-case stability")
-
-    for case_id, case_results in (
-        grouped.items()
-    ):
-        passed = sum(
-            result.final_pass
-            for result
-            in case_results
+        print(
+            "runs:",
+            configuration[
+                "run_count"
+            ],
         )
 
         print(
-            f"- {case_id}: "
-            f"{passed}/"
-            f"{len(case_results)}"
+            "planning_rate:",
+            f"{summary['planning_rate']:.1%}",
         )
+
+        print(
+            "schema_link_rate:",
+            f"{summary['schema_link_rate']:.1%}",
+        )
+
+        print(
+            "generation_rate:",
+            f"{summary['generation_rate']:.1%}",
+        )
+
+        print(
+            "gate_rate:",
+            f"{summary['gate_rate']:.1%}",
+        )
+
+        print(
+            "semantic_rate:",
+            f"{summary['semantic_rate']:.1%}",
+        )
+
+        print(
+            "final_success_rate:",
+            f"{summary['final_success_rate']:.1%}",
+        )
+
+        print(
+            "stable_pass:",
+            (
+                f"{summary['stable_pass_cases']}/"
+                f"{configuration['case_count']}"
+            ),
+        )
+
+        print(
+            "unstable_cases:",
+            summary[
+                "unstable_cases"
+            ],
+        )
+
+        print(
+            "gate_false_negative:",
+            summary[
+                "gate_false_negative_runs"
+            ],
+        )
+
+
+        print()
+        print(
+            "Evidence Rule Hits"
+        )
+
+        for (
+            rule_id,
+            count,
+        ) in report[
+            "evidence_rule_hit_counts"
+        ].items():
+
+            print(
+                f"- {rule_id}: "
+                f"{count}"
+            )
+
+
+        advisory_passes = (
+            report[
+                "pass_with_evidence_advisory"
+            ]
+        )
+
+        print()
+        print(
+            "PASS with Evidence Advisories:",
+            len(
+                advisory_passes
+            ),
+        )
+
+        for item in (
+            advisory_passes
+        ):
+            print(
+                f"- {item['case_id']} "
+                f"run={item['run_index']}: "
+                f"{item['evidence_rule_hits']}"
+            )
+
+
+        if not args.no_report:
+
+            json_path, markdown_path = (
+                write_evaluation_report(
+                    report=report,
+
+                    output_dir=Path(
+                        args.report_dir
+                    ),
+                )
+            )
+
+            print()
+            print(
+                "JSON report:",
+                json_path,
+            )
+
+            print(
+                "Markdown report:",
+                markdown_path,
+            )
+                        
+
 
 
 if __name__ == "__main__":

@@ -22,6 +22,8 @@ from sql_pilot_engine.generation.models import (
     GeneratedSQL,
     QueryPlan,
     QueryPlanningOutcome,
+    GenerationSource,
+    MetricCompilationOutcome,
 )
 
 from sql_pilot_engine.generation.planner import (
@@ -50,6 +52,13 @@ from sql_pilot_engine.workflow.protocols import (
     TrustedSQLWorkflowResultView,
 )
 
+from sql_pilot_engine.core.trust_evidence import (
+    SQLTrustEvidence,
+)
+
+from sql_pilot_engine.generation.metric_compiler import (
+    MetricSQLCompiler,
+)
 
 class TextToSQLStageService:
     """
@@ -94,6 +103,7 @@ class TextToSQLStageService:
         context_builder: QueryContextBuilder,
         planner: QueryPlanner,
         schema_linker: SchemaLinker,
+        metric_compiler: MetricSQLCompiler,
         sql_generator: SQLGenerator,
         trusted_sql_workflow: (
             TrustedSQLWorkflowPort
@@ -141,6 +151,10 @@ class TextToSQLStageService:
 
         self._schema_linker = (
             schema_linker
+        )
+        
+        self._metric_compiler = (
+            metric_compiler
         )
 
         self._sql_generator = (
@@ -255,6 +269,31 @@ class TextToSQLStageService:
         )
 
     # ========================================================
+    # SQL Compile
+    # ========================================================
+
+    def try_compile_sql(
+        self,
+        *,
+        plan: QueryPlan,
+        linked_schema: LinkedSchema,
+        dialect: str,
+    ) -> MetricCompilationOutcome:
+
+        return (
+            self._metric_compiler
+            .compile(
+                plan=plan,
+
+                linked_schema=(
+                    linked_schema
+                ),
+
+                dialect=dialect,
+            )
+        )
+
+    # ========================================================
     # SQL Generation
     # ========================================================
 
@@ -299,7 +338,18 @@ class TextToSQLStageService:
         generated_sql: str,
         dialect: str,
         query_context: QueryContext,
+        plan: QueryPlan,
+        linked_schema: LinkedSchema,
+        generation_source: GenerationSource,
     ) -> TrustedSQLWorkflowResultView:
+        
+        trust_evidence = (
+            SQLTrustEvidence(
+                query_plan=plan,
+                linked_schema=linked_schema,
+                semantic_model=self._semantic_model,
+            )
+        )
 
         return (
             self._trusted_sql_workflow
@@ -311,6 +361,14 @@ class TextToSQLStageService:
                 query_context=(
                     query_context
                 ),
+                
+                trust_evidence=trust_evidence,
+
+                rule_packs=("text_to_sql",),
+                
+                enable_llm = (
+                    generation_source is not (GenerationSource.COMPILED)
+                )
             )
         )
 

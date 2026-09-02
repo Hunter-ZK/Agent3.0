@@ -7,6 +7,10 @@ from sql_pilot_engine.context.builder import (
         QueryContext,
     )
 
+from sql_pilot_engine.core.trust_evidence import (
+    SQLTrustEvidence,
+)
+
 @dataclass
 class SQLReviewRequest:
     """外部调用 SQL Review Engine 的审查请求 DTO。
@@ -26,7 +30,12 @@ class SQLReviewRequest:
     metadata_provider: Any | None = None
     trace_id: str | None = None
     query_context: QueryContext | None = None
+    trust_evidence: SQLTrustEvidence | None = None
 
+    rule_packs: tuple[
+        str,
+        ...
+    ] = ()
 
 @dataclass
 class SQLFixRequest(SQLReviewRequest):

@@ -11,6 +11,8 @@ from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLRequest,
     TextToSQLResponse,
     TextToSQLResult,
+    TextToSQLValidationIssue,
+    TextToSQLCompilationEvidence,
 )
 
 
@@ -269,6 +271,46 @@ class TextToSQLCapability:
                     False,
                 )
             ),
+            
+            generation_source=(
+                state.get(
+                    "generation_source"
+                )
+            ),
+
+            compilation_status=(
+                state.get(
+                    "compilation_status"
+                )
+            ),
+
+            compilation_fallback_reason=(
+                state.get(
+                    "compilation_fallback_reason"
+                )
+            ),
+
+            compilation_evidence=(
+                cls._compilation_evidence(
+                    state.get(
+                        "compilation_evidence"
+                    )
+                )
+            ),
+            
+            linking_failures=tuple(
+                state.get(
+                    "linking_failures",
+                    (),
+                )
+                or ()
+            ),
+
+            linking_error_message=(
+                state.get(
+                    "linking_error_message"
+                )
+            ),
 
             validation_status=(
                 cls._status_text(
@@ -281,6 +323,20 @@ class TextToSQLCapability:
             validation_error_message=(
                 state.get(
                     "validation_error_message"
+                )
+            ),
+
+            validation_issues=tuple(
+                cls._validation_issue_from_raw(
+                    item
+                )
+                for item
+                in (
+                    state.get(
+                        "validation_issues",
+                        (),
+                    )
+                    or ()
                 )
             ),
 
@@ -345,4 +401,97 @@ class TextToSQLCapability:
 
         return cls._status_text(
             value
+        )
+            
+    @classmethod
+    def _validation_issue_from_raw(
+        cls,
+        raw: dict,
+    ) -> TextToSQLValidationIssue:
+
+        return TextToSQLValidationIssue(
+            rule_id=cls._status_text(
+                raw.get(
+                    "rule_id"
+                )
+            ),
+
+            source=cls._status_text(
+                raw.get(
+                    "source"
+                )
+            ),
+
+            severity=cls._status_text(
+                raw.get(
+                    "severity"
+                )
+            ),
+
+            action=cls._status_text(
+                raw.get(
+                    "action"
+                )
+            ),
+
+            category=cls._status_text(
+                raw.get(
+                    "category"
+                )
+            ),
+
+            message=str(
+                raw.get(
+                    "message",
+                    "",
+                )
+                or ""
+            ),
+
+            evidence=str(
+                raw.get(
+                    "evidence",
+                    "",
+                )
+                or ""
+            ),
+        )
+        
+    @staticmethod
+    def _compilation_evidence(
+        value,
+    ) -> (
+        TextToSQLCompilationEvidence
+        | None
+    ):
+
+        if value is None:
+            return None
+
+        return (
+            TextToSQLCompilationEvidence(
+                metric_names=tuple(
+                    value.metric_names
+                ),
+
+                physical_table=(
+                    value.physical_table
+                ),
+
+                metric_expressions=tuple(
+                    value.metric_expressions
+                ),
+
+                dimension_columns=tuple(
+                    value.dimension_columns
+                ),
+
+                filter_expressions=tuple(
+                    value.filter_expressions
+                ),
+
+                group_by_columns=tuple(
+                    value.group_by_columns
+                ),
+            )
         )

@@ -105,7 +105,7 @@ class MetadataValidator:
                     category="metadata",
                     source=IssueSource.SYSTEM,
                     confidence=1.0,
-                    action=IssueAction.CONTEXT_REQUIRED,
+                    action=IssueAction.HUMAN_REVIEW,
                     auto_fixable=False,
                     requires_metadata=True,
                 )

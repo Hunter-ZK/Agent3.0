@@ -13,10 +13,25 @@ RuleCheckFunc = Callable[[str, ReviewContext], list[Issue]]
 @dataclass
 class Rule:
     rule_id: str
+
     name: str
+
     severity: Severity
+
     category: str
+
     description: str
+
     check: RuleCheckFunc
+
     modes: set[str]
+
+    packs: frozenset[str] = (
+        frozenset(
+            {
+                "base",
+            }
+        )
+    )
+
     enabled: bool = True

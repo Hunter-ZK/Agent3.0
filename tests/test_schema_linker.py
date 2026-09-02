@@ -22,7 +22,12 @@ from sql_pilot_engine.metadata.models import (
     TableLookupResult,
     TableMetadata,
 )
-
+from sql_pilot_engine.linking.models import (
+    SchemaBindingKind,
+    LinkedSchema,
+    SchemaLinkingFailureCode,
+    SchemaLinkingFailure,
+)
 
 class FakeMetadataProvider:
 
@@ -291,6 +296,30 @@ def test_schema_linker_resolves_plan_to_physical_schema():
         "fin_org_code",
     }
 
+    dimension_binding = (
+        result.get_binding(
+            kind=(
+                SchemaBindingKind.COLUMN
+            ),
+            logical_name=(
+                "fin_org_code"
+            ),
+        )
+    )
+
+    assert (
+        dimension_binding
+        is not None
+    )
+
+    assert (
+        dimension_binding
+        .physical_columns
+        == (
+            "fin_org_code",
+        )
+    )
+
 
 def test_schema_linker_reports_missing_physical_table():
 
@@ -314,6 +343,29 @@ def test_schema_linker_reports_missing_physical_table():
     assert (
         result.linking_confidence
         < 1.0
+    )
+    
+    assert result.failures == (
+        result.failures
+    )
+
+    assert len(
+        result.failures
+    ) >= 1
+
+    failure = result.failures[0]
+
+    assert (
+        failure.code
+        is (
+            SchemaLinkingFailureCode
+            .TABLE_NOT_FOUND
+        )
+    )
+
+    assert (
+        failure.term
+        == "ods_hd_100_cldkxx"
     )
 
 
@@ -357,6 +409,18 @@ def test_schema_linker_reports_missing_metric():
     assert (
         "unknown_metric"
         in result.unresolved_terms
+    )
+
+    assert any(
+        (
+            failure.code
+            is SchemaLinkingFailureCode
+            .UNKNOWN_METRIC
+            and failure.term
+            == "unknown_metric"
+        )
+        for failure
+        in result.failures
     )
 
 
@@ -425,6 +489,17 @@ def test_schema_linker_reports_metric_with_missing_physical_column():
         in result.unresolved_terms
     )
 
+    assert any(
+        (
+            failure.code
+            is SchemaLinkingFailureCode
+            .PHYSICAL_COLUMN_NOT_FOUND
+            and failure.term
+            == "bad_metric"
+        )
+        for failure
+        in result.failures
+    )
 
 def test_schema_linker_reports_missing_dimension():
 
@@ -469,9 +544,21 @@ def test_schema_linker_reports_missing_dimension():
         "missing_dimension"
         in result.unresolved_terms
     )
+    
+    assert any(
+        (
+            failure.code
+            is SchemaLinkingFailureCode
+            .PHYSICAL_COLUMN_NOT_FOUND
+            and failure.term
+            == "missing_dimension"
+        )
+        for failure
+        in result.failures
+    )
 
 
-def test_schema_linker_propagates_metadata_system_error():
+def test_schema_linker_reports_metadata_system_error():
 
     linker = build_linker(
         provider=(
@@ -482,12 +569,146 @@ def test_schema_linker_propagates_metadata_system_error():
         )
     )
 
-    with pytest.raises(
-        SchemaLinkingError,
-        match=(
-            "Metadata lookup failed"
-        ),
-    ):
-        linker.link(
-            plan=build_plan()
+    result = linker.link(
+        plan=build_plan()
+    )
+
+    assert (
+        result.resolved
+        is False
+    )
+
+    assert any(
+        (
+            failure.code
+            is (
+                SchemaLinkingFailureCode
+                .METADATA_ERROR
+            )
         )
+        for failure
+        in result.failures
+    )
+    
+    
+def test_schema_linker_reports_ambiguous_physical_column():
+
+    first_table = TableMetadata(
+        full_name="project.table_a",
+        columns={
+            "fin_org_code": (
+                ColumnMetadata(
+                    name="fin_org_code",
+                    data_type="STRING",
+                    description=(
+                        "金融机构代码"
+                    ),
+                )
+            ),
+        },
+    )
+
+    second_table = TableMetadata(
+        full_name="project.table_b",
+        columns={
+            "fin_org_code": (
+                ColumnMetadata(
+                    name="fin_org_code",
+                    data_type="STRING",
+                    description=(
+                        "金融机构代码"
+                    ),
+                )
+            ),
+        },
+    )
+
+    linker = SchemaLinker(
+        metadata_provider=(
+            FakeMetadataProvider(
+                {
+                    first_table.full_name:
+                        first_table,
+
+                    second_table.full_name:
+                        second_table,
+                }
+            )
+        ),
+        semantic_model=(
+            SemanticModel(
+                tables=(),
+                metrics=(),
+            )
+        ),
+    )
+
+    plan = QueryPlan(
+        tables=(
+            "project.table_a",
+            "project.table_b",
+        ),
+        dimensions=(
+            "fin_org_code",
+        ),
+        metrics=(),
+        group_by=(
+            "fin_org_code",
+        ),
+    )
+
+    result = linker.link(
+        plan=plan
+    )
+
+    assert (
+        result.resolved
+        is False
+    )
+
+    assert any(
+        (
+            failure.code
+            is (
+                SchemaLinkingFailureCode
+                .PHYSICAL_COLUMN_AMBIGUOUS
+            )
+            and failure.term
+            == "fin_org_code"
+        )
+        for failure
+        in result.failures
+    )
+    
+    
+def test_unresolved_terms_are_derived_from_failures():
+
+    failure = (
+        SchemaLinkingFailure(
+            code=(
+                SchemaLinkingFailureCode
+                .UNKNOWN_METRIC
+            ),
+            term="unknown_metric",
+        )
+    )
+
+    schema = LinkedSchema(
+        tables=(),
+        failures=(
+            failure,
+        ),
+        linking_confidence=0.0,
+    )
+
+    assert (
+        schema.resolved
+        is False
+    )
+
+    assert (
+        schema.unresolved_terms
+        == (
+            "unknown_metric",
+        )
+    )

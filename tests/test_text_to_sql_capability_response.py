@@ -10,6 +10,10 @@ from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLRequest,
     TextToSQLResult,
 )
+from sql_pilot_engine.linking.models import (
+    SchemaLinkingFailure,
+    SchemaLinkingFailureCode,
+)
 
 
 class FakeGraph:
@@ -64,12 +68,39 @@ class FakeGraph:
 
             "success": False,
 
+            "linking_failures": (),
+            "linking_error_message": None,
+
             "validation_status": (
                 "no_issue"
             ),
 
             "validation_error_message": (
                 None
+            ),
+
+            "validation_issues": (
+                {
+                    "rule_id": (
+                        "METRIC_AGGREGATION"
+                    ),
+
+                    "source": "rule",
+
+                    "severity": "high",
+
+                    "action": "advisory",
+
+                    "category": "semantic",
+
+                    "message": (
+                        "Metric aggregation mismatch"
+                    ),
+
+                    "evidence": (
+                        "expected=sum; actual=avg"
+                    ),
+                },
             ),
 
             "semantic_validation_status": (
@@ -126,4 +157,113 @@ def test_result_preserves_semantic_diagnostics():
             "SQL 缺少统计期过滤条件",
             "SQL 未落实高新技术企业筛选条件",
         )
+    )
+    
+
+def test_result_preserves_schema_linking_diagnostics():
+
+    failure = (
+        SchemaLinkingFailure(
+            code=(
+                SchemaLinkingFailureCode
+                .UNKNOWN_METRIC
+            ),
+            term="unknown_metric",
+            message=(
+                "Metric was not found."
+            ),
+        )
+    )
+
+    state = {
+        "query_plan": QueryPlan(
+            tables=(
+                "ods_hd_100_cldkxx",
+            ),
+            dimensions=(),
+            metrics=(
+                "unknown_metric",
+            ),
+            filters=(),
+            group_by=(),
+        ),
+
+        "generated_sql": None,
+
+        "trusted_sql": None,
+
+        "success": False,
+
+        "linking_failures": (
+            failure,
+        ),
+
+        "linking_error_message": (
+            "Schema linking failed: "
+            "unknown_metric: "
+            "unknown_metric"
+        ),
+    }
+
+    result = (
+        TextToSQLCapability
+        ._state_to_response(
+            state=state,
+            question=(
+                "统计未知指标"
+            ),
+            thread_id=(
+                "test-thread"
+            ),
+        )
+    )
+
+    assert (
+        result.success
+        is False
+    )
+
+    assert (
+        result.linking_failures
+        == (
+            failure,
+        )
+    )
+
+    assert (
+        result.linking_error_message
+        is not None
+    )
+
+    assert (
+        result.validation_status
+        == "not_run"
+    )
+    
+
+    assert (
+        len(
+            result.validation_issues
+        )
+        == 1
+    )
+
+    issue = (
+        result
+        .validation_issues[0]
+    )
+
+    assert (
+        issue.rule_id
+        == "METRIC_AGGREGATION"
+    )
+
+    assert (
+        issue.action
+        == "advisory"
+    )
+
+    assert (
+        issue.source
+        == "rule"
     )

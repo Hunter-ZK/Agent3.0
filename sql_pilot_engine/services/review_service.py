@@ -56,9 +56,11 @@ class ReviewService:
             dialect=context.dialect,
             categories=context.categories,
             metadata_provider=context.metadata_provider,
+            rule_packs=context.rule_packs,
             enable_llm=context.enable_llm,
             llm_provider=context.llm_provider,
             query_context=context.query_context,
+            trust_evidence=context.trust_evidence,
         )
 
     def review_sql(
@@ -69,9 +71,11 @@ class ReviewService:
         dialect: str = "maxcompute",
         categories: set[str] | None = None,
         metadata_provider=None,
+        rule_packs: tuple[str, ...] = (),
         enable_llm: bool = False,
         llm_provider: str = "mock",
         query_context = None,
+        trust_evidence = None,
     ) -> ReviewResult:
 
         analysis = (
@@ -143,8 +147,10 @@ class ReviewService:
             metadata_provider=(
                 metadata_provider
             ),
+            trust_evidence=trust_evidence,
             enable_llm=enable_llm,
             llm_provider=llm_provider,
+            rule_packs=rule_packs,
         )
 
         guardrail_issues = (
@@ -211,6 +217,7 @@ class ReviewService:
                         metadata_context_text
                     ),
                     query_context=query_context,
+                    rule_packs=rule_packs,
                 )
             )
 
@@ -245,6 +252,7 @@ class ReviewService:
         analysis_context_text: str,
         metadata_context_text: str,
         query_context = None,
+        rule_packs: tuple[str, ...] = (),
     ) -> list[Issue]:
 
         if self.llm_client is None:
@@ -263,7 +271,9 @@ class ReviewService:
             file_path=file_path,
             guardrail_catalog_text=(
                 self.rule_registry
-                .build_catalog_text()
+                .build_catalog_text(
+                    rule_packs=rule_packs,
+                )
             ),
             deterministic_issues_text=(
                 build_issues_text(

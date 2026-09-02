@@ -317,6 +317,9 @@ class SQLPilotEngine:
             metadata_provider=(
                 request.metadata_provider
             ),
+            trust_evidence=(
+                request.trust_evidence
+            ),
             enable_llm=request.enable_llm,
             llm_provider=(
                 request.llm_provider
@@ -324,6 +327,7 @@ class SQLPilotEngine:
             query_context=(
                 request.query_context
             ),
+            rule_packs=(request.rule_packs),
             fix_sql=fix_sql,
             fix_provider=fix_provider,
             trace_id=(

@@ -25,6 +25,8 @@ from sql_pilot_engine.linking.models import (
     LinkedTable,
     SchemaBinding,
     SchemaBindingKind,
+    SchemaLinkingFailure,
+    SchemaLinkingFailureCode,
 )
 
 from sql_pilot_engine.metadata.models import (
@@ -100,7 +102,9 @@ class SchemaLinker:
         
         bindings: list[SchemaBinding] = []
         
-        unresolved_terms: list[str] = []
+        failures: list[
+            SchemaLinkingFailure
+        ] = []
         
         resolved_units = 0
         total_units = 0
@@ -123,18 +127,39 @@ class SchemaLinker:
             )
             
             if (result.status is MetadataLookupStatus.ERROR):
-                raise SchemaLinkingError(
-                    "Metadata lookup failed "
-                    f"for table "
-                    f"{table_name}: "
-                    f"{result.error_message or ''}"
+                self._append_failure(
+                    failures,
+                    SchemaLinkingFailure(
+                        code=(
+                            SchemaLinkingFailureCode
+                            .METADATA_ERROR
+                        ),
+                        term=table_name,
+                        message=(
+                            "Metadata lookup failed "
+                            f"for table {table_name!r}: "
+                            f"{result.error_message or ''}"
+                        ),
+                    ),
                 )
-
+                
+                
             if (result.status is MetadataLookupStatus.NOT_FOUND or result.table is None):
                 
-                self._append_unique(
-                    unresolved_terms,
-                    table_name,
+                self._append_failure(
+                    failures,
+                    SchemaLinkingFailure(
+                        code=(
+                            SchemaLinkingFailureCode
+                            .TABLE_NOT_FOUND
+                        ),
+                        term=table_name,
+                        message=(
+                            "Physical table "
+                            f"{table_name!r} "
+                            "was not found."
+                        ),
+                    ),
                 )
                 continue
             
@@ -179,31 +204,49 @@ class SchemaLinker:
             )
             
             if metric is None:
-                self._append_unique(
-                    unresolved_terms,
-                    metric_name,
+                self._append_failure(
+                    failures,
+                    SchemaLinkingFailure(
+                        code=(
+                            SchemaLinkingFailureCode
+                            .UNKNOWN_METRIC
+                        ),
+                        term=metric_name,
+                        message=(
+                            "Metric "
+                            f"{metric_name!r} "
+                            "was not found in the "
+                            "current Semantic Model."
+                        ),
+                    ),
                 )
                 
                 continue
             
-            metric_binding = (
+            metric_outcome = (
                 self._link_metric(
-                    metric = metric,
+                    metric=metric,
                     linked_tables=(
                         linked_tables
                     ),
                 )
             )
-            
-            if metric_binding is None:
-                self._append_unique(
-                    unresolved_terms,
-                    metric_name,
+
+            if isinstance(
+                metric_outcome,
+                SchemaLinkingFailure,
+            ):
+                self._append_failure(
+                    failures,
+                    metric_outcome,
                 )
+
                 continue
-            
-            bindings.append(metric_binding)
-            
+
+            bindings.append(
+                metric_outcome
+            )
+
             resolved_units += 1
             
         # ====================================================
@@ -223,23 +266,31 @@ class SchemaLinker:
             
             total_units += 1
             
-            column_binding = (
+            column_outcome = (
                 self._link_column(
                     column_name=column_name,
-                    linked_tables=linked_tables,
+                    linked_tables=(
+                        linked_tables
+                    ),
                 )
             )
-            
-            if column_binding is None:
-                self._append_unique(
-                    unresolved_terms,
-                    column_name,
+
+            if isinstance(
+                column_outcome,
+                SchemaLinkingFailure,
+            ):
+                self._append_failure(
+                    failures,
+                    column_outcome,
                 )
-            
+
                 continue
 
             resolved_units += 1
-            bindings.append(column_binding)
+
+            bindings.append(
+                column_outcome
+            )
 
 
         # ====================================================
@@ -263,8 +314,8 @@ class SchemaLinker:
                 bindings
             ),
             
-            unresolved_terms=tuple(
-                unresolved_terms
+            failures=tuple(
+                failures
             ),
 
             # F-25：
@@ -287,7 +338,7 @@ class SchemaLinker:
         linked_tables: list[
             LinkedTable
         ],
-    ) -> SchemaBinding | None:
+    ) -> SchemaBinding | SchemaLinkingFailure:
 
         linked_table = (
             self._find_linked_table(
@@ -301,7 +352,21 @@ class SchemaLinker:
         )
 
         if linked_table is None:
-            return False
+            return SchemaLinkingFailure(
+                code=(
+                    SchemaLinkingFailureCode
+                    .TABLE_NOT_FOUND
+                ),
+                term=metric.name,
+                message=(
+                    "Metric "
+                    f"{metric.name!r} "
+                    "cannot be linked because "
+                    "its physical table "
+                    f"{metric.table!r} "
+                    "is unavailable."
+                ),
+            )
 
         required_columns = (
             self._extract_metric_columns(
@@ -324,7 +389,21 @@ class SchemaLinker:
                 )
                 is None
             ):
-                return None
+                return SchemaLinkingFailure(
+                    code=(
+                        SchemaLinkingFailureCode
+                        .PHYSICAL_COLUMN_NOT_FOUND
+                    ),
+                    term=metric.name,
+                    message=(
+                        "Metric "
+                        f"{metric.name!r} "
+                        "requires physical column "
+                        f"{column_name!r}, "
+                        "but it was not found in "
+                        f"{physical_table.full_name!r}."
+                    ),
+                )
 
         return SchemaBinding(
             kind=(
@@ -414,8 +493,35 @@ class SchemaLinker:
                     linked_table
                 )
                 
-        if len(matches) != 1:
-            return None
+        if not matches:
+            return SchemaLinkingFailure(
+                code=(
+                    SchemaLinkingFailureCode
+                    .PHYSICAL_COLUMN_NOT_FOUND
+                ),
+                term=column_name,
+                message=(
+                    "Physical column "
+                    f"{column_name!r} "
+                    "was not found in the "
+                    "linked tables."
+                ),
+            )
+
+        if len(matches) > 1:
+            return SchemaLinkingFailure(
+                code=(
+                    SchemaLinkingFailureCode
+                    .PHYSICAL_COLUMN_AMBIGUOUS
+                ),
+                term=column_name,
+                message=(
+                    "Physical column "
+                    f"{column_name!r} "
+                    "exists in multiple "
+                    "linked tables."
+                ),
+            )
         
         physical_table = (matches[0].metadata)
         
@@ -423,7 +529,7 @@ class SchemaLinker:
             kind=(SchemaBindingKind.COLUMN),
             logical_name=(column_name),
             physical_table=(physical_table.full_name),
-            physical_columns=(normalized),
+            physical_columns=(normalized,),
         )
 
     # ========================================================
@@ -521,4 +627,38 @@ class SchemaLinker:
         ):
             values.append(
                 normalized
+            )
+            
+
+    @staticmethod
+    def _append_failure(
+        failures: list[
+            SchemaLinkingFailure
+        ],
+        failure: SchemaLinkingFailure,
+    ) -> None:
+        """
+        同一个 Linking unit 的同类型失败
+        只记录一次。
+        """
+
+        key = (
+            failure.code,
+            failure.term.strip().lower(),
+        )
+
+        existing_keys = {
+            (
+                item.code,
+                item.term
+                .strip()
+                .lower(),
+            )
+            for item
+            in failures
+        }
+
+        if key not in existing_keys:
+            failures.append(
+                failure
             )

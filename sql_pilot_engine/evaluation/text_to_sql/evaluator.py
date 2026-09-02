@@ -5,6 +5,7 @@ from typing import Any
 from sql_pilot_engine.evaluation.text_to_sql.models import (
     TextToSQLEvalCase,
     TextToSQLEvalResult,
+    EvaluationFailureType,
 )
 from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLClarification,
@@ -19,6 +20,15 @@ TRUSTED_VALIDATION_STATUSES = {
     "fix_verified",
 }
 
+EVIDENCE_RULE_IDS = frozenset(
+    {
+        "METRIC_TABLE",
+        "METRIC_AGGREGATION",
+        "METRIC_FIXED_FILTER",
+        "PARTITION_CONSTRAINT",
+    }
+)
+
 
 def _normalize_name(
     value: str,
@@ -29,6 +39,87 @@ def _normalize_name(
         .lower()
         .rsplit(".", maxsplit=1)[-1]
     )
+
+def _failure_code_text(
+    failure,
+) -> str:
+
+    code = getattr(
+        failure,
+        "code",
+        None,
+    )
+
+    if code is None:
+        return ""
+
+    value = getattr(
+        code,
+        "value",
+        code,
+    )
+
+    return str(
+        value
+    ).strip().lower()
+    
+
+def _linking_failure_codes(
+    response: TextToSQLResult,
+) -> tuple[str, ...]:
+
+    values: list[str] = []
+
+    for failure in (
+        getattr(
+            response,
+            "linking_failures",
+            (),
+        )
+        or ()
+    ):
+
+        code = (
+            _failure_code_text(
+                failure
+            )
+        )
+
+        if (
+            code
+            and code not in values
+        ):
+            values.append(
+                code
+            )
+
+    return tuple(values)
+
+def _validation_rule_ids(
+    response: TextToSQLResult,
+) -> tuple[str, ...]:
+
+    result: list[str] = []
+
+    for issue in (
+        response.validation_issues
+    ):
+
+        rule_id = (
+            issue.rule_id
+            .strip()
+        )
+
+        if (
+            rule_id
+            and rule_id
+            not in result
+        ):
+            result.append(
+                rule_id
+            )
+
+    return tuple(result)
 
 
 def _contains_expected(
@@ -182,8 +273,32 @@ def _score_final_result(
         )
     )
 
+    linking_codes = (
+        _linking_failure_codes(
+            response
+        )
+    )
+
+    schema_link_pass = (
+        not linking_codes
+    )
+
+    generated_sql = (
+        response.generated_sql
+    )
+
+    generation_pass = bool(
+        generated_sql
+        and generated_sql.strip()
+    )
+
     validation_status = (
         response.validation_status
+    )
+
+    gate_pass = (
+        validation_status
+        in TRUSTED_VALIDATION_STATUSES
     )
 
     semantic_status = (
@@ -191,30 +306,76 @@ def _score_final_result(
         .semantic_validation_status
     )
 
-    sql_trust_pass = (
-        validation_status
-        in TRUSTED_VALIDATION_STATUSES
+    semantic_pass = (
+        semantic_status
+        == "pass"
     )
 
-    semantic_pass = (
-        semantic_status == "pass"
+    validation_rule_ids = (
+        _validation_rule_ids(
+            response
+        )
+    )
+
+    evidence_rule_hits = tuple(
+        rule_id
+        for rule_id
+        in validation_rule_ids
+        if rule_id
+        in EVIDENCE_RULE_IDS
     )
 
     system_error = (
         validation_status
         == "review_failed"
+        or "metadata_error"
+        in linking_codes
     )
 
     final_pass = all(
         (
             clarification_pass,
             planning_pass,
-            sql_trust_pass,
+            schema_link_pass,
+            generation_pass,
+            gate_pass,
             semantic_pass,
             response.success,
             response.trusted_sql
             is not None,
             not system_error,
+        )
+    )
+    
+    failure_type = (
+        _classify_failure(
+            final_pass=final_pass,
+
+            planning_pass=(
+                planning_pass
+            ),
+
+            schema_link_pass=(
+                schema_link_pass
+            ),
+
+            generation_pass=(
+                generation_pass
+            ),
+
+            gate_pass=gate_pass,
+
+            semantic_pass=(
+                semantic_pass
+            ),
+
+            system_error=(
+                system_error
+            ),
+
+            linking_failure_codes=(
+                linking_codes
+            ),
         )
     )
 
@@ -225,7 +386,7 @@ def _score_final_result(
             planning_reason
         )
 
-    if not sql_trust_pass:
+    if not response.trusted_sql:
         reasons.append(
             "SQL Trust failed: "
             f"{validation_status}"
@@ -265,41 +426,93 @@ def _score_final_result(
 
     return TextToSQLEvalResult(
         case_id=case.case_id,
+
         run_index=run_index,
+
         initial_behavior=(
             initial_behavior
         ),
-        planning_pass=planning_pass,
+
         clarification_pass=(
             clarification_pass
         ),
-        sql_trust_pass=(
-            sql_trust_pass
+
+        planning_pass=(
+            planning_pass
         ),
+
+        schema_link_pass=(
+            schema_link_pass
+        ),
+
+        generation_pass=(
+            generation_pass
+        ),
+
+        gate_pass=gate_pass,
+
         semantic_pass=(
             semantic_pass
         ),
+
         final_pass=final_pass,
-        system_error=system_error,
+
+        system_error=(
+            system_error
+        ),
+
+        failure_type=(
+            failure_type
+        ),
+
         validation_status=(
             validation_status
         ),
+
         semantic_status=(
             semantic_status
         ),
-        validation_error=getattr(
-            response,
-            "validation_error_message",
-            None,
+
+        validation_error=(
+            response
+            .validation_error_message
         ),
+
         generated_sql=(
             response.generated_sql
         ),
+
+        generation_source=(
+            response.generation_source
+        ),
+
+        compilation_status=(
+            response.compilation_status
+        ),
+
+        compilation_fallback_reason=(
+            response
+            .compilation_fallback_reason
+        ),
+
         trusted_sql=(
             response.trusted_sql
         ),
+
         reason="; ".join(
             reasons
+        ),
+
+        linking_failure_codes=(
+            linking_codes
+        ),
+
+        validation_rule_ids=(
+            validation_rule_ids
+        ),
+
+        evidence_rule_hits=(
+            evidence_rule_hits
         ),
     )
 
@@ -336,6 +549,9 @@ def evaluate_case(
             semantic_status=None,
             validation_error=str(error),
             generated_sql=None,
+            generation_source=None,
+            compilation_status=None,
+            compilation_fallback_reason=None,
             trusted_sql=None,
             reason=(
                 f"{type(error).__name__}: "
@@ -553,4 +769,108 @@ def evaluate_case(
             "clarification"
         ),
         run_index=run_index,
+    )
+    
+def _classify_failure(
+    *,
+    final_pass: bool,
+    planning_pass: bool,
+    schema_link_pass: bool,
+    generation_pass: bool,
+    gate_pass: bool,
+    semantic_pass: bool,
+    system_error: bool,
+    linking_failure_codes: tuple[
+        str,
+        ...
+    ],
+) -> (
+    EvaluationFailureType
+    | None
+):
+
+    if final_pass:
+        return None
+
+    if system_error:
+        return (
+            EvaluationFailureType
+            .SYSTEM_ERROR
+        )
+
+    # UNKNOWN_METRIC
+    # 本质是 Planner 产出了
+    # 当前系统不存在的逻辑 Metric。
+    if (
+        "unknown_metric"
+        in linking_failure_codes
+    ):
+        return (
+            EvaluationFailureType
+            .PLANNING_ERROR
+        )
+
+    # 原技术方案保留此类型。
+    # 你当前已经不做 Asset
+    # Accuracy 主动盘点，因此只有
+    # 系统明确产出这个 Failure Code
+    # 时才归 Asset Defect。
+    if (
+        "asset_column_missing"
+        in linking_failure_codes
+    ):
+        return (
+            EvaluationFailureType
+            .ASSET_DEFECT
+        )
+
+    if not planning_pass:
+        return (
+            EvaluationFailureType
+            .PLANNING_ERROR
+        )
+
+    if not schema_link_pass:
+        return (
+            EvaluationFailureType
+            .LINKING_ERROR
+        )
+
+    if not generation_pass:
+        return (
+            EvaluationFailureType
+            .GENERATION_ERROR
+        )
+
+    # Gate 拒绝了一个在前面阶段
+    # 已经正常生成的 Candidate。
+    #
+    # 仅凭当前自动证据无法证明
+    # SQL 实际正确，所以此时首先
+    # 归 GENERATION_ERROR：
+    # Candidate 没通过 Trust Gate。
+    #
+    # 若人工复核确认 Candidate 实际
+    # 正确，再重分类为
+    # GATE_FALSE_POSITIVE。
+    if not gate_pass:
+        return (
+            EvaluationFailureType
+            .GENERATION_ERROR
+        )
+
+    # 这是最重要的红线：
+    #
+    # Gate 已经放行为 Candidate Trusted SQL，
+    # 但后置 Semantic Validator
+    # 仍判断 SQL 语义错误。
+    if not semantic_pass:
+        return (
+            EvaluationFailureType
+            .GATE_FALSE_NEGATIVE
+        )
+
+    return (
+        EvaluationFailureType
+        .SYSTEM_ERROR
     )

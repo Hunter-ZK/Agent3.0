@@ -40,7 +40,78 @@ class SchemaBinding:
     
     physical_columns: tuple[str, ...] = ()
     
+class SchemaLinkingFailureCode(
+    str,
+    Enum,
+):
+    """
+    Schema Linking 的确定性失败类型。
+
+    这里只描述 Linking 过程中
+    已经能够证明的事实。
+
+    不判断：
+    - Semantic Asset 是否正确；
+    - Planner 是否应该生成别的业务对象；
+    - 用户业务意图是否正确。
+    """
+
+    TABLE_NOT_FOUND = (
+        "table_not_found"
+    )
+
+    UNKNOWN_METRIC = (
+        "unknown_metric"
+    )
+
+    PHYSICAL_COLUMN_NOT_FOUND = (
+        "physical_column_not_found"
+    )
+
+    PHYSICAL_COLUMN_AMBIGUOUS = (
+        "physical_column_ambiguous"
+    )
+
+    METADATA_ERROR = (
+        "metadata_error"
+    )
     
+    
+
+@dataclass(frozen=True)
+class SchemaLinkingFailure:
+    """
+    SchemaLinker 的结构化失败事实。
+
+    code:
+        稳定、可供 Runtime /
+        Evaluation 使用的机器类型。
+
+    term:
+        当前无法完成 Linking
+        的逻辑对象。
+
+    message:
+        面向诊断的详细说明。
+        不是业务决策依据。
+    """
+
+    code: SchemaLinkingFailureCode
+
+    term: str
+
+    message: str = ""
+
+    def __post_init__(
+        self,
+    ) -> None:
+
+        if not self.term.strip():
+            raise ValueError(
+                "SchemaLinkingFailure.term "
+                "cannot be empty."
+            )
+
 
 @dataclass(frozen=True)
 class LinkedTable:
@@ -100,11 +171,8 @@ class LinkedSchema:
         SchemaBinding,
         ...
     ] = ()
-
-    unresolved_terms: tuple[
-        str,
-        ...
-    ] = ()
+    
+    failures: tuple[SchemaLinkingFailure, ...] = ()
 
     omitted_column_count: int = 0
 
@@ -156,7 +224,7 @@ class LinkedSchema:
         后续不能直接进入 Generation。
         """
 
-        return not self.unresolved_terms
+        return not self.failures
 
     def get_binding(
         self,
@@ -222,3 +290,31 @@ class LinkedSchema:
                 return linked_table
 
         return None
+    
+
+    @property
+    def unresolved_terms(
+        self,
+    ) -> tuple[str, ...]:
+        """
+        兼容人类可读的 unresolved term 视图。
+
+        正式机器 Contract 使用 failures。
+
+        这里不是第二份状态，
+        而是 failures 的派生结果。
+        """
+
+        result: list[str] = []
+
+        for failure in self.failures:
+
+            if (
+                failure.term
+                not in result
+            ):
+                result.append(
+                    failure.term
+                )
+
+        return tuple(result)

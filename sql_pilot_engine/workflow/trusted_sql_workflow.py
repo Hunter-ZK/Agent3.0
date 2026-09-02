@@ -23,12 +23,12 @@ from sql_pilot_engine.workflow.review_routing import (
 from sql_pilot_engine.context.builder import (
     QueryContext,
 )
-from sql_pilot_engine.core.execution_context import (
-    SQLExecutionContext,
-)
 
 from sql_pilot_engine.core.models import (
     IssueAction,
+)
+from sql_pilot_engine.core.trust_evidence import (
+    SQLTrustEvidence,
 )
 
 @dataclass
@@ -77,6 +77,41 @@ class TrustedSQLWorkflowResult:
     final_sql: str | None = None
 
     optimization_applied: bool = False
+    
+    @property
+    def validation_issues(
+        self,
+    ) -> tuple[
+        dict[str, Any],
+        ...
+    ]:
+        """
+        返回最终实际对应 SQL 的 Review Issues。
+
+        初次 Review 直接通过：
+            review_response
+
+        Fix + Re-review：
+            re_review_response
+
+        这是派生视图，
+        不额外保存第二份 Issue 状态。
+        """
+
+        response = (
+            self.re_review_response
+            or self.review_response
+        )
+
+        if response is None:
+            return ()
+
+        return tuple(
+            dict(issue)
+            for issue
+            in response.issues
+        )
+    
 
 class TrustedSQLWorkflow:
     """SQL Agent模式的端到端流程。"""
@@ -123,7 +158,9 @@ class TrustedSQLWorkflow:
         mode: str = "prod",
         dialect: str = "maxcompute",
         query_context: QueryContext | None = None,
+        trust_evidence: SQLTrustEvidence | None = None,
         categories: set[str] | None = None,
+        rule_packs: tuple[str, ...] = (),
         enable_metadata: bool | None = None,
         enable_llm: bool | None = None,
         llm_provider: str | None = None,
@@ -183,6 +220,8 @@ class TrustedSQLWorkflow:
                     mode=mode,
                     dialect=dialect,
                     query_context=query_context,
+                    trust_evidence=trust_evidence,
+                    rule_packs=rule_packs,
                 )
             )
 
@@ -208,6 +247,8 @@ class TrustedSQLWorkflow:
                 mode=mode,
                 dialect=dialect,
                 query_context=query_context,
+                trust_evidence=trust_evidence,
+                rule_packs=rule_packs,    
             )
         )
 
@@ -227,117 +268,7 @@ class TrustedSQLWorkflow:
                 ),
             )
 
-        print("\n" + "=" * 80)
-        print("[TRUST DEBUG] SQL")
-        print("=" * 80)
-        print(sql)
-
-        print("\n[TRUST DEBUG] QUERY CONTEXT")
-
-        if query_context is None:
-            print("query_context = None")
-        else:
-            print(
-                "question =",
-                query_context.question,
-            )
-
-            print(
-                "\nsemantic_context ="
-            )
-            print(
-                query_context.semantic_context
-            )
-
-            print(
-                "\nbusiness_knowledge ="
-            )
-            for item in (
-                query_context.business_knowledge
-            ):
-                print("-", item)
-
-            print(
-                "\nsession_context ="
-            )
-            for item in (
-                query_context.session_context
-            ):
-                print("-", item)
-
-        print("\n[TRUST DEBUG] REVIEW")
-
-        print(
-            "review_success =",
-            review_response.success,
-        )
-
-        print(
-            "risk_level =",
-            review_response.risk_level,
-        )
-
-        print(
-            "issue_count =",
-            review_response.issue_count,
-        )
-
-        for index, issue in enumerate(
-            review_response.issues,
-            start=1,
-        ):
-            print(
-                f"\n--- issue {index} ---"
-            )
-
-            for key in (
-                "rule_id",
-                "title",
-                "source",
-                "severity",
-                "action",
-                "requires_metadata",
-                "requires_knowledge",
-                "blocking",
-                "confidence",
-                "message",
-                "suggestion",
-                "evidence",
-                "metadata",
-            ):
-                print(
-                    f"{key} =",
-                    issue.get(key),
-                )
-
-
         decision = decide_review_route(review_response)
-        
-        print(
-            "\n[TRUST DEBUG] ROUTE"
-        )
-
-        print(
-            "route =",
-            decision.route.value,
-        )
-
-        print(
-            "final_status =",
-            decision.final_status,
-        )
-
-        print(
-            "reason =",
-            decision.reason,
-        )
-
-        print(
-            "actionable_issue_count =",
-            decision.actionable_issue_count,
-        )
-
-        print("=" * 80 + "\n")
         
         if decision.route == ReviewRoute.COMPLETE:
             return TrustedSQLWorkflowResult(
@@ -414,6 +345,8 @@ class TrustedSQLWorkflow:
                     mode=mode,
                     dialect=dialect,
                     query_context=query_context,
+                    trust_evidence=trust_evidence,
+                    rule_packs=rule_packs,
                 ),
                 prior_review=(
                     current_review_response
@@ -447,6 +380,8 @@ class TrustedSQLWorkflow:
                             mode=mode,
                             dialect=dialect,
                             query_context=query_context,
+                            trust_evidence=trust_evidence,
+                            rule_packs=rule_packs,
                         )
                     )
                 )
@@ -546,94 +481,6 @@ class TrustedSQLWorkflow:
                         ),
                     )
 
-            print("\n" + "=" * 80)
-            print("[TRUST DEBUG] FIX RESULT")
-            print("=" * 80)
-
-            print(
-                "fix_success =",
-                fix_response.success,
-            )
-
-            print(
-                "\nfixed_sql ="
-            )
-
-            print(
-                fix_response.fixed_sql
-            )
-
-            print(
-                "\napplied_fixes =",
-                fix_response.applied_fixes,
-            )
-
-            print(
-                "manual_notes =",
-                fix_response.manual_notes,
-            )
-
-            print(
-                "fix_source =",
-                fix_response.fix_source,
-            )
-
-
-            print(
-                "\n[TRUST DEBUG] RE-REVIEW"
-            )
-
-            if re_review_response is None:
-
-                print(
-                    "re_review_response = None"
-                )
-
-            else:
-
-                print(
-                    "success =",
-                    re_review_response.success,
-                )
-
-                print(
-                    "risk_level =",
-                    re_review_response.risk_level,
-                )
-
-                print(
-                    "issue_count =",
-                    re_review_response.issue_count,
-                )
-
-                for index, issue in enumerate(
-                    re_review_response.issues,
-                    start=1,
-                ):
-
-                    print(
-                        f"\n--- re-review issue {index} ---"
-                    )
-
-                    for key in (
-                        "rule_id",
-                        "title",
-                        "source",
-                        "severity",
-                        "action",
-                        "requires_metadata",
-                        "requires_knowledge",
-                        "blocking",
-                        "confidence",
-                        "message",
-                        "suggestion",
-                        "evidence",
-                        "metadata",
-                    ):
-                        print(
-                            f"{key} =",
-                            issue.get(key),
-                        )
 
                 if re_review_response.success:
 
@@ -642,23 +489,6 @@ class TrustedSQLWorkflow:
                             re_review_response
                         )
                     )
-
-                    print(
-                        "\nre_review_route =",
-                        re_review_decision.route.value,
-                    )
-
-                    print(
-                        "re_review_final_status =",
-                        re_review_decision.final_status,
-                    )
-
-                    print(
-                        "re_review_reason =",
-                        re_review_decision.reason,
-                    )
-
-            print("=" * 80 + "\n")
 
             critic_response = (
                 self.engine.critique(
@@ -681,41 +511,6 @@ class TrustedSQLWorkflow:
                 else f"critic_retry_{attempt}"
             )
 
-            print(
-                "\n[TRUST DEBUG] CRITIC"
-            )
-
-            print(
-                "passed =",
-                critic_response.passed,
-            )
-
-            print(
-                "status =",
-                critic_response.status,
-            )
-
-            print(
-                "need_retry =",
-                critic_response.need_retry,
-            )
-
-            print(
-                "reason =",
-                critic_response.reason,
-            )
-
-            print(
-                "error_message =",
-                critic_response.error_message,
-            )
-
-            print(
-                "retry_instructions =",
-                critic_response.retry_instructions,
-            )
-
-            print("=" * 80 + "\n")
 
             if critic_response.passed:
 

@@ -33,6 +33,7 @@ def test_review_service_passes_query_context_to_llm_review():
         analysis_context_text,
         metadata_context_text,
         query_context=None,
+        rule_packs=(),
     ):
         captured[
             "query_context"

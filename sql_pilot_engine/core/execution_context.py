@@ -9,6 +9,9 @@ if TYPE_CHECKING:
         QueryContext,
     )
 
+    from sql_pilot_engine.core.trust_evidence import (
+        SQLTrustEvidence,
+    )
 
 @dataclass
 class SQLExecutionContext:
@@ -37,11 +40,18 @@ class SQLExecutionContext:
 
     metadata_provider: Any | None = None
 
+    trust_evidence: SQLTrustEvidence | None = None
+    
     enable_llm: bool = False
 
     llm_provider: str = "mock"
 
     query_context: QueryContext | None = None
+
+    rule_packs: tuple[
+        str,
+        ...
+    ] = ()
 
     fix_sql: bool = False
 

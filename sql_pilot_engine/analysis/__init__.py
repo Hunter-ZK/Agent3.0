@@ -3,7 +3,9 @@ from sql_pilot_engine.analysis.sql_parser import (
     SQLParser,
 )
 from sql_pilot_engine.analysis.facts import (
+    AggregateFact,
     ColumnReference,
+    PredicateFact,
     SQLFacts,
     SQLFactsExtractor,
     TableReference,
@@ -22,4 +24,6 @@ __all__ = [
     "TableReference",
     "SQLAnalysisAdapter",
     "SQLAnalysisResult",
+    "AggregateFact",
+    "PredicateFact",
 ]

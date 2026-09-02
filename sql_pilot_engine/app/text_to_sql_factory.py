@@ -75,7 +75,16 @@ from sql_pilot_engine.metadata.provider import (
 from sql_pilot_engine.services.text_to_sql_stage_service import (
     TextToSQLStageService,
 )
-
+from sql_pilot_engine.runtime.query_nodes import (
+    QueryRuntimeNodes,
+)
+from sql_pilot_engine.runtime.event_bus import (
+    DevEventSink,
+    EventBus,
+)
+from sql_pilot_engine.generation.metric_compiler import (
+    MetricSQLCompiler,
+)
 
 def build_text_to_sql_capability(
     *,
@@ -107,6 +116,10 @@ def build_text_to_sql_capability(
 
     checkpoint_store: (
         CheckpointStore | None
+    ) = None,
+
+    event_bus: (
+        EventBus | None
     ) = None,
 
     collection_name: str = (
@@ -237,6 +250,12 @@ def build_text_to_sql_capability(
         ),
         semantic_model=semantic_model,
     )
+    
+    metric_compiler = (
+        MetricSQLCompiler(
+            semantic_model=semantic_model,
+        )
+    )
 
     sql_generator = SQLGenerator(
         model=sql_model
@@ -270,6 +289,12 @@ def build_text_to_sql_capability(
         else MemoryCheckpointStore()
     )
 
+    runtime_event_bus = (
+        event_bus
+        if event_bus is not None
+        else DevEventSink()
+    )
+
     stage_service = (
         TextToSQLStageService(
             semantic_model=(
@@ -292,6 +317,10 @@ def build_text_to_sql_capability(
 
             schema_linker=(
                 schema_linker
+            ),
+            
+            metric_compiler = (
+                metric_compiler
             ),
 
             sql_generator=(
@@ -316,22 +345,23 @@ def build_text_to_sql_capability(
         )
     )
 
+    runtime_nodes = (
+        QueryRuntimeNodes(
+            stage_service = stage_service,
+            event_bus = runtime_event_bus,
+            max_semantic_retries=max_semantic_retries,
+            max_clarification_rounds = max_clarification_rounds,
+        )
+    )
+
     graph = QueryAgentGraph(
-        stage_service=stage_service,
+        nodes=runtime_nodes,
       
         checkpoint_store=(
             runtime_checkpoint_store
         ),
-
-
-        max_semantic_retries=(
-            max_semantic_retries
-        ),
-
-        max_clarification_rounds=(
-            max_clarification_rounds
-        ),
     )
+
 
     return TextToSQLCapability(
         graph=graph

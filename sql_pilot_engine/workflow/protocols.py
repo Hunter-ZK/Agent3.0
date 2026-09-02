@@ -5,7 +5,14 @@ from typing import Protocol
 from sql_pilot_engine.context.builder import (
     QueryContext,
 )
+from sql_pilot_engine.core.trust_evidence import (
+    SQLTrustEvidence,
+)
 
+from typing import (
+    Any,
+    Protocol,
+)
 
 class TrustedSQLWorkflowResultView(Protocol):
     """
@@ -22,6 +29,11 @@ class TrustedSQLWorkflowResultView(Protocol):
     error_message: str | None
     
     missing_context: tuple[str, ...] 
+    
+    validation_issues: tuple[
+        dict[str, Any],
+        ...
+    ]
 
 
 class TrustedSQLWorkflowPort(Protocol):
@@ -42,5 +54,8 @@ class TrustedSQLWorkflowPort(Protocol):
         *,
         dialect: str = "maxcompute",
         query_context: QueryContext | None = None,
+        trust_evidence: SQLTrustEvidence | None = None,
+        rule_packs: tuple[str, ...] = (),
+        enable_llm: bool | None = None,
     ) -> TrustedSQLWorkflowResultView:
         ...

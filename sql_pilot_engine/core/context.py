@@ -14,7 +14,9 @@ if TYPE_CHECKING:
     from sql_pilot_engine.metadata.provider import (
         MetadataProvider,
     )
-
+    from sql_pilot_engine.core.trust_evidence import (
+        SQLTrustEvidence,
+    )
 
 @dataclass
 class ReviewContext:
@@ -39,10 +41,16 @@ class ReviewContext:
     sql_facts: SQLFacts | None = None
 
     metadata_provider: MetadataProvider | None = None
+    trust_evidence: SQLTrustEvidence | None = None
+    
 
     enable_llm: bool = False
     llm_provider: str = "mock"
 
-    rule_packs: list[str] | None = None
+    rule_packs: tuple[
+        str,
+        ...
+    ] = ()
+    
     extra: dict[str, Any] | None = None
     
