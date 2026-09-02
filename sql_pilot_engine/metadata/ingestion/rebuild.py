@@ -252,10 +252,6 @@ def rebuild_metadata_database(
             building,
             target,
         )
-        os.replace(
-            building,
-            target,
-        )
 
         return (
             MetadataDatabaseRebuildResult(
