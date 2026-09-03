@@ -2,31 +2,151 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sql_pilot_engine.analysis.facts import (
-    SQLFacts,
-)
-from sql_pilot_engine.program.enums import (
-    ParameterUsageKind,
-    ProgramAnalysisStatus,
-    StatementKind,
-    WriteStrategy,
-)
+
+# ============================================================
+# 【架构位置】
+#
+# Raw Production SQL
+#         ↓
+# ProgramPreprocessor
+#         ↓
+# ProgramPreprocessResult
+#         ├── normalized_sql
+#         ├── session_hints
+#         ├── parameters
+#         └── source_map
+#                 ↓
+#            Existing SQLParser
+#                 ↓
+#             SQLGlot AST
+#
+#
+# 当前 models.py 只定义：
+#
+#     Phase 4.2-A1
+#     “生产 SQL 输入保真层”
+#
+# 所需要的数据结构。
+#
+#
+# 当前明确不在这里定义：
+#
+#     SQLProgram
+#     CTENode
+#     StatementKind
+#     ProgramScopeAnalysis
+#     ParameterUsageKind
+#     WriteTarget
+#
+# 这些属于后续 Phase 4.2-B。
+#
+#
+# 这样做的原因：
+#
+# A1 当前只解决：
+#
+#     “生产 SQL 如何安全进入 Parser”
+#
+# 不能为了以后可能需要的能力，
+# 提前把 Program Domain 全部塞进当前文件。
+# ============================================================
 
 
 @dataclass(
     frozen=True,
     slots=True,
 )
-class SourcePosition:
+class SourceLocation:
     """
-    Raw SQL 中一个确定位置。
+    SQL 文本中的一个确定位置。
 
-    line / column 使用 1-based，
-    offset 使用 Python string 的 0-based offset。
+    ========================================================
+    【这个类解决什么问题】
+    ========================================================
+
+    程序处理 SQL 时最方便使用的是：
+
+        offset
+
+    例如：
+
+        sql[100]
+        sql[100:120]
+
+    但用户查看 SQL 时使用的是：
+
+        第几行
+        第几列
+
+    所以 SourceLocation 同时保存：
+
+        offset
+        line
+        column
+
+
+    ========================================================
+    【坐标约定】
+    ========================================================
+
+    offset:
+
+        0-based。
+
+        SQL 第一个字符：
+
+            offset = 0
+
+
+    line:
+
+        1-based。
+
+        第一行：
+
+            line = 1
+
+
+    column:
+
+        1-based。
+
+        第一列：
+
+            column = 1
+
+
+    ========================================================
+    【为什么 frozen=True】
+    ========================================================
+
+    SourceLocation 是已经确定的源码事实。
+
+    一旦创建以后，
+    后面的分析模块不应该修改它。
+
+
+    ========================================================
+    【为什么 slots=True】
+    ========================================================
+
+    slots=True 会限制实例只能拥有声明过的字段。
+
+    当前主要作用是：
+
+        DTO 结构更加明确；
+
+    同时可以减少大量 SourceLocation 对象产生时的
+    一部分内存开销。
+
+    这里不是核心设计，
+    但与项目现有只读 DTO 风格一致。
     """
 
     offset: int
+
     line: int
+
     column: int
 
 
@@ -36,22 +156,64 @@ class SourcePosition:
 )
 class SourceSpan:
     """
-    Raw SQL 中一个半开区间：
+    SQL 源码中的一段连续区域。
 
-        [start_offset, end_offset)
+    ========================================================
+    【为什么不是只保存 SourceLocation】
+    ========================================================
 
-    也就是：
+    后续我们真正定位的一般不是：
+
+        “某一个字符”
+
+    而是：
+
+        ${biz_date}
+
+        amount
+
+        SUM(amount)
+
+        某一个 AST expression
+
+
+    所以必须有：
+
+        start
+        end
+
+
+    ========================================================
+    【为什么采用半开区间】
+    ========================================================
+
+    SourceSpan 使用：
+
+        [start, end)
+
+    与 Python slicing 完全一致。
+
+
+    例如：
 
         raw_sql[
-            start_offset:end_offset
+            span.start.offset:
+            span.end.offset
         ]
 
-    使用半开区间是为了与 Python slicing、
-    Patch insertion/replacement 保持一致。
+    可以直接取回这一段源码。
+
+
+    end 指向：
+
+        “源码片段结束后的第一个位置”
+
+    而不是最后一个字符。
     """
 
-    start: SourcePosition
-    end: SourcePosition
+    start: SourceLocation
+
+    end: SourceLocation
 
 
 @dataclass(
@@ -60,34 +222,134 @@ class SourceSpan:
 )
 class SourceMap:
     """
-    Program Preprocessing 的位置映射。
+    Normalized SQL → Raw SQL 的位置映射。
 
-    raw_text:
-        用户原始 SQL。
+    ========================================================
+    【为什么需要 SourceMap】
+    ========================================================
 
-    normalized_text:
-        交给 SQLParser 的 SQL。
-
-    normalized_to_raw:
-        normalized 每个字符对应的 raw offset。
-
-        CompatibilityPatch 新插入的字符没有直接 raw
-        来源，因此值为 None。
-
-    raw_to_normalized:
-        raw 每个字符对应 normalized offset。
-
-        被 Preprocessing 删除的 SET 等字符没有 normalized
-        对应位置，因此值为 None。
-
-    这就是 Phase 4.2 冻结设计中的：
+    用户真正提供的是：
 
         Raw SQL
-            ↔
+
+    SQLParser 实际接收的是：
+
         Normalized SQL
+
+
+    例如 Raw SQL：
+
+        SET x=1;
+
+        SELECT *
+        FROM table_a;
+
+
+    ProgramPreprocessor 把 SET 分离以后：
+
+        SELECT *
+        FROM table_a;
+
+
+    此时 Parser 看到的：
+
+        normalized offset = 0
+
+    实际对应 Raw SQL 中：
+
+        SELECT 的位置
+
+
+    如果没有 SourceMap，
+
+    后面 SQLGlot 即使告诉我们：
+
+        “Analyzer SQL 第 100 个字符有问题”
+
+    我们也无法安全找到：
+
+        用户原始 SQL 的哪个字符有问题。
+
+
+    ========================================================
+    【A1 当前采用什么实现】
+    ========================================================
+
+    当前只采用：
+
+        normalized_to_raw:
+            tuple[int | None, ...]
+
+    不使用：
+
+        SourceMapSegment
+        SourceMappingKind
+
+
+    这点非常重要。
+
+
+    ========================================================
+    【normalized_to_raw 怎么理解】
+    ========================================================
+
+    假设：
+
+        normalized_to_raw[20] = 37
+
+    表示：
+
+        Normalized SQL 第 20 个字符
+
+    来源于：
+
+        Raw SQL 第 37 个字符。
+
+
+    这是最直接、最容易验证正确性的实现。
+
+
+    ========================================================
+    【为什么允许 None】
+    ========================================================
+
+    当前 A1 主要是删除和替换，
+
+    但以后 Dialect Compatibility 可能插入：
+
+        Raw SQL 本来不存在的字符。
+
+    比如分析版本增加一个逗号。
+
+    那个字符没有真实 Raw offset，
+
+    所以类型预留：
+
+        int | None
+
+
+    ========================================================
+    【非常重要】
+    ========================================================
+
+    SourceMap 只是：
+
+        Analyzer Source Position
+                ↓
+        Raw Source Position
+
+    的基础设施。
+
+    它：
+
+        不判断 SQL 是否正确；
+        不做 AST；
+        不做 lineage；
+        不做 Fix。
     """
 
     raw_text: str
+
     normalized_text: str
 
     normalized_to_raw: tuple[
@@ -95,27 +357,92 @@ class SourceMap:
         ...,
     ]
 
-    raw_to_normalized: tuple[
-        int | None,
-        ...,
-    ]
+    def __post_init__(
+        self,
+    ) -> None:
+        """
+        创建 SourceMap 时校验最基本 Contract。
+
+        ====================================================
+        【为什么需要这个检查】
+        ====================================================
+
+        normalized_text 与 normalized_to_raw
+        必须严格一一对应。
+
+        即：
+
+            normalized_text 第 i 个字符
+
+        必须有：
+
+            normalized_to_raw[i]
+
+
+        如果两者长度不同，
+
+        说明 Preprocessor 修改 SQL 时没有同步维护
+        SourceMap。
+
+        这是系统内部错误，
+
+        不应该等到后面的 Fix / Explain
+        才发现。
+        """
+
+        if (
+            len(
+                self.normalized_text
+            )
+            != len(
+                self.normalized_to_raw
+            )
+        ):
+            raise ValueError(
+                "normalized_text and "
+                "normalized_to_raw must "
+                "have the same length."
+            )
 
     def normalized_offset_to_raw(
         self,
         offset: int,
-        *,
-        nearest: bool = True,
     ) -> int | None:
         """
-        将 normalized offset 映射回 Raw SQL。
+        Normalized SQL offset → Raw SQL offset。
 
-        CompatibilityPatch 插入的字符可能没有直接来源。
+        ====================================================
+        【示例】
+        ====================================================
 
-        nearest=True 时：
-        向两侧寻找最近具有 Raw 来源的字符。
+        normalized SQL：
 
-        Fix 2.0 最终做 Source Patch 时仍需要
-        expected source 校验，不能只依赖 nearest。
+            SELECT *
+
+        假设 SELECT 在 Raw SQL 中原本从 offset=20 开始。
+
+        那么：
+
+            normalized_offset_to_raw(0)
+
+        应得到：
+
+            20
+
+
+        ====================================================
+        【为什么越界返回 None】
+        ====================================================
+
+        “无法映射”
+
+        属于源码定位层可以表达的状态。
+
+        没必要让：
+
+            IndexError
+
+        直接泄漏到上层 Agent。
         """
 
         if (
@@ -127,115 +454,216 @@ class SourceMap:
         ):
             return None
 
-        direct = (
-            self.normalized_to_raw[
-                offset
-            ]
-        )
-
-        if (
-            direct is not None
-            or not nearest
-        ):
-            return direct
-
-        distance = 1
-
-        while (
-            offset - distance >= 0
-            or offset + distance
-            < len(
-                self.normalized_to_raw
-            )
-        ):
-            left = offset - distance
-
-            if left >= 0:
-                candidate = (
-                    self
-                    .normalized_to_raw[
-                        left
-                    ]
-                )
-
-                if candidate is not None:
-                    return candidate
-
-            right = offset + distance
-
-            if right < len(
-                self.normalized_to_raw
-            ):
-                candidate = (
-                    self
-                    .normalized_to_raw[
-                        right
-                    ]
-                )
-
-                if candidate is not None:
-                    return candidate
-
-            distance += 1
-
-        return None
+        return self.normalized_to_raw[
+            offset
+        ]
 
     def raw_offset_to_normalized(
         self,
         offset: int,
     ) -> int | None:
         """
-        将 Raw SQL offset 映射到 normalized SQL。
+        Raw SQL offset → Normalized SQL offset。
 
-        被删除的 SET 内容没有对应 normalized offset，
-        因此返回 None。
+        ====================================================
+        【这个方法为什么存在】
+        ====================================================
+
+        有时候我们已经知道 Raw SQL 中某个位置，
+
+        需要知道：
+
+            这个字符经过 Preprocessing 后还存在吗？
+
+
+        例如：
+
+            SET x=1;
+
+        已经从 Normalized SQL 中删除。
+
+
+        那么：
+
+            raw_offset_to_normalized(
+                SET 的 offset
+            )
+
+        应返回：
+
+            None
+
+
+        ====================================================
+        【当前实现为什么直接遍历】
+        ====================================================
+
+        normalized_to_raw 本身就是：
+
+            normalized → raw
+
+        所以反向查询需要寻找：
+
+            哪一个 normalized offset
+            对应当前 raw offset。
+
+
+        当前 SQL 的字符规模下，
+        这种 O(n) 查询足够。
+
+        A1 当前目标是：
+
+            简单
+            正确
+            容易理解
+
+        暂时没有必要再维护第二套反向索引。
+
+
+        ====================================================
+        【重要：这里绝不能再访问 segment.kind】
+        ====================================================
+
+        当前 Contract 是：
+
+            tuple[int | None]
+
+        所以循环里的 raw_offset 是：
+
+            int
+            或 None
+
+        不是 SourceMapSegment。
         """
 
         if (
             offset < 0
             or offset
             >= len(
-                self.raw_to_normalized
+                self.raw_text
             )
         ):
             return None
 
-        return self.raw_to_normalized[
-            offset
-        ]
+        for (
+            normalized_offset,
+            raw_offset,
+        ) in enumerate(
+            self.normalized_to_raw
+        ):
+            if raw_offset == offset:
+                return (
+                    normalized_offset
+                )
+
+        return None
 
     def normalized_span_to_raw(
         self,
-        start_offset: int,
-        end_offset: int,
+        *,
+        start: int,
+        end: int,
     ) -> SourceSpan | None:
         """
-        将 normalized 半开区间映射回 Raw SQL。
+        将 Normalized SQL 中的一段区域映射回 Raw SQL。
 
-        新插入的 CompatibilityPatch 字符会被忽略，
-        只使用具有 Raw 来源的字符计算 envelope。
+        ====================================================
+        【典型场景】
+        ====================================================
+
+        Raw SQL：
+
+            ${biz_date}
+
+        Normalized SQL：
+
+            __sqlpilot_parameter_000001__
+
+
+        Parser / Program Analysis 后面看到的是：
+
+            __sqlpilot_parameter_000001__
+
+        但用户真正的 SQL 里是：
+
+            ${biz_date}
+
+
+        所以需要：
+
+            Normalized Span
+                  ↓
+              SourceMap
+                  ↓
+              Raw Span
+
+
+        ====================================================
+        【具体算法】
+        ====================================================
+
+        例如 normalized 区间：
+
+            [20:50]
+
+        我们取得：
+
+            normalized_to_raw[20:50]
+
+        得到其中所有真实 Raw offset。
+
+
+        然后：
+
+            raw_start = min(...)
+            raw_end   = max(...) + 1
+
+
+        最终构造成：
+
+            SourceSpan
+
+
+        ====================================================
+        【为什么这里不再访问 normalized_start】
+        ====================================================
+
+        因为当前 A1 已经撤销：
+
+            SourceMapSegment
+
+        normalized_to_raw 中的每一个元素就是：
+
+            int | None
+
+        不存在：
+
+            item.normalized_start
+            item.kind
+
+
+        这正是你当前两个失败测试的根因。
         """
 
         if (
-            start_offset < 0
-            or end_offset
+            start < 0
+            or end
             > len(
                 self.normalized_text
             )
-            or start_offset
-            >= end_offset
+            or start
+            >= end
         ):
             return None
 
-        raw_offsets = tuple(
+        raw_offsets = [
             raw_offset
             for raw_offset
             in self.normalized_to_raw[
-                start_offset:
-                end_offset
+                start:end
             ]
             if raw_offset is not None
-        )
+        ]
 
         if not raw_offsets:
             return None
@@ -245,14 +673,16 @@ class SourceMap:
         )
 
         raw_end = (
-            max(raw_offsets)
+            max(
+                raw_offsets
+            )
             + 1
         )
 
         return build_source_span(
-            self.raw_text,
-            raw_start,
-            raw_end,
+            text=self.raw_text,
+            start=raw_start,
+            end=raw_end,
         )
 
 
@@ -262,15 +692,37 @@ class SourceMap:
 )
 class SessionHint:
     """
-    从 Program Header 中抽取的 SET 指令。
+    从 SQL Program 主体中分离出来的 SET 配置。
 
-    SET 不进入 SQLParser，
-    但仍属于 SQL Program 的执行上下文事实。
+    【示例】
+
+        SET engine.option=true;
+
+
+    Preprocessor 会：
+
+        从 normalized SQL 中删除它；
+
+    但是：
+
+        保存为 SessionHint。
+
+
+    因此：
+
+        “不交给业务 SQL Parser”
+
+    不等于：
+
+        “丢掉执行上下文”。
     """
 
     name: str
-    value: str
+
+    value: str | None
+
     raw_text: str
+
     span: SourceSpan
 
 
@@ -278,237 +730,104 @@ class SessionHint:
     frozen=True,
     slots=True,
 )
-class ParameterBinding:
+class ParameterOccurrence:
     """
-    一个 Program 级调度参数。
+    `${parameter}` 的一次实际出现。
 
-    同一个变量只有一个 ParameterBinding，
-    occurrences 保存它在 Raw SQL 中的全部位置。
-    """
+    ========================================================
+    【为什么保存 occurrence】
+    ========================================================
 
-    name: str
+    SQL：
 
-    occurrences: tuple[
-        SourceSpan,
-        ...,
-    ]
+        WHERE dt='${month}'
 
-    usage_kinds: tuple[
-        ParameterUsageKind,
-        ...,
-    ]
-
-    inferred_format: (
-        str | None
-    ) = None
+        PARTITION(dt='${month}')
 
 
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class AppliedCompatibilityPatch:
-    """
-    已应用的 dialect compatibility evidence。
+    虽然参数名称都是：
 
-    native_verified=False 表示：
+        month
 
-        “这个变换帮助 SQLGlot/Spark 理解 SQL”
-
-    不等于：
-
-        “已经证明 ODPS 原生支持原始语法”。
-    """
-
-    patch_id: str
-
-    native_verified: bool
-
-    edit_count: int
-
-    note: str = ""
+    但它出现了两次。
 
 
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class ColumnSpec:
-    """
-    Program 输出字段的最小结构描述。
+    后续 AST Analysis 可能发现：
 
-    Phase 4.2 只定义 Contract。
-    output_schema 在 Phase 4.4 Schema Propagation 后填充。
-    """
+        第一次是读取条件；
 
-    name: str
-    data_type: str = ""
-
-    nullable: (
-        bool | None
-    ) = None
+        第二次是写分区。
 
 
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class PartitionBinding:
-    """
-    INSERT partition specification。
+    所以 A1 当前必须保留每一次 occurrence。
 
-    value=None：
 
-        PARTITION(batch_num)
+    ========================================================
+    【当前明确不做】
+    ========================================================
 
-    表示动态分区。
+    A1 不判断：
 
-    value!=None：
+        参数是什么日期格式；
+        参数是不是分区；
+        参数是不是业务周期；
+        参数是不是月份。
 
-        PARTITION(dt='202501')
 
-    表示静态分区表达式。
+    当前只保存：
+
+        参数名
+        Raw SQL 位置
+        Normalized SQL 位置
+        Analyzer token
     """
 
     name: str
 
-    value: (
-        str | None
-    )
+    raw_span: SourceSpan
 
-    is_dynamic: bool
+    normalized_span: SourceSpan
 
-
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class WriteTarget:
-    """
-    一个 SQL Statement 的确定性写入目标。
-    """
-
-    table_name: str
-
-    strategy: WriteStrategy
-
-    partition_spec: tuple[
-        PartitionBinding,
-        ...,
-    ] = ()
+    analyzer_token: str
 
 
 @dataclass(
     frozen=True,
     slots=True,
 )
-class CTENode:
+class ProgramPreprocessResult:
     """
-    SQL Program 内一个 CTE 节点。
+    Phase 4.2-A1 的最终输出。
 
-    dependencies 只记录 CTE → CTE 依赖，
-    不把物理表混进 DAG。
-    """
+    【调用链】
 
-    name: str
-    statement_index: int
-    scope_id: str
-
-    dependencies: tuple[
-        str,
-        ...,
-    ] = ()
-
-
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class ProgramScopeAnalysis:
-    """
-    Scoped SQLFacts wrapper。
-
-    这是 v2.1 冻结的关键设计：
-
-        SQLFacts
-            不修改
-
-        ProgramScopeAnalysis
-            包装某一个 statement / CTE 的 SQLFacts
-
-    Query Line 因此不需要 Contract Migration。
-    """
-
-    scope_id: str
-    statement_index: int
-    cte_name: str | None
-
-    facts: SQLFacts
-
-    output_schema: (
-        tuple[
-            ColumnSpec,
-            ...,
-        ]
-        | None
-    ) = None
+        raw_sql
+            ↓
+        preprocess_program_sql()
+            ↓
+        ProgramPreprocessResult
+            ↓
+        SQLParser.parse(
+            result.normalized_sql
+        )
 
 
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class SQLStatement:
-    """
-    Program 中的一条 SQL statement。
-    """
+    【注意】
 
-    index: int
+    normalized_sql：
 
-    kind: StatementKind
+        只是 Analyzer 内部版本。
 
-    normalized_sql: str
+    永远不能用来：
 
-    write_target: (
-        WriteTarget | None
-    ) = None
-
-    cte_names: tuple[
-        str,
-        ...,
-    ] = ()
-
-
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class SQLProgram:
-    """
-    Complex SQL 的 Program Domain Model。
-
-    注意：
-    不保存 QueryPlan。
-    Program Line 与 Query Line 物理分离。
+        覆盖用户原始 SQL 文件。
     """
 
     raw_sql: str
+
     normalized_sql: str
 
-    statements: tuple[
-        SQLStatement,
-        ...,
-    ]
-
-    cte_nodes: tuple[
-        CTENode,
-        ...,
-    ]
-
-    scope_analyses: tuple[
-        ProgramScopeAnalysis,
-        ...,
-    ]
+    source_map: SourceMap
 
     session_hints: tuple[
         SessionHint,
@@ -516,57 +835,61 @@ class SQLProgram:
     ]
 
     parameters: tuple[
-        ParameterBinding,
+        ParameterOccurrence,
         ...,
     ]
 
-    source_map: SourceMap
 
-    applied_patches: tuple[
-        AppliedCompatibilityPatch,
-        ...,
-    ] = ()
-
-
-@dataclass(
-    frozen=True,
-    slots=True,
-)
-class ProgramAnalysisResult:
-    """
-    Program Analysis 对外唯一结果 Contract。
-
-    成功但不完整时必须显式 PARTIAL，
-    不允许返回“看起来正常”的空结构。
-    """
-
-    status: ProgramAnalysisStatus
-
-    program: (
-        SQLProgram | None
-    )
-
-    diagnostics: tuple[
-        str,
-        ...,
-    ] = ()
-
-    unsupported_features: tuple[
-        str,
-        ...,
-    ] = ()
-
-    failure_reason: (
-        str | None
-    ) = None
-
-
-def build_source_position(
+def build_source_location(
+    *,
     text: str,
     offset: int,
-) -> SourcePosition:
+) -> SourceLocation:
     """
-    根据 Raw SQL offset 构造 1-based line/column。
+    将字符串 offset 转换成：
+
+        offset
+        line
+        column
+
+
+    【safe_offset】
+
+    调用：
+
+        max(
+            0,
+            min(
+                offset,
+                len(text),
+            ),
+        )
+
+    是为了确保位置始终处于：
+
+        0 <= offset <= len(text)
+
+
+    【line】
+
+    统计当前位置之前有多少：
+
+        "\\n"
+
+    再加 1。
+
+
+    【column】
+
+    找到当前 offset 之前最后一个：
+
+        "\\n"
+
+    然后计算距离。
+
+
+    这是一个通用源码位置工具，
+    后续 AST Diagnostic / Fix 仍可复用。
     """
 
     safe_offset = max(
@@ -586,21 +909,39 @@ def build_source_position(
         + 1
     )
 
-    last_newline = text.rfind(
-        "\n",
-        0,
-        safe_offset,
+    last_newline = (
+        text.rfind(
+            "\n",
+            0,
+            safe_offset,
+        )
     )
 
     if last_newline < 0:
-        column = safe_offset + 1
+        column = (
+            safe_offset
+            + 1
+        )
+
     else:
+        # 例如：
+        #
+        # "\nA"
+        #
+        # A 的 offset=1，
+        # last_newline=0。
+        #
+        # column:
+        #
+        #     1 - 0 = 1
+        #
+        # 正好表示第 1 列。
         column = (
             safe_offset
             - last_newline
         )
 
-    return SourcePosition(
+    return SourceLocation(
         offset=safe_offset,
         line=line,
         column=column,
@@ -608,21 +949,40 @@ def build_source_position(
 
 
 def build_source_span(
+    *,
     text: str,
-    start_offset: int,
-    end_offset: int,
+    start: int,
+    end: int,
 ) -> SourceSpan:
     """
-    根据 Raw SQL 的半开 offset 区间构造 SourceSpan。
+    根据：
+
+        start
+        end
+
+    构造半开区间 SourceSpan。
+
+    调用方后续可以直接：
+
+        text[
+            span.start.offset:
+            span.end.offset
+        ]
+
+    取回原始源码。
     """
 
     return SourceSpan(
-        start=build_source_position(
-            text,
-            start_offset,
+        start=(
+            build_source_location(
+                text=text,
+                offset=start,
+            )
         ),
-        end=build_source_position(
-            text,
-            end_offset,
+        end=(
+            build_source_location(
+                text=text,
+                offset=end,
+            )
         ),
     )
