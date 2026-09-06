@@ -20,6 +20,7 @@ from sql_pilot_engine.program.models import (
     CTENode,
     ProgramScopeAnalysis,
     SQLProgram,
+    ScopeSourceBinding,
 )
 
 
@@ -175,12 +176,18 @@ class ScopeResolver:
         ...,
     ]:
         """
-        解析一条 Statement 内全部 SQLGlot Scope。
+        解析 Statement 内全部 Scope。
 
-        CTE Scope 使用 ProgramBuilder 已经生成的
-        CTENode.scope_id。
+        第一遍：
+            为所有 Scope 建立稳定 scope_id。
 
-        其它内部 Scope 使用本分析过程的稳定 ordinal。
+        第二遍：
+            建立 SQLFacts +
+            ScopeSourceBinding。
+
+        必须先建立完整 scope_id mapping，
+        因为一个 Scope 的 source
+        可能指向另一个 Scope。
         """
 
         scopes = traverse_scope(
@@ -197,9 +204,18 @@ class ScopeResolver:
             )
         )
 
-        analyses: list[
-            ProgramScopeAnalysis
+        identified_scopes: list[
+            tuple[
+                Scope,
+                str,
+                str | None,
+            ]
         ] = []
+
+        scope_ids_by_expression: dict[
+            int,
+            str,
+        ] = {}
 
         for (
             scope_index,
@@ -219,6 +235,28 @@ class ScopeResolver:
                 ),
             )
 
+            identified_scopes.append(
+                (
+                    scope,
+                    scope_id,
+                    cte_name,
+                )
+            )
+
+            scope_ids_by_expression[
+                id(scope.expression)
+            ] = scope_id
+
+        analyses: list[
+            ProgramScopeAnalysis
+        ] = []
+
+        for (
+            scope,
+            scope_id,
+            cte_name,
+        ) in identified_scopes:
+
             analyses.append(
                 ProgramScopeAnalysis(
                     scope_id=scope_id,
@@ -229,6 +267,14 @@ class ScopeResolver:
                     facts=(
                         self._facts_from_scope(
                             scope
+                        )
+                    ),
+                    source_bindings=(
+                        self._source_bindings(
+                            scope=scope,
+                            scope_ids_by_expression=(
+                                scope_ids_by_expression
+                            ),
                         )
                     ),
                 )
@@ -301,6 +347,104 @@ class ScopeResolver:
                 f"{scope_type}"
             ),
             None,
+        )
+
+    @classmethod
+    def _source_bindings(
+        cls,
+        *,
+        scope: Scope,
+        scope_ids_by_expression: dict[
+            int,
+            str,
+        ],
+    ) -> tuple[
+        ScopeSourceBinding,
+        ...,
+    ]:
+        """
+        将 SQLGlot selected_sources
+        投影成 Agent3.0 Source Binding。
+
+        物理表：
+            alias → physical_table
+
+        CTE / derived query：
+            alias → source_scope_id
+        """
+
+        bindings: list[
+            ScopeSourceBinding
+        ] = []
+
+        for (
+            source_alias,
+            (
+                _,
+                source,
+            ),
+        ) in (
+            scope
+            .selected_sources
+            .items()
+        ):
+
+            if isinstance(
+                source,
+                exp.Table,
+            ):
+                bindings.append(
+                    ScopeSourceBinding(
+                        alias=source_alias,
+                        physical_table=(
+                            cls
+                            ._qualified_table_name(
+                                source
+                            )
+                        ),
+                    )
+                )
+
+                continue
+
+            if isinstance(
+                source,
+                Scope,
+            ):
+                source_scope_id = (
+                    scope_ids_by_expression
+                    .get(
+                        id(
+                            source.expression
+                        )
+                    )
+                )
+
+                if source_scope_id is None:
+                    raise ValueError(
+                        "SQLGlot source Scope "
+                        "has no Program scope_id."
+                    )
+
+                bindings.append(
+                    ScopeSourceBinding(
+                        alias=source_alias,
+                        source_scope_id=(
+                            source_scope_id
+                        ),
+                    )
+                )
+
+                continue
+
+            raise TypeError(
+                "Unsupported SQLGlot "
+                "selected source type: "
+                f"{type(source)!r}"
+            )
+
+        return tuple(
+            bindings
         )
 
     @classmethod

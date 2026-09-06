@@ -352,3 +352,108 @@ def test_multiple_statements_have_separate_roots():
         "statement:0:root",
         "statement:1:root",
     }
+
+
+
+def test_scope_preserves_physical_and_cte_bindings():
+    program = _analyze_scopes(
+        """
+        WITH base AS (
+            SELECT id
+            FROM ods.loan_detail
+        ),
+        joined_data AS (
+            SELECT
+                l.id
+            FROM ods.loan_ext l
+            JOIN base b
+              ON l.id = b.id
+        )
+        SELECT *
+        FROM joined_data
+        """
+    )
+
+    base_scope = _scope_by_cte(
+        program,
+        "base",
+    )
+
+    joined_scope = _scope_by_cte(
+        program,
+        "joined_data",
+    )
+
+    bindings = {
+        item.alias: item
+        for item
+        in joined_scope.source_bindings
+    }
+
+    assert (
+        bindings["l"].physical_table
+        == "ods.loan_ext"
+    )
+
+    assert (
+        bindings["l"].source_scope_id
+        is None
+    )
+
+    assert (
+        bindings["b"].physical_table
+        is None
+    )
+
+    assert (
+        bindings["b"].source_scope_id
+        == base_scope.scope_id
+    )
+
+
+def test_single_cte_source_is_preserved_as_scope_binding():
+    program = _analyze_scopes(
+        """
+        WITH base AS (
+            SELECT id
+            FROM ods.loan_detail
+        ),
+        summary AS (
+            SELECT id
+            FROM base
+        )
+        SELECT *
+        FROM summary
+        """
+    )
+
+    base_scope = _scope_by_cte(
+        program,
+        "base",
+    )
+
+    summary_scope = _scope_by_cte(
+        program,
+        "summary",
+    )
+
+    assert len(
+        summary_scope.source_bindings
+    ) == 1
+
+    binding = (
+        summary_scope
+        .source_bindings[0]
+    )
+
+    assert binding.alias == "base"
+
+    assert (
+        binding.physical_table
+        is None
+    )
+
+    assert (
+        binding.source_scope_id
+        == base_scope.scope_id
+    )

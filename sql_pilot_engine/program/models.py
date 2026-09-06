@@ -1167,6 +1167,90 @@ class CTENode:
     frozen=True,
     slots=True,
 )
+class ScopeSourceBinding:
+    """
+    一个 SQL Scope 中的 source binding。
+
+    alias:
+        当前 Scope 内引用 Source 使用的名称。
+
+    physical_table:
+        Source 是真实物理表时填写。
+
+    source_scope_id:
+        Source 是 CTE / derived query 等内部 Scope 时填写。
+
+    physical_table 与 source_scope_id 必须二选一。
+    """
+
+    alias: str
+
+    physical_table: str | None = None
+
+    source_scope_id: str | None = None
+
+    def __post_init__(
+        self,
+    ) -> None:
+        alias = (
+            self.alias
+            .strip()
+            .lower()
+        )
+
+        if not alias:
+            raise ValueError(
+                "ScopeSourceBinding.alias "
+                "cannot be empty."
+            )
+
+        physical_table = (
+            self.physical_table
+            .strip()
+            .lower()
+            if self.physical_table
+            else None
+        )
+
+        source_scope_id = (
+            self.source_scope_id
+            .strip()
+            if self.source_scope_id
+            else None
+        )
+
+        if (
+            (physical_table is None)
+            == (source_scope_id is None)
+        ):
+            raise ValueError(
+                "ScopeSourceBinding must contain "
+                "exactly one of physical_table "
+                "or source_scope_id."
+            )
+
+        object.__setattr__(
+            self,
+            "alias",
+            alias,
+        )
+
+        object.__setattr__(
+            self,
+            "physical_table",
+            physical_table,
+        )
+
+        object.__setattr__(
+            self,
+            "source_scope_id",
+            source_scope_id,
+        )
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
 class ProgramScopeAnalysis:
     """
     一个 Program Scope 的确定性 SQLFacts。
@@ -1188,6 +1272,8 @@ class ProgramScopeAnalysis:
     cte_name: str | None
 
     facts: SQLFacts
+
+    source_bindings: tuple[ScopeSourceBinding, ...] = ()
 
     def __post_init__(
         self,

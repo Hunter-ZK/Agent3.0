@@ -1,0 +1,653 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+
+from sql_pilot_engine.analysis.facts import (
+    ColumnReference,
+)
+from sql_pilot_engine.metadata.models import (
+    ColumnMetadata,
+    MetadataLookupStatus,
+    TableLookupResult,
+    TableMetadata,
+)
+from sql_pilot_engine.metadata.provider import (
+    MetadataProvider,
+)
+from sql_pilot_engine.program.models import (
+    ProgramScopeAnalysis,
+    ScopeSourceBinding,
+    SQLProgram,
+)
+
+
+class MetadataObjectRole(
+    str,
+    Enum,
+):
+    """
+    Program 中物理表的角色。
+
+    同一张表可能同时作为：
+    - READ_SOURCE
+    - WRITE_TARGET
+
+    两种 Evidence 必须保留为不同角色。
+    """
+
+    READ_SOURCE = "read_source"
+    WRITE_TARGET = "write_target"
+
+
+class ColumnMetadataEvidenceStatus(
+    str,
+    Enum,
+):
+    """
+    字段 Metadata Evidence 状态。
+
+    注意：
+    这是事实状态，
+    不是 Review Severity。
+    """
+
+    FOUND = "found"
+
+    NOT_FOUND = "not_found"
+
+    UNRESOLVED = "unresolved"
+
+    SOURCE_NOT_FOUND = (
+        "source_not_found"
+    )
+
+    SOURCE_ERROR = "source_error"
+
+    NON_PHYSICAL_SOURCE = (
+        "non_physical_source"
+    )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class TableMetadataEvidence:
+    """
+    一个物理表的 Metadata 查询证据。
+    """
+
+    role: MetadataObjectRole
+
+    requested_table: str
+
+    status: MetadataLookupStatus
+
+    metadata: TableMetadata | None = None
+
+    error_message: str | None = None
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class ColumnMetadataEvidence:
+    """
+    一个 Scope 内字段引用的 Metadata Evidence。
+    """
+
+    scope_id: str
+
+    column: ColumnReference
+
+    status: (
+        ColumnMetadataEvidenceStatus
+    )
+
+    source_alias: str | None = None
+
+    physical_table: str | None = None
+
+    source_scope_id: str | None = None
+
+    metadata: ColumnMetadata | None = None
+
+    error_message: str | None = None
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class ProgramMetadataCoverage:
+    """
+    SQLProgram 与 Metadata Plane
+    建立出的确定性 Coverage Evidence。
+
+    不生成：
+    - Issue
+    - Severity
+    - BLOCK / WARNING
+    """
+
+    table_evidence: tuple[
+        TableMetadataEvidence,
+        ...,
+    ]
+
+    column_evidence: tuple[
+        ColumnMetadataEvidence,
+        ...,
+    ]
+
+
+class ProgramMetadataCoverageService:
+    """
+    SQLProgram → Metadata Evidence。
+
+    【架构位置】
+
+        ProgramAnalysisService
+                ↓
+            SQLProgram
+                ↓
+    ProgramMetadataCoverageService
+                ↓
+      ProgramMetadataCoverage
+
+    这里只回答：
+
+        Metadata 能证明什么？
+
+    不回答：
+
+        这是不是一个 SQL 问题？
+    """
+
+    def __init__(
+        self,
+        provider: MetadataProvider,
+    ) -> None:
+        self._provider = provider
+
+    def collect(
+        self,
+        program: SQLProgram,
+    ) -> ProgramMetadataCoverage:
+
+        lookup_cache: dict[
+            str,
+            TableLookupResult,
+        ] = {}
+
+        table_evidence = (
+            self._collect_table_evidence(
+                program=program,
+                lookup_cache=(
+                    lookup_cache
+                ),
+            )
+        )
+
+        column_evidence = (
+            self._collect_column_evidence(
+                program=program,
+                lookup_cache=(
+                    lookup_cache
+                ),
+            )
+        )
+
+        return ProgramMetadataCoverage(
+            table_evidence=(
+                table_evidence
+            ),
+            column_evidence=(
+                column_evidence
+            ),
+        )
+
+    def _collect_table_evidence(
+        self,
+        *,
+        program: SQLProgram,
+        lookup_cache: dict[
+            str,
+            TableLookupResult,
+        ],
+    ) -> tuple[
+        TableMetadataEvidence,
+        ...,
+    ]:
+
+        requested: list[
+            tuple[
+                MetadataObjectRole,
+                str,
+            ]
+        ] = []
+
+        seen: set[
+            tuple[
+                MetadataObjectRole,
+                str,
+            ]
+        ] = set()
+
+        # -----------------------------------------------
+        # READ SOURCE
+        # -----------------------------------------------
+
+        for scope in (
+            program.scope_analyses
+        ):
+            for binding in (
+                scope.source_bindings
+            ):
+                if (
+                    binding.physical_table
+                    is None
+                ):
+                    continue
+
+                key = (
+                    MetadataObjectRole
+                    .READ_SOURCE,
+                    binding.physical_table,
+                )
+
+                if key in seen:
+                    continue
+
+                seen.add(
+                    key
+                )
+
+                requested.append(
+                    key
+                )
+
+        # -----------------------------------------------
+        # WRITE TARGET
+        # -----------------------------------------------
+
+        for statement in (
+            program.statements
+        ):
+            target = (
+                statement.write_target
+            )
+
+            if target is None:
+                continue
+
+            table_name = (
+                target.table_name
+                .strip()
+                .lower()
+            )
+
+            key = (
+                MetadataObjectRole
+                .WRITE_TARGET,
+                table_name,
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(
+                key
+            )
+
+            requested.append(
+                key
+            )
+
+        evidence: list[
+            TableMetadataEvidence
+        ] = []
+
+        for (
+            role,
+            table_name,
+        ) in requested:
+
+            lookup = self._lookup_table(
+                table_name=table_name,
+                lookup_cache=(
+                    lookup_cache
+                ),
+            )
+
+            evidence.append(
+                TableMetadataEvidence(
+                    role=role,
+                    requested_table=(
+                        table_name
+                    ),
+                    status=(
+                        lookup.status
+                    ),
+                    metadata=(
+                        lookup.table
+                    ),
+                    error_message=(
+                        lookup.error_message
+                    ),
+                )
+            )
+
+        return tuple(
+            evidence
+        )
+
+    def _collect_column_evidence(
+        self,
+        *,
+        program: SQLProgram,
+        lookup_cache: dict[
+            str,
+            TableLookupResult,
+        ],
+    ) -> tuple[
+        ColumnMetadataEvidence,
+        ...,
+    ]:
+
+        evidence: list[
+            ColumnMetadataEvidence
+        ] = []
+
+        for scope in (
+            program.scope_analyses
+        ):
+
+            for column in (
+                scope
+                .facts
+                .column_references
+            ):
+
+                evidence.append(
+                    self._resolve_column(
+                        scope=scope,
+                        column=column,
+                        lookup_cache=(
+                            lookup_cache
+                        ),
+                    )
+                )
+
+        return tuple(
+            evidence
+        )
+
+    def _resolve_column(
+        self,
+        *,
+        scope: ProgramScopeAnalysis,
+        column: ColumnReference,
+        lookup_cache: dict[
+            str,
+            TableLookupResult,
+        ],
+    ) -> ColumnMetadataEvidence:
+
+        binding = (
+            self._resolve_source_binding(
+                scope=scope,
+                column=column,
+            )
+        )
+
+        if binding is None:
+
+            return (
+                ColumnMetadataEvidence(
+                    scope_id=(
+                        scope.scope_id
+                    ),
+                    column=column,
+                    status=(
+                        ColumnMetadataEvidenceStatus
+                        .UNRESOLVED
+                    ),
+                )
+            )
+
+        if (
+            binding.physical_table
+            is None
+        ):
+
+            return (
+                ColumnMetadataEvidence(
+                    scope_id=(
+                        scope.scope_id
+                    ),
+                    column=column,
+                    status=(
+                        ColumnMetadataEvidenceStatus
+                        .NON_PHYSICAL_SOURCE
+                    ),
+                    source_alias=(
+                        binding.alias
+                    ),
+                    source_scope_id=(
+                        binding
+                        .source_scope_id
+                    ),
+                )
+            )
+
+        table_name = (
+            binding.physical_table
+        )
+
+        lookup = self._lookup_table(
+            table_name=table_name,
+            lookup_cache=(
+                lookup_cache
+            ),
+        )
+
+        if (
+            lookup.status
+            is MetadataLookupStatus.NOT_FOUND
+        ):
+            return (
+                ColumnMetadataEvidence(
+                    scope_id=(
+                        scope.scope_id
+                    ),
+                    column=column,
+                    status=(
+                        ColumnMetadataEvidenceStatus
+                        .SOURCE_NOT_FOUND
+                    ),
+                    source_alias=(
+                        binding.alias
+                    ),
+                    physical_table=(
+                        table_name
+                    ),
+                )
+            )
+
+        if (
+            lookup.status
+            is MetadataLookupStatus.ERROR
+        ):
+            return (
+                ColumnMetadataEvidence(
+                    scope_id=(
+                        scope.scope_id
+                    ),
+                    column=column,
+                    status=(
+                        ColumnMetadataEvidenceStatus
+                        .SOURCE_ERROR
+                    ),
+                    source_alias=(
+                        binding.alias
+                    ),
+                    physical_table=(
+                        table_name
+                    ),
+                    error_message=(
+                        lookup.error_message
+                    ),
+                )
+            )
+
+        table = lookup.table
+
+        if table is None:
+            raise RuntimeError(
+                "MetadataProvider returned "
+                "FOUND without TableMetadata."
+            )
+
+        column_metadata = (
+            table.get_column(
+                column.name
+            )
+        )
+
+        if column_metadata is None:
+
+            return (
+                ColumnMetadataEvidence(
+                    scope_id=(
+                        scope.scope_id
+                    ),
+                    column=column,
+                    status=(
+                        ColumnMetadataEvidenceStatus
+                        .NOT_FOUND
+                    ),
+                    source_alias=(
+                        binding.alias
+                    ),
+                    physical_table=(
+                        table_name
+                    ),
+                )
+            )
+
+        return (
+            ColumnMetadataEvidence(
+                scope_id=(
+                    scope.scope_id
+                ),
+                column=column,
+                status=(
+                    ColumnMetadataEvidenceStatus
+                    .FOUND
+                ),
+                source_alias=(
+                    binding.alias
+                ),
+                physical_table=(
+                    table_name
+                ),
+                metadata=(
+                    column_metadata
+                ),
+            )
+        )
+
+    @staticmethod
+    def _resolve_source_binding(
+        *,
+        scope: ProgramScopeAnalysis,
+        column: ColumnReference,
+    ) -> ScopeSourceBinding | None:
+        """
+        字段 → Source 的保守解析。
+
+        1. 有 qualifier：
+           必须精确匹配 alias。
+
+        2. 无 qualifier：
+           只有当前 Scope 恰好一个 Source
+           时才能确定来源。
+
+        3. 多 Source：
+           UNRESOLVED。
+
+        不允许“任选一张表”。
+        """
+
+        if column.qualifier:
+
+            qualifier = (
+                column.qualifier
+                .strip()
+                .lower()
+            )
+
+            for binding in (
+                scope.source_bindings
+            ):
+                if (
+                    binding.alias
+                    == qualifier
+                ):
+                    return binding
+
+            return None
+
+        if (
+            len(
+                scope.source_bindings
+            )
+            != 1
+        ):
+            return None
+
+        return (
+            scope
+            .source_bindings[0]
+        )
+
+    def _lookup_table(
+        self,
+        *,
+        table_name: str,
+        lookup_cache: dict[
+            str,
+            TableLookupResult,
+        ],
+    ) -> TableLookupResult:
+
+        normalized = (
+            table_name
+            .strip()
+            .lower()
+        )
+
+        cached = (
+            lookup_cache.get(
+                normalized
+            )
+        )
+
+        if cached is not None:
+            return cached
+
+        result = (
+            self._provider
+            .get_table(
+                normalized
+            )
+        )
+
+        lookup_cache[
+            normalized
+        ] = result
+
+        return result
