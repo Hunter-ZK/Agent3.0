@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
+from sql_pilot_engine.analysis.facts import (
+    SQLFacts,
+)
+from sql_pilot_engine.program.enums import (
+    ParameterUsageKind,
+    ProgramAnalysisStatus,
+    StatementKind,
+    WriteStrategy,
+)
 # ============================================================
 # 【架构位置】
 #
@@ -11,46 +19,41 @@ from dataclasses import dataclass
 # ProgramPreprocessor
 #         ↓
 # ProgramPreprocessResult
-#         ├── normalized_sql
-#         ├── session_hints
-#         ├── parameters
-#         └── source_map
-#                 ↓
-#            Existing SQLParser
-#                 ↓
-#             SQLGlot AST
+#         ↓
+# SQLParser / SQLGlot AST
+#         ↓
+# ProgramBuilder
+#         ↓
+# SQLProgram
+#         ↓
+# Scope / Dependency / Metadata / Lineage
 #
 #
-# 当前 models.py 只定义：
+# 本模块包含两层稳定 Contract：
 #
-#     Phase 4.2-A1
-#     “生产 SQL 输入保真层”
+# A1:
+#     SourceLocation / SourceSpan / SourceMap
+#     SessionHint / ParameterOccurrence
+#     ProgramPreprocessResult
 #
-# 所需要的数据结构。
-#
-#
-# 当前明确不在这里定义：
-#
-#     SQLProgram
-#     CTENode
-#     StatementKind
-#     ProgramScopeAnalysis
-#     ParameterUsageKind
-#     WriteTarget
-#
-# 这些属于后续 Phase 4.2-B。
+# B:
+#     SQLProgram / SQLStatement / CTENode
+#     ParameterBinding / WriteTarget
+#     ProgramScopeAnalysis / ProgramAnalysisResult
 #
 #
-# 这样做的原因：
+# 本模块不负责：
 #
-# A1 当前只解决：
+# - Review / Issue 判断；
+# - SQL Fix；
+# - Metadata 校验；
+# - Schema Propagation；
+# - Column Lineage；
+# - Execution Verification。
 #
-#     “生产 SQL 如何安全进入 Parser”
-#
-# 不能为了以后可能需要的能力，
-# 提前把 Program Domain 全部塞进当前文件。
+# 这些能力消费 SQLProgram，
+# 但不应该污染 Program 的基础结构 Contract。
 # ============================================================
-
 
 @dataclass(
     frozen=True,
@@ -986,3 +989,405 @@ def build_source_span(
             )
         ),
     )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class ParameterBinding:
+    """
+    Program 级调度参数。
+
+    A1 的 ParameterOccurrence 表示“出现一次”。
+
+    ParameterBinding 表示：
+        同一个参数在整个 SQL Program 中的聚合视图。
+
+    例如 `${p_month_yyyymm}` 出现 25 次：
+        A1 = 25 个 ParameterOccurrence
+        B  = 1 个 ParameterBinding
+    """
+
+    name: str
+
+    occurrences: tuple[
+        ParameterOccurrence,
+        ...,
+    ]
+
+    usage_kinds: tuple[
+        ParameterUsageKind,
+        ...,
+    ] = ()
+
+    inferred_format: str | None = None
+
+    def __post_init__(
+        self,
+    ) -> None:
+        if not self.name.strip():
+            raise ValueError(
+                "ParameterBinding.name "
+                "cannot be empty."
+            )
+
+        if not self.occurrences:
+            raise ValueError(
+                "ParameterBinding must contain "
+                "at least one occurrence."
+            )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class PartitionBinding:
+    """
+    INSERT 目标中的一个分区绑定。
+
+    静态分区：
+        PARTITION(dt='202609')
+        value = "'202609'"
+
+    动态分区：
+        PARTITION(dt)
+        value = None
+
+    是否动态由 value 推导，
+    不额外保存第二份布尔状态。
+    """
+
+    name: str
+
+    value: str | None = None
+
+    def __post_init__(
+        self,
+    ) -> None:
+        if not self.name.strip():
+            raise ValueError(
+                "PartitionBinding.name "
+                "cannot be empty."
+            )
+
+    @property
+    def is_dynamic(
+        self,
+    ) -> bool:
+        return self.value is None
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class WriteTarget:
+    """
+    一条写入 Statement 的目标。
+
+   这里只描述确定性结构事实：
+        写到哪张表；
+        overwrite 还是 append；
+        使用什么 partition specification。
+
+    不判断这个写入是否业务正确。
+    """
+
+    table_name: str
+
+    strategy: WriteStrategy
+
+    partition_spec: tuple[
+        PartitionBinding,
+        ...,
+    ] = ()
+
+    def __post_init__(
+        self,
+    ) -> None:
+        if not self.table_name.strip():
+            raise ValueError(
+                "WriteTarget.table_name "
+                "cannot be empty."
+            )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class CTENode:
+    """
+    SQL Program 中的一个 CTE 节点。
+
+    dependency_scope_ids 只记录：
+        CTE → CTE
+
+    使用 scope_id 而不是 CTE name，
+    因为 scope_id 才是 Program 内唯一身份。
+
+    物理源表不进入 CTE DAG。
+    """
+
+    name: str
+
+    statement_index: int
+
+    scope_id: str
+
+    dependency_scope_ids: tuple[
+        str,
+        ...,
+    ] = ()
+
+    def __post_init__(
+        self,
+    ) -> None:
+        if not self.name.strip():
+            raise ValueError(
+                "CTENode.name cannot be empty."
+            )
+
+        if self.statement_index < 0:
+            raise ValueError(
+                "CTENode.statement_index "
+                "cannot be negative."
+            )
+
+        if not self.scope_id.strip():
+            raise ValueError(
+                "CTENode.scope_id "
+                "cannot be empty."
+            )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class ProgramScopeAnalysis:
+    """
+    一个 Program Scope 的确定性 SQLFacts。
+
+    关键原则：
+
+        SQLFacts 不修改。
+
+    Query Line 继续使用原来的 SQLFacts Contract；
+    Program Line 通过 wrapper 表达：
+
+        这些 Facts 属于哪个 statement / CTE scope。
+    """
+
+    scope_id: str
+
+    statement_index: int
+
+    cte_name: str | None
+
+    facts: SQLFacts
+
+    def __post_init__(
+        self,
+    ) -> None:
+        if not self.scope_id.strip():
+            raise ValueError(
+                "ProgramScopeAnalysis.scope_id "
+                "cannot be empty."
+            )
+
+        if self.statement_index < 0:
+            raise ValueError(
+                "ProgramScopeAnalysis."
+                "statement_index cannot "
+                "be negative."
+            )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class SQLStatement:
+    """
+    SQLProgram 中的一条业务 Statement。
+
+    normalized_sql 保存 Analyzer 实际分析的文本。
+
+    Raw SQL 仍由 SQLProgram.raw_sql +
+    SourceMap 作为唯一源码事实保存。
+    """
+
+    index: int
+
+    kind: StatementKind
+
+    normalized_sql: str
+
+    write_target: WriteTarget | None = None
+
+    cte_names: tuple[
+        str,
+        ...,
+    ] = ()
+
+    def __post_init__(
+        self,
+    ) -> None:
+        if self.index < 0:
+            raise ValueError(
+                "SQLStatement.index "
+                "cannot be negative."
+            )
+
+        if not self.normalized_sql.strip():
+            raise ValueError(
+                "SQLStatement.normalized_sql "
+                "cannot be empty."
+            )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class SQLProgram:
+    """
+    Complex MaxCompute SQL 的 Program Domain Model。
+
+    SQLProgram 表示：
+
+        “这段复杂 SQL 程序是什么”
+
+    而不是：
+
+        “这段 SQL 是否正确”。
+
+    QueryPlan 不进入 SQLProgram。
+    Query Line 与 Program Line 保持 Domain Model 分离。
+    """
+
+    raw_sql: str
+
+    normalized_sql: str
+
+    statements: tuple[
+        SQLStatement,
+        ...,
+    ]
+
+    session_hints: tuple[
+        SessionHint,
+        ...,
+    ]
+
+    parameters: tuple[
+        ParameterBinding,
+        ...,
+    ]
+
+    source_map: SourceMap
+
+    cte_nodes: tuple[
+        CTENode,
+        ...,
+    ] = ()
+
+    scope_analyses: tuple[
+        ProgramScopeAnalysis,
+        ...,
+    ] = ()
+
+    def __post_init__(
+        self,
+    ) -> None:
+        if not self.raw_sql.strip():
+            raise ValueError(
+                "SQLProgram.raw_sql "
+                "cannot be empty."
+            )
+
+        if not self.normalized_sql.strip():
+            raise ValueError(
+                "SQLProgram.normalized_sql "
+                "cannot be empty."
+            )
+
+        if not self.statements:
+            raise ValueError(
+                "SQLProgram must contain "
+                "at least one statement."
+            )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class ProgramAnalysisResult:
+    """
+    Program Analysis 的稳定返回 Contract。
+
+    COMPLETE / PARTIAL：
+        必须存在 SQLProgram。
+
+    FAILED：
+        不允许伪造半成品 SQLProgram，
+        必须提供 failure_reason。
+    """
+
+    status: ProgramAnalysisStatus
+
+    program: SQLProgram | None
+
+    diagnostics: tuple[
+        str,
+        ...,
+    ] = ()
+
+    unsupported_features: tuple[
+        str,
+        ...,
+    ] = ()
+
+    failure_reason: str | None = None
+
+    def __post_init__(
+        self,
+    ) -> None:
+        if (
+            self.status
+            is ProgramAnalysisStatus.FAILED
+        ):
+            if self.program is not None:
+                raise ValueError(
+                    "FAILED ProgramAnalysisResult "
+                    "cannot contain a program."
+                )
+
+            if not (
+                self.failure_reason
+                and self.failure_reason.strip()
+            ):
+                raise ValueError(
+                    "FAILED ProgramAnalysisResult "
+                    "must contain failure_reason."
+                )
+
+            return
+
+        if self.program is None:
+            raise ValueError(
+                "COMPLETE or PARTIAL "
+                "ProgramAnalysisResult "
+                "must contain a program."
+            )
+
+        if self.failure_reason is not None:
+            raise ValueError(
+                "Only FAILED "
+                "ProgramAnalysisResult may "
+                "contain failure_reason."
+            )
