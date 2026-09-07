@@ -1,14 +1,100 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from sql_pilot_engine.program.enums import (
     ProgramAnalysisStatus,
+    SourceBindingKind,
     StatementKind,
     WriteStrategy,
 )
+
+from sql_pilot_engine.program.models import (
+    ScopeSourceBinding,
+)
+
+from sql_pilot_engine.program.scope_resolver import (
+    ScopeResolver,
+)
+
 from sql_pilot_engine.program.service import (
     ProgramAnalysisService,
 )
 
+class _UnresolvedSourceScopeResolver:
+    """
+    测试专用 Resolver。
+
+    先执行真实 ScopeResolver，
+    再人为注入一个 UNRESOLVED binding。
+
+    目的不是测试 SQLGlot，
+    而是验证 ProgramAnalysisService 的
+    PARTIAL 状态聚合 Contract。
+    """
+
+    def __init__(
+        self,
+    ) -> None:
+        self._delegate = (
+            ScopeResolver()
+        )
+
+    def resolve(
+        self,
+        *,
+        program,
+        parse_result,
+    ):
+        resolved = (
+            self
+            ._delegate
+            .resolve(
+                program=program,
+                parse_result=parse_result,
+            )
+        )
+
+        first_scope = (
+            resolved
+            .scope_analyses[0]
+        )
+
+        degraded_scope = replace(
+            first_scope,
+            source_bindings=(
+                first_scope
+                .source_bindings
+                + (
+                    ScopeSourceBinding(
+                        alias=(
+                            "unknown_source"
+                        ),
+                        kind=(
+                            SourceBindingKind
+                            .UNRESOLVED
+                        ),
+                        unresolved_reason=(
+                            "Test unresolved "
+                            "source."
+                        ),
+                    ),
+                )
+            ),
+        )
+
+        return replace(
+            resolved,
+            scope_analyses=(
+                (
+                    degraded_scope,
+                )
+                + (
+                    resolved
+                    .scope_analyses[1:]
+                )
+            ),
+        )
 
 def test_simple_query_analysis_is_complete():
     result = (
@@ -309,3 +395,37 @@ def test_set_only_program_returns_failed_result():
     )
 
     assert result.program is None
+    
+def test_unresolved_source_binding_downgrades_program_to_partial():
+    service = (
+        ProgramAnalysisService(
+            scope_resolver=(
+                _UnresolvedSourceScopeResolver()
+            )
+        )
+    )
+
+    result = service.analyze(
+        """
+        SELECT id
+        FROM ods.loan_detail
+        """
+    )
+
+    assert (
+        result.status
+        is ProgramAnalysisStatus.PARTIAL
+    )
+
+    assert result.program is not None
+
+    assert result.diagnostics
+
+    assert any(
+        (
+            "unknown_source"
+            in diagnostic
+        )
+        for diagnostic
+        in result.diagnostics
+    )

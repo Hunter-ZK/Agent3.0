@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sql_pilot_engine.analysis.facts import (
     SQLFacts,
@@ -8,6 +8,7 @@ from sql_pilot_engine.analysis.facts import (
 from sql_pilot_engine.program.enums import (
     ParameterUsageKind,
     ProgramAnalysisStatus,
+    SourceBindingKind,
     StatementKind,
     WriteStrategy,
 )
@@ -1162,32 +1163,56 @@ class CTENode:
                 "cannot be empty."
             )
 
-
 @dataclass(
     frozen=True,
     slots=True,
 )
 class ScopeSourceBinding:
     """
-    一个 SQL Scope 中的 source binding。
+    当前 SQL Scope 中一个 source alias 的确定性绑定结果。
 
-    alias:
-        当前 Scope 内引用 Source 使用的名称。
+    例如：
 
-    physical_table:
-        Source 是真实物理表时填写。
+        FROM ods.loan_detail l
 
-    source_scope_id:
-        Source 是 CTE / derived query 等内部 Scope 时填写。
+    得到：
 
-    physical_table 与 source_scope_id 必须二选一。
+        alias = "l"
+        kind = PHYSICAL_TABLE
+        physical_table = "ods.loan_detail"
+
+    又例如：
+
+        WITH base AS (...)
+        SELECT *
+        FROM base b
+
+    得到：
+
+        alias = "b"
+        kind = SCOPE
+        source_scope_id = "<base scope id>"
+
+    如果 SQLGlot 暴露了 Source，
+    但当前 Program 无法可靠映射：
+
+        kind = UNRESOLVED
+        unresolved_reason = "..."
+
+    重要：
+    UNRESOLVED 表示“事实不足”，
+    不能伪装成某个 physical table 或 Scope。
     """
 
     alias: str
 
+    kind: SourceBindingKind
+
     physical_table: str | None = None
 
     source_scope_id: str | None = None
+
+    unresolved_reason: str | None = None
 
     def __post_init__(
         self,
@@ -1219,15 +1244,73 @@ class ScopeSourceBinding:
             else None
         )
 
+        unresolved_reason = (
+            self.unresolved_reason
+            .strip()
+            if self.unresolved_reason
+            else None
+        )
+
         if (
-            (physical_table is None)
-            == (source_scope_id is None)
+            self.kind
+            is SourceBindingKind.PHYSICAL_TABLE
         ):
-            raise ValueError(
-                "ScopeSourceBinding must contain "
-                "exactly one of physical_table "
-                "or source_scope_id."
-            )
+            if physical_table is None:
+                raise ValueError(
+                    "PHYSICAL_TABLE binding "
+                    "requires physical_table."
+                )
+
+            if (
+                source_scope_id is not None
+                or unresolved_reason is not None
+            ):
+                raise ValueError(
+                    "PHYSICAL_TABLE binding "
+                    "cannot contain "
+                    "source_scope_id or "
+                    "unresolved_reason."
+                )
+
+        elif (
+            self.kind
+            is SourceBindingKind.SCOPE
+        ):
+            if source_scope_id is None:
+                raise ValueError(
+                    "SCOPE binding requires "
+                    "source_scope_id."
+                )
+
+            if (
+                physical_table is not None
+                or unresolved_reason is not None
+            ):
+                raise ValueError(
+                    "SCOPE binding cannot contain "
+                    "physical_table or "
+                    "unresolved_reason."
+                )
+
+        elif (
+            self.kind
+            is SourceBindingKind.UNRESOLVED
+        ):
+            if unresolved_reason is None:
+                raise ValueError(
+                    "UNRESOLVED binding requires "
+                    "unresolved_reason."
+                )
+
+            if (
+                physical_table is not None
+                or source_scope_id is not None
+            ):
+                raise ValueError(
+                    "UNRESOLVED binding cannot "
+                    "contain physical_table or "
+                    "source_scope_id."
+                )
 
         object.__setattr__(
             self,
@@ -1246,6 +1329,120 @@ class ScopeSourceBinding:
             "source_scope_id",
             source_scope_id,
         )
+
+        object.__setattr__(
+            self,
+            "unresolved_reason",
+            unresolved_reason,
+        )
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class ScopeOutputProjection:
+    """
+    当前 SQL Scope 可以由 AST 确定的输出投影事实。
+
+    column_names:
+        AST 能明确确定的输出字段名称，
+        保留 SELECT projection 的出现顺序。
+
+        例如：
+
+            SELECT
+                id,
+                SUM(amount) AS total_amount
+
+        得到：
+
+            ("id", "total_amount")
+
+    has_wildcard:
+        是否包含：
+
+            SELECT *
+            SELECT a.*
+
+        wildcard 表示仅凭 AST 无法获得完整 output schema。
+
+    unnamed_expression_count:
+        没有稳定输出名称的表达式数量。
+
+        例如：
+
+            SELECT 1 + 2
+
+        SQLGlot 的 output_name 为空，
+        因此记录为 unnamed，而不是伪造字段名。
+
+    complete:
+        仅表示“静态 AST 是否已经给出了完整输出名称”。
+
+        它不是 ProgramAnalysisStatus。
+        SELECT * 可以使 projection.complete=False，
+        但 Program Analysis 本身仍然可以 COMPLETE。
+    """
+
+    column_names: tuple[
+        str,
+        ...,
+    ] = ()
+
+    has_wildcard: bool = False
+
+    unnamed_expression_count: int = 0
+
+    def __post_init__(
+        self,
+    ) -> None:
+        normalized_names = tuple(
+            name.strip().lower()
+            for name
+            in self.column_names
+            if name.strip()
+        )
+
+        if (
+            len(normalized_names)
+            != len(self.column_names)
+        ):
+            raise ValueError(
+                "ScopeOutputProjection."
+                "column_names cannot "
+                "contain empty names."
+            )
+
+        if (
+            self.unnamed_expression_count
+            < 0
+        ):
+            raise ValueError(
+                "ScopeOutputProjection."
+                "unnamed_expression_count "
+                "cannot be negative."
+            )
+
+        object.__setattr__(
+            self,
+            "column_names",
+            normalized_names,
+        )
+
+    @property
+    def complete(
+        self,
+    ) -> bool:
+        return (
+            not self.has_wildcard
+            and (
+                self
+                .unnamed_expression_count
+                == 0
+            )
+        )
+
 
 @dataclass(
     frozen=True,
@@ -1274,6 +1471,10 @@ class ProgramScopeAnalysis:
     facts: SQLFacts
 
     source_bindings: tuple[ScopeSourceBinding, ...] = ()
+    
+    output_projection: (ScopeOutputProjection) = field(
+        default_factory=(ScopeOutputProjection)
+    )
 
     def __post_init__(
         self,

@@ -11,9 +11,11 @@ from sql_pilot_engine.program.cte_dependencies import (
 )
 from sql_pilot_engine.program.enums import (
     ProgramAnalysisStatus,
+    SourceBindingKind,
 )
 from sql_pilot_engine.program.models import (
     ProgramAnalysisResult,
+    SQLProgram,
 )
 from sql_pilot_engine.program.preprocessing import (
     preprocess_program_sql,
@@ -208,16 +210,94 @@ class ProgramAnalysisService:
             .unsupported_features
         )
 
+        binding_diagnostics = (
+            self
+            ._collect_source_binding_diagnostics(
+                program
+            )
+        )
+
         status = (
             ProgramAnalysisStatus.PARTIAL
-            if unsupported_features
+            if (
+                unsupported_features
+                or binding_diagnostics
+            )
             else ProgramAnalysisStatus.COMPLETE
         )
 
         return ProgramAnalysisResult(
             status=status,
             program=program,
+            diagnostics=(
+                binding_diagnostics
+            ),
             unsupported_features=(
                 unsupported_features
             ),
+        )
+        
+
+    @staticmethod
+    def _collect_source_binding_diagnostics(
+        program: SQLProgram,
+    ) -> tuple[
+        str,
+        ...,
+    ]:
+        """
+        汇总 Program 中显式降级的 Source Binding。
+
+        Resolver 负责保留事实：
+
+            UNRESOLVED
+
+        Service 负责把整体分析状态：
+
+            COMPLETE
+                ↓
+            PARTIAL
+
+        这样 ScopeResolver 不需要引入另一套 Result DTO，
+        ProgramAnalysisService 也不会吞掉真正的内部异常。
+        """
+
+        diagnostics: list[
+            str
+        ] = []
+
+        for scope in (
+            program.scope_analyses
+        ):
+            for binding in (
+                scope.source_bindings
+            ):
+                if (
+                    binding.kind
+                    is not (
+                        SourceBindingKind
+                        .UNRESOLVED
+                    )
+                ):
+                    continue
+
+                reason = (
+                    binding.unresolved_reason
+                    or (
+                        "Source binding could "
+                        "not be resolved."
+                    )
+                )
+
+                diagnostics.append(
+                    (
+                        "Unresolved source binding "
+                        f"in {scope.scope_id}: "
+                        f"alias='{binding.alias}', "
+                        f"reason={reason}"
+                    )
+                )
+
+        return tuple(
+            diagnostics
         )

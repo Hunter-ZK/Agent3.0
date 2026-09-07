@@ -21,6 +21,8 @@ from sql_pilot_engine.program.models import (
     ProgramScopeAnalysis,
     SQLProgram,
     ScopeSourceBinding,
+    SourceBindingKind,
+    ScopeOutputProjection,
 )
 
 
@@ -176,18 +178,17 @@ class ScopeResolver:
         ...,
     ]:
         """
-        解析 Statement 内全部 Scope。
+        解析一条 Statement 内的全部 SQLGlot Scope。
 
         第一遍：
-            为所有 Scope 建立稳定 scope_id。
+            给所有 Scope 建立稳定 scope_id。
 
         第二遍：
-            建立 SQLFacts +
-            ScopeSourceBinding。
+            生成 SQLFacts 和 ScopeSourceBinding。
 
-        必须先建立完整 scope_id mapping，
-        因为一个 Scope 的 source
-        可能指向另一个 Scope。
+        两遍处理的原因是：
+            一个 Scope 的 source 可能指向
+            当前 Statement 中另一个 Scope。
         """
 
         scopes = traverse_scope(
@@ -216,6 +217,11 @@ class ScopeResolver:
             int,
             str,
         ] = {}
+
+        # --------------------------------------------------------
+        # Pass 1:
+        # SQLGlot Scope → Program scope_id
+        # --------------------------------------------------------
 
         for (
             scope_index,
@@ -246,6 +252,11 @@ class ScopeResolver:
             scope_ids_by_expression[
                 id(scope.expression)
             ] = scope_id
+
+        # --------------------------------------------------------
+        # Pass 2:
+        # Scope facts + source bindings
+        # --------------------------------------------------------
 
         analyses: list[
             ProgramScopeAnalysis
@@ -364,13 +375,21 @@ class ScopeResolver:
     ]:
         """
         将 SQLGlot selected_sources
-        投影成 Agent3.0 Source Binding。
+        投影成 Agent3.0 的 source binding。
 
-        物理表：
-            alias → physical_table
+        这里刻意不重新解析 FROM/JOIN 文本。
 
-        CTE / derived query：
-            alias → source_scope_id
+        SQLGlot 已经完成：
+            alias → Table / Scope
+
+        我们只把第三方结构转换成
+        Agent3.0 自己稳定的 Domain Contract。
+
+        对当前明确无法映射的 Source：
+            返回 UNRESOLVED。
+
+        不通过 broad try/except
+        把内部程序 Bug 伪装成 UNRESOLVED。
         """
 
         bindings: list[
@@ -388,6 +407,15 @@ class ScopeResolver:
             .selected_sources
             .items()
         ):
+            alias = (
+                str(source_alias)
+                .strip()
+                .lower()
+            )
+
+            # ----------------------------------------------------
+            # Physical Table
+            # ----------------------------------------------------
 
             if isinstance(
                 source,
@@ -395,7 +423,11 @@ class ScopeResolver:
             ):
                 bindings.append(
                     ScopeSourceBinding(
-                        alias=source_alias,
+                        alias=alias,
+                        kind=(
+                            SourceBindingKind
+                            .PHYSICAL_TABLE
+                        ),
                         physical_table=(
                             cls
                             ._qualified_table_name(
@@ -406,6 +438,10 @@ class ScopeResolver:
                 )
 
                 continue
+
+            # ----------------------------------------------------
+            # CTE / derived table / subquery Scope
+            # ----------------------------------------------------
 
             if isinstance(
                 source,
@@ -421,14 +457,29 @@ class ScopeResolver:
                 )
 
                 if source_scope_id is None:
-                    raise ValueError(
-                        "SQLGlot source Scope "
-                        "has no Program scope_id."
+                    bindings.append(
+                        ScopeSourceBinding(
+                            alias=alias,
+                            kind=(
+                                SourceBindingKind
+                                .UNRESOLVED
+                            ),
+                            unresolved_reason=(
+                                "SQLGlot Scope source "
+                                "could not be mapped to "
+                                "a Program scope_id."
+                            ),
+                        )
                     )
+
+                    continue
 
                 bindings.append(
                     ScopeSourceBinding(
-                        alias=source_alias,
+                        alias=alias,
+                        kind=(
+                            SourceBindingKind.SCOPE
+                        ),
                         source_scope_id=(
                             source_scope_id
                         ),
@@ -437,14 +488,121 @@ class ScopeResolver:
 
                 continue
 
-            raise TypeError(
-                "Unsupported SQLGlot "
-                "selected source type: "
-                f"{type(source)!r}"
+            # ----------------------------------------------------
+            # Unknown SQLGlot source type
+            #
+            # 保留 alias，但明确降级。
+            # ----------------------------------------------------
+
+            bindings.append(
+                ScopeSourceBinding(
+                    alias=alias,
+                    kind=(
+                        SourceBindingKind
+                        .UNRESOLVED
+                    ),
+                    unresolved_reason=(
+                        "Unsupported SQLGlot "
+                        "selected source type: "
+                        f"{type(source).__name__}."
+                    ),
+                )
             )
 
         return tuple(
             bindings
+        )
+
+    @staticmethod
+    def _output_projection(
+        scope: Scope,
+    ) -> ScopeOutputProjection:
+        """
+        提取当前 Scope 可以由 AST 确定的输出投影。
+
+        这里只做结构事实，不做 schema inference。
+
+        使用 SQLGlot projection.output_name：
+
+        - SELECT a
+            → "a"
+
+        - SELECT a AS b
+            → "b"
+
+        - SELECT 1 + 2
+            → ""
+
+        因此不会通过 expression text
+        猜一个并不存在的稳定列名。
+
+        SELECT * / alias.*
+        显式记录 wildcard，
+        完整 schema 留给后续
+        Execution Schema Propagation。
+        """
+
+        expression = (
+            scope.expression
+        )
+
+        if not isinstance(
+            expression,
+            exp.Query,
+        ):
+            return (
+                ScopeOutputProjection()
+            )
+
+        column_names: list[
+            str
+        ] = []
+
+        has_wildcard = False
+
+        unnamed_expression_count = 0
+
+        for projection in (
+            expression.selects
+        ):
+            # SQLGlot Expression.is_star
+            # 同时覆盖：
+            #
+            #     *
+            #     alias.*
+            #
+            # COUNT(*) 本身不是 projection star，
+            # 所以不会被误判。
+            if projection.is_star:
+                has_wildcard = True
+                continue
+
+            output_name = (
+                projection
+                .output_name
+                .strip()
+                .lower()
+            )
+
+            if output_name:
+                column_names.append(
+                    output_name
+                )
+
+                continue
+
+            unnamed_expression_count += 1
+
+        return ScopeOutputProjection(
+            column_names=tuple(
+                column_names
+            ),
+            has_wildcard=(
+                has_wildcard
+            ),
+            unnamed_expression_count=(
+                unnamed_expression_count
+            ),
         )
 
     @classmethod

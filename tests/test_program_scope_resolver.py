@@ -12,7 +12,9 @@ from sql_pilot_engine.program.preprocessing import (
 from sql_pilot_engine.program.scope_resolver import (
     ScopeResolver,
 )
-
+from sql_pilot_engine.program.enums import (
+    SourceBindingKind,
+)
 
 def _analyze_scopes(
     raw_sql: str,
@@ -447,6 +449,116 @@ def test_single_cte_source_is_preserved_as_scope_binding():
     )
 
     assert binding.alias == "base"
+
+    assert (
+        binding.physical_table
+        is None
+    )
+
+    assert (
+        binding.source_scope_id
+        == base_scope.scope_id
+    )
+    
+
+def test_scope_preserves_physical_source_binding():
+    program = _analyze_scopes(
+        """
+        SELECT
+            l.id,
+            l.amount
+        FROM ods.loan_detail l
+        """
+    )
+
+    root = next(
+        scope
+        for scope
+        in program.scope_analyses
+        if (
+            scope.scope_id
+            == "statement:0:root"
+        )
+    )
+
+    assert len(
+        root.source_bindings
+    ) == 1
+
+    binding = (
+        root.source_bindings[0]
+    )
+
+    assert (
+        binding.alias
+        == "l"
+    )
+
+    assert (
+        binding.kind
+        is (
+            SourceBindingKind
+            .PHYSICAL_TABLE
+        )
+    )
+
+    assert (
+        binding.physical_table
+        == "ods.loan_detail"
+    )
+
+    assert (
+        binding.source_scope_id
+        is None
+    )
+
+
+def test_scope_preserves_cte_source_binding():
+    program = _analyze_scopes(
+        """
+        WITH base AS (
+            SELECT id
+            FROM ods.loan_detail
+        )
+        SELECT b.id
+        FROM base b
+        """
+    )
+
+    base_scope = next(
+        scope
+        for scope
+        in program.scope_analyses
+        if (
+            scope.cte_name
+            == "base"
+        )
+    )
+
+    root = next(
+        scope
+        for scope
+        in program.scope_analyses
+        if (
+            scope.scope_id
+            == "statement:0:root"
+        )
+    )
+
+    assert len(
+        root.source_bindings
+    ) == 1
+
+    binding = (
+        root.source_bindings[0]
+    )
+
+    assert binding.alias == "b"
+
+    assert (
+        binding.kind
+        is SourceBindingKind.SCOPE
+    )
 
     assert (
         binding.physical_table

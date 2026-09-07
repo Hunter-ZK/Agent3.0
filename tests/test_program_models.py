@@ -4,11 +4,13 @@ import pytest
 
 from sql_pilot_engine.program.enums import (
     ProgramAnalysisStatus,
+    SourceBindingKind,
 )
 from sql_pilot_engine.program.models import (
     ParameterBinding,
     PartitionBinding,
     ProgramAnalysisResult,
+    ScopeSourceBinding,
 )
 
 
@@ -90,3 +92,77 @@ def test_non_failed_result_requires_program():
             ),
             program=None,
         )
+        
+
+def test_physical_source_binding_requires_table():
+    with pytest.raises(
+        ValueError,
+        match="requires physical_table",
+    ):
+        ScopeSourceBinding(
+            alias="a",
+            kind=(
+                SourceBindingKind
+                .PHYSICAL_TABLE
+            ),
+        )
+
+
+def test_scope_source_binding_requires_scope_id():
+    with pytest.raises(
+        ValueError,
+        match="requires source_scope_id",
+    ):
+        ScopeSourceBinding(
+            alias="a",
+            kind=(
+                SourceBindingKind.SCOPE
+            ),
+        )
+
+
+def test_unresolved_source_binding_requires_reason():
+    with pytest.raises(
+        ValueError,
+        match="requires unresolved_reason",
+    ):
+        ScopeSourceBinding(
+            alias="a",
+            kind=(
+                SourceBindingKind
+                .UNRESOLVED
+            ),
+        )
+
+
+def test_unresolved_source_binding_keeps_explicit_reason():
+    binding = ScopeSourceBinding(
+        alias="  Unknown_Alias  ",
+        kind=(
+            SourceBindingKind
+            .UNRESOLVED
+        ),
+        unresolved_reason=(
+            "Unsupported source type."
+        ),
+    )
+
+    assert (
+        binding.alias
+        == "unknown_alias"
+    )
+
+    assert (
+        binding.physical_table
+        is None
+    )
+
+    assert (
+        binding.source_scope_id
+        is None
+    )
+
+    assert (
+        binding.unresolved_reason
+        == "Unsupported source type."
+    )

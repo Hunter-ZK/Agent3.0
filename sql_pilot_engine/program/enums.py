@@ -60,3 +60,28 @@ class ParameterUsageKind(str, Enum):
     PERIOD_CLASSIFICATION = "period_classification"
     DATE_ARITHMETIC = "date_arithmetic"
     OTHER = "other"
+    
+    
+class SourceBindingKind(str, Enum):
+    """
+    SQL Scope 中一个 source alias 的绑定类型。
+
+    PHYSICAL_TABLE:
+        alias 绑定真实物理表。
+
+    SCOPE:
+        alias 绑定 SQLProgram 内部的另一个 Scope，
+        例如 CTE / derived query / subquery。
+
+    UNRESOLVED:
+        Analyzer 知道当前存在这个 source alias，
+        但暂时无法可靠确定它指向哪个物理表或 Scope。
+
+    UNRESOLVED 是显式降级状态，不等同于错误，
+    但它会使 ProgramAnalysisStatus 从 COMPLETE
+    降级为 PARTIAL。
+    """
+
+    PHYSICAL_TABLE = "physical_table"
+    SCOPE = "scope"
+    UNRESOLVED = "unresolved"
