@@ -16,13 +16,15 @@ from sql_pilot_engine.analysis.facts import (
 from sql_pilot_engine.analysis.sql_parser import (
     SQLParseResult,
 )
+from sql_pilot_engine.program.enums import (
+    SourceBindingKind,
+)
 from sql_pilot_engine.program.models import (
     CTENode,
     ProgramScopeAnalysis,
     SQLProgram,
-    ScopeSourceBinding,
-    SourceBindingKind,
     ScopeOutputProjection,
+    ScopeSourceBinding,
 )
 
 

@@ -154,60 +154,29 @@ class SQLiteMetadataRepository:
                 .not_found()
             )
 
-        names = [
-            normalized
-        ]
-
-        # SQL 可能出现：
-        # project.table_name
-        #
-        # 当前 Metadata Source
-        # 可能只保存 table_name。
-        if "." in normalized:
-
-            base_name = (
-                normalized
-                .rsplit(
-                    ".",
-                    1,
-                )[-1]
-            )
-
-            if base_name not in names:
-                names.append(
-                    base_name
-                )
-
         try:
             with self._connect() as connection:
 
-                table_row = None
-
-                for name in names:
-
-                    table_row = (
-                        connection.execute(
-                            """
-                            SELECT
-                                id,
-                                full_name,
-                                description,
-                                layer,
-                                row_count,
-                                size_bytes
-                            FROM metadata_table
-                            WHERE full_name = ?
-                            LIMIT 1
-                            """,
-                            (
-                                name,
-                            ),
-                        )
-                        .fetchone()
+                table_row = (
+                    connection.execute(
+                        """
+                        SELECT
+                            id,
+                            full_name,
+                            description,
+                            layer,
+                            row_count,
+                            size_bytes
+                        FROM metadata_table
+                        WHERE full_name = ?
+                        LIMIT 1
+                        """,
+                        (
+                            normalized,
+                        ),
                     )
-
-                    if table_row is not None:
-                        break
+                    .fetchone()
+                )
 
                 if table_row is None:
 
@@ -978,37 +947,4 @@ class SQLiteMetadataRepository:
                 ]
                 or ""
             ),
-        )
-
-    @staticmethod
-    def _normalize_table_lookup_name(
-        table_name: str,
-    ) -> str:
-        """
-        将 Runtime SQL 中的物理表标识
-        转换为当前 Metadata V1 的表名口径。
-
-        当前 Metadata DB 以裸物理表名作为身份：
-
-            odps_prd_dwd.ods_hd_100_cldkxx
-            -> ods_hd_100_cldkxx
-
-        同时兼容反引号等 SQL 标识符包装。
-        """
-
-        normalized = (
-            table_name
-            .strip()
-            .replace("`", "")
-            .replace('"', "")
-        )
-
-        if not normalized:
-            return ""
-
-        return (
-            normalized
-            .split(".")[-1]
-            .strip()
-            .lower()
         )

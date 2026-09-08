@@ -1,0 +1,3697 @@
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' agent3_original/Agent3.0-main/sql_pilot_engine/evidence/program_metadata.py agent3_calibrate/Agent3.0-main/sql_pilot_engine/evidence/program_metadata.py
+--- agent3_original/Agent3.0-main/sql_pilot_engine/evidence/program_metadata.py	2026-09-08 07:18:23.000000000 +0000
++++ agent3_calibrate/Agent3.0-main/sql_pilot_engine/evidence/program_metadata.py	2026-09-08 15:21:19.567008321 +0000
+@@ -3,24 +3,16 @@
+ from dataclasses import dataclass
+ from enum import Enum
+ 
+-from sql_pilot_engine.analysis.facts import (
+-    ColumnReference,
+-)
++from sql_pilot_engine.analysis.facts import ColumnReference
++from sql_pilot_engine.metadata.catalog import MetadataCatalog
+ from sql_pilot_engine.metadata.models import (
+     ColumnMetadata,
+     MetadataLookupStatus,
+     TableLookupResult,
+     TableMetadata,
+ )
+-from sql_pilot_engine.metadata.provider import (
+-    MetadataProvider,
+-)
+-from sql_pilot_engine.metadata.catalog import (
+-    MetadataCatalog,
+-)
+-from sql_pilot_engine.program.enums import (
+-    SourceBindingKind,
+-)
++from sql_pilot_engine.metadata.provider import MetadataProvider
++from sql_pilot_engine.program.enums import SourceBindingKind
+ from sql_pilot_engine.program.models import (
+     ProgramScopeAnalysis,
+     ScopeSourceBinding,
+@@ -28,381 +20,150 @@
+ )
+ 
+ 
+-class MetadataObjectRole(
+-    str,
+-    Enum,
+-):
+-    """
+-    一个物理表在 SQLProgram 中承担的角色。
+-
+-    READ_SOURCE：
+-        SQL 从该表读取数据。
+-
+-    WRITE_TARGET：
+-        SQL 向该表写入数据。
+-
+-    同一张物理表理论上可能同时承担两个角色，
+-    因此 Evidence 中不做角色合并。
+-    """
++class MetadataObjectRole(str, Enum):
++    """物理表在 SQLProgram 中承担的角色。"""
+ 
+     READ_SOURCE = "read_source"
+-
+     WRITE_TARGET = "write_target"
+ 
+ 
+-class ColumnResolutionStatus(
+-    str,
+-    Enum,
+-):
+-    """
+-    一个字段引用相对于权威 Metadata 的解析状态。
+-
+-    RESOLVED：
+-        已确定具体物理表，
+-        且字段真实存在。
+-
+-    ABSENT：
+-        已确定具体物理表，
+-        表真实存在，
+-        但字段确认不存在。
+-
+-    SOURCE_ABSENT：
+-        已确定引用的物理表，
+-        但该表在权威 Metadata 中不存在。
+-
+-    SOURCE_ERROR：
+-        MetadataProvider 查询失败。
+-
+-    UNRESOLVED_SOURCE：
+-        SQL 结构自身不足以把字段唯一绑定到一个 Source。
+-        例如多表 JOIN 中的无 qualifier 字段。
+-
+-        这不是 Metadata 不完整。
+-
+-    NON_PHYSICAL_SOURCE：
+-        字段当前绑定到 CTE / derived Scope，
+-        因此不能直接向 Physical Metadata 查询。
+-        后续由 Column Lineage 向上追溯。
+-
+-    SELECT_ALIAS：
+-        当前引用是 SELECT 输出 alias，
+-        不是物理字段引用。
+-    """
++class TableResolutionStatus(str, Enum):
++    """SQL table identifier 相对于权威 Metadata 的解析状态。"""
+ 
+     RESOLVED = "resolved"
+-
+     ABSENT = "absent"
++    AMBIGUOUS = "ambiguous"
++    ERROR = "error"
+ 
+-    SOURCE_ABSENT = "source_absent"
+-
+-    SOURCE_ERROR = "source_error"
+-
+-    UNRESOLVED_SOURCE = (
+-        "unresolved_source"
+-    )
+-
+-    NON_PHYSICAL_SOURCE = (
+-        "non_physical_source"
+-    )
+ 
+-    SELECT_ALIAS = "select_alias"
++class ColumnResolutionStatus(str, Enum):
++    """SQL column reference 相对于权威 Metadata 的解析状态。"""
+ 
+-
+-class TableResolutionStatus(
+-    str,
+-    Enum,
+-):
+     RESOLVED = "resolved"
+-
+     ABSENT = "absent"
+-
+     AMBIGUOUS = "ambiguous"
+ 
+-    ERROR = "error"
+-    
+-
+-@dataclass(
+-    frozen=True,
+-    slots=True,
+-)
+-class TableMetadataResolution:
+-    """
+-    SQL 中一个 table reference
+-    相对于权威 Metadata 的解析结果。
++    SOURCE_ABSENT = "source_absent"
++    SOURCE_AMBIGUOUS = "source_ambiguous"
++    SOURCE_ERROR = "source_error"
+ 
+-    requested_table:
+-        SQL 原始引用。
++    UNRESOLVED_SOURCE = "unresolved_source"
++    NON_PHYSICAL_SOURCE = "non_physical_source"
++    SELECT_ALIAS = "select_alias"
+ 
+-    canonical_table:
+-        唯一解析后的完整物理表名。
+ 
+-    candidates:
+-        AMBIGUOUS 时保存全部候选。
+-    """
++@dataclass(frozen=True, slots=True)
++class TableMetadataResolution:
++    """一个 SQL table reference 的 canonical Metadata 解析结果。"""
+ 
+     role: MetadataObjectRole
+-
+     requested_table: str
+-
+     status: TableResolutionStatus
+ 
+     canonical_table: str | None = None
+-
+-    candidates: tuple[
+-        str,
+-        ...,
+-    ] = ()
+-
++    candidates: tuple[str, ...] = ()
+     metadata: TableMetadata | None = None
+-
+     error_message: str | None = None
+ 
+ 
+-@dataclass(
+-    frozen=True,
+-    slots=True,
+-)
++@dataclass(frozen=True, slots=True)
+ class ColumnMetadataResolution:
+-    """
+-    SQLProgram 中一个 ColumnReference 的 Metadata Evidence。
+-    """
++    """一个 SQL ColumnReference 的 Metadata 解析证据。"""
+ 
+     scope_id: str
+-
+     column: ColumnReference
+-
+     status: ColumnResolutionStatus
+ 
+     source_alias: str | None = None
+-
+     physical_table: str | None = None
+-
+     source_scope_id: str | None = None
+-
++    candidate_tables: tuple[str, ...] = ()
+     metadata: ColumnMetadata | None = None
+-
+     error_message: str | None = None
+ 
+ 
+-@dataclass(
+-    frozen=True,
+-    slots=True,
+-)
++@dataclass(frozen=True, slots=True)
+ class ProgramMetadataEvidence:
+     """
+-    SQLProgram 对权威 Physical Metadata 的解析证据。
++    SQLProgram 对权威 Physical Metadata 的确定性解析证据。
+ 
+-    本 DTO 只表达事实。
+-
+-    它不生成：
+-    - Issue；
+-    - Severity；
+-    - BLOCK / WARNING；
+-    - Fix suggestion。
+-
+-    是否构成问题，由后续 Review /
+-    Generate Validation 决定。
++    这里只表达事实，不产生 Issue / Severity / Fix suggestion。
+     """
+ 
+-    tables: tuple[
+-        TableMetadataResolution,
+-        ...,
+-    ]
+-
+-    columns: tuple[
+-        ColumnMetadataResolution,
+-        ...,
+-    ]
++    tables: tuple[TableMetadataResolution, ...]
++    columns: tuple[ColumnMetadataResolution, ...]
+ 
+ 
+ class ProgramMetadataResolver:
+     """
+-    SQLProgram + MetadataProvider
+-        → ProgramMetadataEvidence
+-
+-    【架构位置】
++    SQLProgram + authoritative Metadata -> ProgramMetadataEvidence。
+ 
+-        SQLProgram
+-            ↓
+-    ProgramMetadataResolver
+-            ↓
+-    ProgramMetadataEvidence
+-
+-    该 Resolver：
+-
+-    - 不修改 SQLProgram；
++    设计原则：
++    - Program 不回写；
++    - Repository 不猜；
++    - Resolver 明确执行 0 / 1 / N 候选判定；
+     - 不依赖 LLM；
+-    - 不做模糊搜索；
+     - 不做 Column Lineage；
+     - 不产生 Review verdict。
+     """
+ 
+     def __init__(
+         self,
++        *,
+         provider: MetadataProvider,
+         catalog: MetadataCatalog,
+     ) -> None:
+         self._provider = provider
+         self._catalog = catalog
+ 
+-    def resolve(
+-        self,
+-        program: SQLProgram,
+-    ) -> ProgramMetadataEvidence:
+-
+-        cache: dict[
+-            str,
+-            TableLookupResult,
+-        ] = {}
+-
+-        tables = (
+-            self._resolve_tables(
+-                program=program,
+-                cache=cache,
+-            )
+-        )
+-
+-        columns = (
+-            self._resolve_columns(
+-                program=program,
+-                cache=cache,
+-            )
+-        )
++    def resolve(self, program: SQLProgram) -> ProgramMetadataEvidence:
++        cache: dict[str, TableLookupResult] = {}
+ 
+         return ProgramMetadataEvidence(
+-            tables=tables,
+-            columns=columns,
++            tables=self._resolve_tables(program=program, cache=cache),
++            columns=self._resolve_columns(program=program, cache=cache),
+         )
+ 
+     def _resolve_tables(
+         self,
+         *,
+         program: SQLProgram,
+-        cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
+-    ) -> tuple[
+-        TableMetadataResolution,
+-        ...,
+-    ]:
+-
+-        requests: list[
+-            tuple[
+-                MetadataObjectRole,
+-                str,
+-            ]
+-        ] = []
+-
+-        seen: set[
+-            tuple[
+-                MetadataObjectRole,
+-                str,
+-            ]
+-        ] = set()
+-
+-        # --------------------------------------------------
+-        # Physical READ sources
+-        # --------------------------------------------------
+-
+-        for scope in (
+-            program.scope_analyses
+-        ):
+-            for binding in (
+-                scope.source_bindings
+-            ):
+-                if (
+-                    binding.kind
+-                    is not (
+-                        SourceBindingKind
+-                        .PHYSICAL_TABLE
+-                    )
+-                ):
++        cache: dict[str, TableLookupResult],
++    ) -> tuple[TableMetadataResolution, ...]:
++        requests: list[tuple[MetadataObjectRole, str]] = []
++        seen: set[tuple[MetadataObjectRole, str]] = set()
++
++        for scope in program.scope_analyses:
++            for binding in scope.source_bindings:
++                if binding.kind is not SourceBindingKind.PHYSICAL_TABLE:
+                     continue
+ 
+-                assert (
+-                    binding.physical_table
+-                    is not None
+-                )
+-
+-                key = (
+-                    MetadataObjectRole
+-                    .READ_SOURCE,
+-                    binding.physical_table,
+-                )
+-
+-                if key in seen:
+-                    continue
+-
+-                seen.add(key)
+-                requests.append(key)
+-
+-        # --------------------------------------------------
+-        # WRITE targets
+-        # --------------------------------------------------
+-
+-        for statement in (
+-            program.statements
+-        ):
+-            target = (
+-                statement.write_target
+-            )
++                assert binding.physical_table is not None
++                key = (MetadataObjectRole.READ_SOURCE, binding.physical_table)
++                if key not in seen:
++                    seen.add(key)
++                    requests.append(key)
+ 
++        for statement in program.statements:
++            target = statement.write_target
+             if target is None:
+                 continue
+ 
+-            table_name = (
+-                target.table_name
+-                .strip()
+-                .lower()
+-            )
+-
+             key = (
+-                MetadataObjectRole
+-                .WRITE_TARGET,
+-                table_name,
+-            )
+-
+-            if key in seen:
+-                continue
+-
+-            seen.add(key)
+-            requests.append(key)
+-
+-        resolutions: list[
+-            TableMetadataResolution
+-        ] = []
+-
+-        for (
+-            role,
+-            table_name,
+-        ) in requests:
+-
+-            result = self._lookup(
+-                table_name=table_name,
+-                cache=cache,
+-            )
+-
+-            resolutions.append(
+-                TableMetadataResolution(
+-                    role=role,
+-                    requested_table=(
+-                        table_name
+-                    ),
+-                    status=(
+-                        result.status
+-                    ),
+-                    metadata=(
+-                        result.table
+-                    ),
+-                    error_message=(
+-                        result.error_message
+-                    ),
+-                )
++                MetadataObjectRole.WRITE_TARGET,
++                target.table_name.strip().lower(),
+             )
++            if key not in seen:
++                seen.add(key)
++                requests.append(key)
+ 
+         return tuple(
+-            resolutions
++            self._resolve_table_identifier(
++                role=role,
++                requested_table=table_name,
++                lookup_cache=cache,
++            )
++            for role, table_name in requests
+         )
+ 
+     def _resolve_table_identifier(
+@@ -410,841 +171,406 @@
+         *,
+         role: MetadataObjectRole,
+         requested_table: str,
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
++        lookup_cache: dict[str, TableLookupResult],
+     ) -> TableMetadataResolution:
++        normalized = requested_table.strip().lower()
+ 
+-        normalized = (
+-            requested_table
+-            .strip()
+-            .lower()
+-        )
+-
+-        # --------------------------------------------------
+-        # 已经带 namespace / project
+-        #
+-        # 必须 exact lookup。
+-        # --------------------------------------------------
++        if not normalized:
++            return TableMetadataResolution(
++                role=role,
++                requested_table=normalized,
++                status=TableResolutionStatus.ABSENT,
++            )
+ 
++        # 已带 project / namespace：权威 exact lookup，不做 fallback。
+         if "." in normalized:
++            return self._table_lookup_to_resolution(
++                role=role,
++                requested_table=normalized,
++                canonical_table=normalized,
++                result=self._lookup(
++                    table_name=normalized,
++                    cache=lookup_cache,
++                ),
++            )
+ 
+-            result = self._lookup(
+-                table_name=normalized,
+-                cache=lookup_cache,
+-            )
+-
+-            if (
+-                result.status
+-                is MetadataLookupStatus.ERROR
+-            ):
+-                return (
+-                    TableMetadataResolution(
+-                        role=role,
+-                        requested_table=normalized,
+-                        status=(
+-                            TableResolutionStatus.ERROR
+-                        ),
+-                        error_message=(
+-                            result.error_message
+-                        ),
+-                    )
+-                )
+-
+-            if (
+-                result.status
+-                is MetadataLookupStatus.NOT_FOUND
+-            ):
+-                return (
+-                    TableMetadataResolution(
+-                        role=role,
+-                        requested_table=normalized,
+-                        status=(
+-                            TableResolutionStatus.ABSENT
+-                        ),
+-                    )
+-                )
++        # 裸表名：从完整 Metadata 中取得全部 exact base-name candidates。
++        candidates = self._catalog.find_table_identifiers(normalized)
++        candidate_names = tuple(
++            sorted({candidate.full_name.lower() for candidate in candidates})
++        )
+ 
+-            if result.table is None:
+-                raise RuntimeError(
+-                    "MetadataProvider returned "
+-                    "FOUND without TableMetadata."
+-                )
++        if not candidate_names:
++            return TableMetadataResolution(
++                role=role,
++                requested_table=normalized,
++                status=TableResolutionStatus.ABSENT,
++            )
+ 
+-            return (
+-                TableMetadataResolution(
+-                    role=role,
+-                    requested_table=normalized,
+-                    status=(
+-                        TableResolutionStatus.RESOLVED
+-                    ),
+-                    canonical_table=(
+-                        result.table.full_name
+-                    ),
+-                    metadata=(
+-                        result.table
+-                    ),
+-                )
++        if len(candidate_names) > 1:
++            return TableMetadataResolution(
++                role=role,
++                requested_table=normalized,
++                status=TableResolutionStatus.AMBIGUOUS,
++                candidates=candidate_names,
+             )
+ 
+-        # --------------------------------------------------
+-        # 没带空间名：
+-        # 查全部 canonical candidates。
+-        # --------------------------------------------------
+-
+-        candidates = (
+-            self._catalog
+-            .find_table_identifiers(
+-                normalized
++        canonical = candidate_names[0]
++        result = self._lookup(table_name=canonical, cache=lookup_cache)
++
++        if result.status is not MetadataLookupStatus.FOUND or result.table is None:
++            return TableMetadataResolution(
++                role=role,
++                requested_table=normalized,
++                status=TableResolutionStatus.ERROR,
++                canonical_table=canonical,
++                error_message=(
++                    "MetadataCatalog resolved "
++                    f"{normalized!r} to {canonical!r}, but MetadataProvider "
++                    "could not load the canonical table."
++                ),
+             )
+-        )
+ 
+-        candidate_names = tuple(
+-            candidate.full_name
+-            for candidate
+-            in candidates
++        return TableMetadataResolution(
++            role=role,
++            requested_table=normalized,
++            status=TableResolutionStatus.RESOLVED,
++            canonical_table=canonical,
++            metadata=result.table,
+         )
+ 
+-        if not candidate_names:
+-
+-            return (
+-                TableMetadataResolution(
+-                    role=role,
+-                    requested_table=normalized,
+-                    status=(
+-                        TableResolutionStatus.ABSENT
+-                    ),
+-                )
++    @staticmethod
++    def _table_lookup_to_resolution(
++        *,
++        role: MetadataObjectRole,
++        requested_table: str,
++        canonical_table: str,
++        result: TableLookupResult,
++    ) -> TableMetadataResolution:
++        if result.status is MetadataLookupStatus.ERROR:
++            return TableMetadataResolution(
++                role=role,
++                requested_table=requested_table,
++                status=TableResolutionStatus.ERROR,
++                canonical_table=canonical_table,
++                error_message=result.error_message,
+             )
+ 
+-        if len(candidate_names) > 1:
++        if result.status is MetadataLookupStatus.NOT_FOUND:
++            return TableMetadataResolution(
++                role=role,
++                requested_table=requested_table,
++                status=TableResolutionStatus.ABSENT,
++            )
+ 
+-            return (
+-                TableMetadataResolution(
+-                    role=role,
+-                    requested_table=normalized,
+-                    status=(
+-                        TableResolutionStatus
+-                        .AMBIGUOUS
+-                    ),
+-                    candidates=(
+-                        candidate_names
+-                    ),
+-                )
++        if result.table is None:
++            raise RuntimeError(
++                "MetadataProvider returned FOUND without TableMetadata."
+             )
+ 
+-        canonical = (
+-            candidate_names[0]
++        return TableMetadataResolution(
++            role=role,
++            requested_table=requested_table,
++            status=TableResolutionStatus.RESOLVED,
++            canonical_table=result.table.full_name,
++            metadata=result.table,
+         )
+ 
+-        result = self._lookup(
+-            table_name=canonical,
+-            cache=lookup_cache,
+-        )
++    def _resolve_columns(
++        self,
++        *,
++        program: SQLProgram,
++        cache: dict[str, TableLookupResult],
++    ) -> tuple[ColumnMetadataResolution, ...]:
++        resolutions: list[ColumnMetadataResolution] = []
+ 
+-        # Catalog 与 Provider 使用同一权威事实库，
+-        # 这里理论上必须 FOUND。
+-        if (
+-            result.status
+-            is not MetadataLookupStatus.FOUND
+-            or result.table is None
+-        ):
+-            return (
+-                TableMetadataResolution(
+-                    role=role,
+-                    requested_table=normalized,
+-                    status=(
+-                        TableResolutionStatus.ERROR
+-                    ),
+-                    canonical_table=(
+-                        canonical
+-                    ),
+-                    error_message=(
+-                        "MetadataCatalog resolved "
+-                        f"{normalized!r} to "
+-                        f"{canonical!r}, but "
+-                        "MetadataProvider could not "
+-                        "load the canonical table."
+-                    ),
++        for scope in program.scope_analyses:
++            for column in scope.facts.column_references:
++                resolutions.append(
++                    self._resolve_column(
++                        scope=scope,
++                        column=column,
++                        cache=cache,
++                    )
+                 )
++
++        return tuple(resolutions)
++
++    def _resolve_column(
++        self,
++        *,
++        scope: ProgramScopeAnalysis,
++        column: ColumnReference,
++        cache: dict[str, TableLookupResult],
++    ) -> ColumnMetadataResolution:
++        if column.qualifier is None:
++            return self._resolve_unqualified_column(
++                scope=scope,
++                column=column,
++                lookup_cache=cache,
+             )
+ 
+-        return (
+-            TableMetadataResolution(
+-                role=role,
+-                requested_table=normalized,
+-                status=(
+-                    TableResolutionStatus.RESOLVED
+-                ),
+-                canonical_table=(
+-                    canonical
+-                ),
+-                metadata=(
+-                    result.table
+-                ),
++        binding = self._resolve_qualified_binding(scope=scope, column=column)
++
++        if binding is None:
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
++                column=column,
++                status=ColumnResolutionStatus.UNRESOLVED_SOURCE,
+             )
+-        )
+ 
++        return self._resolve_column_from_binding(
++            scope=scope,
++            column=column,
++            binding=binding,
++            lookup_cache=cache,
++        )
+ 
+     def _resolve_unqualified_column(
+         self,
+         *,
+         scope: ProgramScopeAnalysis,
+         column: ColumnReference,
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
++        lookup_cache: dict[str, TableLookupResult],
+     ) -> ColumnMetadataResolution:
+-
+         resolved_candidates: list[
+-            tuple[
+-                ScopeSourceBinding,
+-                TableMetadata,
+-                ColumnMetadata,
+-            ]
++            tuple[ScopeSourceBinding, TableMetadata, ColumnMetadata]
+         ] = []
+ 
+-        ambiguous_sources: list[str] = []
+-
++        ambiguous_tables: set[str] = set()
++        absent_sources: set[str] = set()
+         has_non_physical_source = False
+-
+         has_unresolved_source = False
+ 
+-        for binding in (
+-            scope.source_bindings
+-        ):
+-
+-            # ----------------------------------------------
+-            # CTE / subquery
+-            #
+-            # Metadata 无法直接证明内部字段来源，
+-            # 留给 4.5 Lineage。
+-            # ----------------------------------------------
+-
+-            if (
+-                binding.kind
+-                is SourceBindingKind.SCOPE
+-            ):
++        for binding in scope.source_bindings:
++            if binding.kind is SourceBindingKind.SCOPE:
+                 has_non_physical_source = True
+                 continue
+ 
+-            if (
+-                binding.kind
+-                is SourceBindingKind.UNRESOLVED
+-            ):
++            if binding.kind is SourceBindingKind.UNRESOLVED:
+                 has_unresolved_source = True
+                 continue
+ 
+-            assert (
+-                binding.physical_table
+-                is not None
+-            )
++            assert binding.physical_table is not None
+ 
+-            table_resolution = (
+-                self._resolve_table_identifier(
+-                    role=(
+-                        MetadataObjectRole
+-                        .READ_SOURCE
+-                    ),
+-                    requested_table=(
+-                        binding.physical_table
+-                    ),
+-                    lookup_cache=(
+-                        lookup_cache
+-                    ),
+-                )
++            table_resolution = self._resolve_table_identifier(
++                role=MetadataObjectRole.READ_SOURCE,
++                requested_table=binding.physical_table,
++                lookup_cache=lookup_cache,
+             )
+ 
+-            if (
+-                table_resolution.status
+-                is TableResolutionStatus.AMBIGUOUS
+-            ):
+-                ambiguous_sources.append(
+-                    binding.alias
++            if table_resolution.status is TableResolutionStatus.ERROR:
++                return ColumnMetadataResolution(
++                    scope_id=scope.scope_id,
++                    column=column,
++                    status=ColumnResolutionStatus.SOURCE_ERROR,
++                    source_alias=binding.alias,
++                    error_message=table_resolution.error_message,
+                 )
+ 
++            if table_resolution.status is TableResolutionStatus.AMBIGUOUS:
++                ambiguous_tables.update(table_resolution.candidates)
+                 continue
+ 
+-            if (
+-                table_resolution.status
+-                is TableResolutionStatus.ERROR
+-            ):
+-                return (
+-                    ColumnMetadataResolution(
+-                        scope_id=scope.scope_id,
+-                        column=column,
+-                        status=(
+-                            ColumnResolutionStatus
+-                            .SOURCE_ERROR
+-                        ),
+-                        source_alias=(
+-                            binding.alias
+-                        ),
+-                        error_message=(
+-                            table_resolution
+-                            .error_message
+-                        ),
+-                    )
+-                )
+-
+-            if (
+-                table_resolution.status
+-                is TableResolutionStatus.ABSENT
+-            ):
+-                return (
+-                    ColumnMetadataResolution(
+-                        scope_id=scope.scope_id,
+-                        column=column,
+-                        status=(
+-                            ColumnResolutionStatus
+-                            .SOURCE_ABSENT
+-                        ),
+-                        source_alias=(
+-                            binding.alias
+-                        ),
+-                    )
+-                )
+-
+-            table = (
+-                table_resolution.metadata
+-            )
+-
+-            assert table is not None
+-
+-            column_metadata = (
+-                table.get_column(
+-                    column.name
+-                )
+-            )
+-
+-            if column_metadata is None:
++            if table_resolution.status is TableResolutionStatus.ABSENT:
++                absent_sources.add(binding.physical_table)
+                 continue
+ 
+-            resolved_candidates.append(
+-                (
+-                    binding,
+-                    table,
+-                    column_metadata,
++            table = table_resolution.metadata
++            if table is None:
++                raise RuntimeError(
++                    "RESOLVED table resolution has no TableMetadata."
+                 )
+-            )
+-
+-        # --------------------------------------------------
+-        # 表本身存在命名歧义。
+-        # --------------------------------------------------
+ 
+-        if ambiguous_sources:
++            column_metadata = table.get_column(column.name)
++            if column_metadata is not None:
++                resolved_candidates.append((binding, table, column_metadata))
+ 
+-            return (
+-                ColumnMetadataResolution(
+-                    scope_id=scope.scope_id,
+-                    column=column,
+-                    status=(
+-                        ColumnResolutionStatus
+-                        .SOURCE_AMBIGUOUS
+-                    ),
+-                    error_message=(
+-                        "Ambiguous source table "
+-                        "identifiers: "
+-                        + ", ".join(
+-                            ambiguous_sources
+-                        )
+-                    ),
+-                )
++        if ambiguous_tables:
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
++                column=column,
++                status=ColumnResolutionStatus.SOURCE_AMBIGUOUS,
++                candidate_tables=tuple(sorted(ambiguous_tables)),
+             )
+ 
+-        # --------------------------------------------------
+-        # 两张以上物理表都拥有此字段。
+-        # --------------------------------------------------
+-
+-        if (
+-            len(resolved_candidates)
+-            > 1
+-        ):
+-
+-            candidate_tables = tuple(
+-                table.full_name
+-                for (
+-                    _,
+-                    table,
+-                    _,
+-                )
+-                in resolved_candidates
++        if absent_sources:
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
++                column=column,
++                status=ColumnResolutionStatus.SOURCE_ABSENT,
++                candidate_tables=tuple(sorted(absent_sources)),
+             )
+ 
+-            return (
+-                ColumnMetadataResolution(
+-                    scope_id=scope.scope_id,
+-                    column=column,
+-                    status=(
+-                        ColumnResolutionStatus
+-                        .AMBIGUOUS
+-                    ),
+-                    candidate_tables=(
+-                        candidate_tables
+-                    ),
+-                )
++        if len(resolved_candidates) > 1:
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
++                column=column,
++                status=ColumnResolutionStatus.AMBIGUOUS,
++                candidate_tables=tuple(
++                    sorted(table.full_name for _, table, _ in resolved_candidates)
++                ),
+             )
+ 
+-        # --------------------------------------------------
+-        # 唯一物理表拥有该字段。
+-        # --------------------------------------------------
+-
+-        if (
+-            len(resolved_candidates)
+-            == 1
+-        ):
+-            (
+-                binding,
+-                table,
+-                column_metadata,
+-            ) = resolved_candidates[0]
+-
+-            # 如果当前同时存在 CTE / unresolved source，
+-            # Metadata 单独不能证明 CTE 中没有同名字段。
+-            #
+-            # 4.5 使用 SQLGlot qualify + lineage
+-            # 后再完成最终消歧。
+-            if (
+-                has_non_physical_source
+-                or has_unresolved_source
+-            ):
+-                return (
+-                    ColumnMetadataResolution(
+-                        scope_id=scope.scope_id,
+-                        column=column,
+-                        status=(
+-                            ColumnResolutionStatus
+-                            .UNRESOLVED_SOURCE
+-                        ),
+-                        physical_table=(
+-                            table.full_name
+-                        ),
+-                        error_message=(
+-                            "A physical metadata "
+-                            "candidate exists, but "
+-                            "the scope also contains "
+-                            "non-physical or unresolved "
+-                            "sources."
+-                        ),
+-                    )
+-                )
++        if len(resolved_candidates) == 1:
++            binding, table, column_metadata = resolved_candidates[0]
+ 
+-            return (
+-                ColumnMetadataResolution(
++            # 还有 CTE / derived / unresolved source 时，Physical Metadata
++            # 无法单独证明该字段只属于这个物理表，留给 4.5 lineage。
++            if has_non_physical_source or has_unresolved_source:
++                return ColumnMetadataResolution(
+                     scope_id=scope.scope_id,
+                     column=column,
+-                    status=(
+-                        ColumnResolutionStatus
+-                        .RESOLVED
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    physical_table=(
+-                        table.full_name
+-                    ),
+-                    metadata=(
+-                        column_metadata
++                    status=ColumnResolutionStatus.UNRESOLVED_SOURCE,
++                    physical_table=table.full_name,
++                    error_message=(
++                        "A physical metadata candidate exists, but the scope also "
++                        "contains non-physical or unresolved sources."
+                     ),
+                 )
+-            )
+ 
+-        # --------------------------------------------------
+-        # 没有物理表拥有字段。
+-        # --------------------------------------------------
+-
+-        if (
+-            has_non_physical_source
+-            or has_unresolved_source
+-        ):
+-            return (
+-                ColumnMetadataResolution(
+-                    scope_id=scope.scope_id,
+-                    column=column,
+-                    status=(
+-                        ColumnResolutionStatus
+-                        .UNRESOLVED_SOURCE
+-                    ),
+-                )
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
++                column=column,
++                status=ColumnResolutionStatus.RESOLVED,
++                source_alias=binding.alias,
++                physical_table=table.full_name,
++                metadata=column_metadata,
+             )
+ 
+-        return (
+-            ColumnMetadataResolution(
++        if has_non_physical_source or has_unresolved_source:
++            return ColumnMetadataResolution(
+                 scope_id=scope.scope_id,
+                 column=column,
+-                status=(
+-                    ColumnResolutionStatus
+-                    .ABSENT
+-                ),
++                status=ColumnResolutionStatus.UNRESOLVED_SOURCE,
+             )
+-        )
+ 
+-    def _resolve_columns(
+-        self,
+-        *,
+-        program: SQLProgram,
+-        cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
+-    ) -> tuple[
+-        ColumnMetadataResolution,
+-        ...,
+-    ]:
+-
+-        resolutions: list[
+-            ColumnMetadataResolution
+-        ] = []
+-
+-        for scope in (
+-            program.scope_analyses
+-        ):
+-
+-            for column in (
+-                scope
+-                .facts
+-                .column_references
+-            ):
+-                resolutions.append(
+-                    self._resolve_column(
+-                        scope=scope,
+-                        column=column,
+-                        cache=cache,
+-                    )
+-                )
++        # 只有在没有物理候选时，才把显式 SELECT alias 作为 alias 事实。
++        # 这样不会优先把同名真实字段误判成 alias。
++        if column.name in scope.facts.select_aliases:
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
++                column=column,
++                status=ColumnResolutionStatus.SELECT_ALIAS,
++            )
+ 
+-        return tuple(
+-            resolutions
++        return ColumnMetadataResolution(
++            scope_id=scope.scope_id,
++            column=column,
++            status=ColumnResolutionStatus.ABSENT,
+         )
+ 
+-    def _resolve_column(
++    def _resolve_column_from_binding(
+         self,
+         *,
+         scope: ProgramScopeAnalysis,
+         column: ColumnReference,
+-        cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
++        binding: ScopeSourceBinding,
++        lookup_cache: dict[str, TableLookupResult],
+     ) -> ColumnMetadataResolution:
+-
+-        # --------------------------------------------------
+-        # SELECT alias 不是物理字段
+-        #
+-        # SQLFacts 本身已经保存 select_aliases。
+-        # 例如：
+-        #
+-        # SUM(amount) AS total_amount
+-        # ORDER BY total_amount
+-        #
+-        # total_amount 不应查询 Metadata。
+-        # --------------------------------------------------
+-
+-        if (
+-            column.qualifier is None
+-        ):
+-            return (
+-                self._resolve_unqualified_column(
+-                    scope=scope,
+-                    column=column,
+-                    lookup_cache=cache,
+-                )
+-            )
+-
+-        binding = (
+-            self._resolve_binding(
+-                scope=scope,
++        if binding.kind is SourceBindingKind.UNRESOLVED:
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
+                 column=column,
+-            )
+-        )
+-
+-        if binding is None:
+-            return (
+-                ColumnMetadataResolution(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnResolutionStatus
+-                        .UNRESOLVED_SOURCE
+-                    ),
+-                )
++                status=ColumnResolutionStatus.UNRESOLVED_SOURCE,
++                source_alias=binding.alias,
++                error_message=binding.unresolved_reason,
+             )
+ 
+-        # --------------------------------------------------
+-        # ScopeSourceBinding 本身未解析
+-        # --------------------------------------------------
+-
+-        if (
+-            binding.kind
+-            is SourceBindingKind.UNRESOLVED
+-        ):
+-            return (
+-                ColumnMetadataResolution(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnResolutionStatus
+-                        .UNRESOLVED_SOURCE
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    error_message=(
+-                        binding
+-                        .unresolved_reason
+-                    ),
+-                )
+-            )
+-
+-        # --------------------------------------------------
+-        # CTE / derived scope
+-        #
+-        # 不是 Metadata 不完整，
+-        # 而是当前引用不是物理 Source。
+-        # --------------------------------------------------
+-
+-        if (
+-            binding.kind
+-            is SourceBindingKind.SCOPE
+-        ):
+-            return (
+-                ColumnMetadataResolution(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnResolutionStatus
+-                        .NON_PHYSICAL_SOURCE
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    source_scope_id=(
+-                        binding
+-                        .source_scope_id
+-                    ),
+-                )
++        if binding.kind is SourceBindingKind.SCOPE:
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
++                column=column,
++                status=ColumnResolutionStatus.NON_PHYSICAL_SOURCE,
++                source_alias=binding.alias,
++                source_scope_id=binding.source_scope_id,
+             )
+ 
+-        assert (
+-            binding.kind
+-            is (
+-                SourceBindingKind
+-                .PHYSICAL_TABLE
+-            )
+-        )
++        assert binding.physical_table is not None
+ 
+-        assert (
+-            binding.physical_table
+-            is not None
++        table_resolution = self._resolve_table_identifier(
++            role=MetadataObjectRole.READ_SOURCE,
++            requested_table=binding.physical_table,
++            lookup_cache=lookup_cache,
+         )
+ 
+-        table_name = (
+-            binding.physical_table
+-        )
+-
+-        result = self._lookup(
+-            table_name=table_name,
+-            cache=cache,
+-        )
+-
+-        if (
+-            result.status
+-            is MetadataLookupStatus.NOT_FOUND
+-        ):
+-            return (
+-                ColumnMetadataResolution(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnResolutionStatus
+-                        .SOURCE_ABSENT
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    physical_table=(
+-                        table_name
+-                    ),
+-                )
++        if table_resolution.status is TableResolutionStatus.ERROR:
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
++                column=column,
++                status=ColumnResolutionStatus.SOURCE_ERROR,
++                source_alias=binding.alias,
++                error_message=table_resolution.error_message,
+             )
+ 
+-        if (
+-            result.status
+-            is MetadataLookupStatus.ERROR
+-        ):
+-            return (
+-                ColumnMetadataResolution(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnResolutionStatus
+-                        .SOURCE_ERROR
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    physical_table=(
+-                        table_name
+-                    ),
+-                    error_message=(
+-                        result.error_message
+-                    ),
+-                )
++        if table_resolution.status is TableResolutionStatus.AMBIGUOUS:
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
++                column=column,
++                status=ColumnResolutionStatus.SOURCE_AMBIGUOUS,
++                source_alias=binding.alias,
++                candidate_tables=table_resolution.candidates,
+             )
+ 
+-        table = result.table
+-
+-        if table is None:
+-            raise RuntimeError(
+-                "MetadataProvider returned "
+-                "FOUND without TableMetadata."
++        if table_resolution.status is TableResolutionStatus.ABSENT:
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
++                column=column,
++                status=ColumnResolutionStatus.SOURCE_ABSENT,
++                source_alias=binding.alias,
++                physical_table=binding.physical_table,
+             )
+ 
+-        column_metadata = (
+-            table.get_column(
+-                column.name
+-            )
+-        )
++        table = table_resolution.metadata
++        if table is None:
++            raise RuntimeError("RESOLVED table resolution has no TableMetadata.")
+ 
++        column_metadata = table.get_column(column.name)
+         if column_metadata is None:
+-            return (
+-                ColumnMetadataResolution(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnResolutionStatus
+-                        .ABSENT
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    physical_table=(
+-                        table_name
+-                    ),
+-                )
+-            )
+-
+-        return (
+-            ColumnMetadataResolution(
+-                scope_id=(
+-                    scope.scope_id
+-                ),
++            return ColumnMetadataResolution(
++                scope_id=scope.scope_id,
+                 column=column,
+-                status=(
+-                    ColumnResolutionStatus
+-                    .RESOLVED
+-                ),
+-                source_alias=(
+-                    binding.alias
+-                ),
+-                physical_table=(
+-                    table_name
+-                ),
+-                metadata=(
+-                    column_metadata
+-                ),
++                status=ColumnResolutionStatus.ABSENT,
++                source_alias=binding.alias,
++                physical_table=table.full_name,
+             )
++
++        return ColumnMetadataResolution(
++            scope_id=scope.scope_id,
++            column=column,
++            status=ColumnResolutionStatus.RESOLVED,
++            source_alias=binding.alias,
++            physical_table=table.full_name,
++            metadata=column_metadata,
+         )
+ 
+     @staticmethod
+-    def _resolve_binding(
++    def _resolve_qualified_binding(
+         *,
+         scope: ProgramScopeAnalysis,
+         column: ColumnReference,
+     ) -> ScopeSourceBinding | None:
+-        """
+-        ColumnReference → ScopeSourceBinding。
+-
+-        规则刻意保守：
+-
+-        1. 有 qualifier：
+-           必须 exact alias match。
+-
+-        2. 无 qualifier：
+-           当前 Scope 恰好只有一个 Source，
+-           才允许自动绑定。
+-
+-        3. 多 Source：
+-           不猜。
+-        """
+-
+-        if column.qualifier:
+-
+-            qualifier = (
+-                column.qualifier
+-                .strip()
+-                .lower()
+-            )
+-
+-            for binding in (
+-                scope.source_bindings
+-            ):
+-                if (
+-                    binding.alias
+-                    == qualifier
+-                ):
+-                    return binding
+-
++        qualifier = (column.qualifier or "").strip().lower()
++        if not qualifier:
+             return None
+ 
+-        if (
+-            len(
+-                scope.source_bindings
+-            )
+-            != 1
+-        ):
+-            return None
++        for binding in scope.source_bindings:
++            if binding.alias == qualifier:
++                return binding
+ 
+-        return (
+-            scope.source_bindings[0]
+-        )
++        return None
+ 
+     def _lookup(
+         self,
+         *,
+         table_name: str,
+-        cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
++        cache: dict[str, TableLookupResult],
+     ) -> TableLookupResult:
+-
+-        normalized = (
+-            table_name
+-            .strip()
+-            .lower()
+-        )
+-
+-        result = cache.get(
+-            normalized
+-        )
+-
+-        if result is not None:
+-            return result
+-
+-        result = (
+-            self._provider
+-            .get_table(
+-                normalized
+-            )
+-        )
+-
+-        cache[
+-            normalized
+-        ] = result
+-
+-        return result
+\ No newline at end of file
++        normalized = table_name.strip().lower()
++        cached = cache.get(normalized)
++        if cached is not None:
++            return cached
++
++        result = self._provider.get_table(normalized)
++        cache[normalized] = result
++        return result
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' agent3_original/Agent3.0-main/sql_pilot_engine/metadata/ingestion/excel.py agent3_calibrate/Agent3.0-main/sql_pilot_engine/metadata/ingestion/excel.py
+--- agent3_original/Agent3.0-main/sql_pilot_engine/metadata/ingestion/excel.py	2026-09-08 07:18:23.000000000 +0000
++++ agent3_calibrate/Agent3.0-main/sql_pilot_engine/metadata/ingestion/excel.py	2026-09-08 15:21:32.939980474 +0000
+@@ -56,10 +56,15 @@
+     table_name: str,
+ ) -> str:
+ 
+-    prefix = (
++    base_table_name = (
+         table_name
+         .strip()
+         .lower()
++        .split(".")[-1]
++    )
++
++    prefix = (
++        base_table_name
+         .split("_", 1)[0]
+     )
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' agent3_original/Agent3.0-main/sql_pilot_engine/metadata/sqlite_repository.py agent3_calibrate/Agent3.0-main/sql_pilot_engine/metadata/sqlite_repository.py
+--- agent3_original/Agent3.0-main/sql_pilot_engine/metadata/sqlite_repository.py	2026-09-08 07:18:23.000000000 +0000
++++ agent3_calibrate/Agent3.0-main/sql_pilot_engine/metadata/sqlite_repository.py	2026-09-08 15:22:53.287426283 +0000
+@@ -154,60 +154,29 @@
+                 .not_found()
+             )
+ 
+-        names = [
+-            normalized
+-        ]
+-
+-        # SQL 可能出现：
+-        # project.table_name
+-        #
+-        # 当前 Metadata Source
+-        # 可能只保存 table_name。
+-        if "." in normalized:
+-
+-            base_name = (
+-                normalized
+-                .rsplit(
+-                    ".",
+-                    1,
+-                )[-1]
+-            )
+-
+-            if base_name not in names:
+-                names.append(
+-                    base_name
+-                )
+-
+         try:
+             with self._connect() as connection:
+ 
+-                table_row = None
+-
+-                for name in names:
+-
+-                    table_row = (
+-                        connection.execute(
+-                            """
+-                            SELECT
+-                                id,
+-                                full_name,
+-                                description,
+-                                layer,
+-                                row_count,
+-                                size_bytes
+-                            FROM metadata_table
+-                            WHERE full_name = ?
+-                            LIMIT 1
+-                            """,
+-                            (
+-                                name,
+-                            ),
+-                        )
+-                        .fetchone()
++                table_row = (
++                    connection.execute(
++                        """
++                        SELECT
++                            id,
++                            full_name,
++                            description,
++                            layer,
++                            row_count,
++                            size_bytes
++                        FROM metadata_table
++                        WHERE full_name = ?
++                        LIMIT 1
++                        """,
++                        (
++                            normalized,
++                        ),
+                     )
+-
+-                    if table_row is not None:
+-                        break
++                    .fetchone()
++                )
+ 
+                 if table_row is None:
+ 
+@@ -979,36 +948,3 @@
+                 or ""
+             ),
+         )
+-
+-    @staticmethod
+-    def _normalize_table_lookup_name(
+-        table_name: str,
+-    ) -> str:
+-        """
+-        将 Runtime SQL 中的物理表标识
+-        转换为当前 Metadata V1 的表名口径。
+-
+-        当前 Metadata DB 以裸物理表名作为身份：
+-
+-            odps_prd_dwd.ods_hd_100_cldkxx
+-            -> ods_hd_100_cldkxx
+-
+-        同时兼容反引号等 SQL 标识符包装。
+-        """
+-
+-        normalized = (
+-            table_name
+-            .strip()
+-            .replace("`", "")
+-            .replace('"', "")
+-        )
+-
+-        if not normalized:
+-            return ""
+-
+-        return (
+-            normalized
+-            .split(".")[-1]
+-            .strip()
+-            .lower()
+-        )
+\ No newline at end of file
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' agent3_original/Agent3.0-main/sql_pilot_engine/program/builder.py agent3_calibrate/Agent3.0-main/sql_pilot_engine/program/builder.py
+--- agent3_original/Agent3.0-main/sql_pilot_engine/program/builder.py	2026-09-08 07:18:23.000000000 +0000
++++ agent3_calibrate/Agent3.0-main/sql_pilot_engine/program/builder.py	2026-09-08 15:22:53.287737303 +0000
+@@ -558,8 +558,8 @@
+             1 ParameterBinding
+             occurrences = 3
+ 
+-        usage_kinds 当前保持为空。
+-        参数用途必须在具有 AST / Scope 上下文后再分析。
++        Program 层只聚合同名参数的 occurrence。
++        参数用途不属于 SQLProgram Contract。
+         """
+ 
+         grouped: dict[
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' agent3_original/Agent3.0-main/sql_pilot_engine/program/metadata_coverage.py agent3_calibrate/Agent3.0-main/sql_pilot_engine/program/metadata_coverage.py
+--- agent3_original/Agent3.0-main/sql_pilot_engine/program/metadata_coverage.py	2026-09-08 07:18:23.000000000 +0000
++++ agent3_calibrate/Agent3.0-main/sql_pilot_engine/program/metadata_coverage.py	1970-01-01 00:00:00.000000000 +0000
+@@ -1,653 +0,0 @@
+-from __future__ import annotations
+-
+-from dataclasses import dataclass
+-from enum import Enum
+-
+-from sql_pilot_engine.analysis.facts import (
+-    ColumnReference,
+-)
+-from sql_pilot_engine.metadata.models import (
+-    ColumnMetadata,
+-    MetadataLookupStatus,
+-    TableLookupResult,
+-    TableMetadata,
+-)
+-from sql_pilot_engine.metadata.provider import (
+-    MetadataProvider,
+-)
+-from sql_pilot_engine.program.models import (
+-    ProgramScopeAnalysis,
+-    ScopeSourceBinding,
+-    SQLProgram,
+-)
+-
+-
+-class MetadataObjectRole(
+-    str,
+-    Enum,
+-):
+-    """
+-    Program 中物理表的角色。
+-
+-    同一张表可能同时作为：
+-    - READ_SOURCE
+-    - WRITE_TARGET
+-
+-    两种 Evidence 必须保留为不同角色。
+-    """
+-
+-    READ_SOURCE = "read_source"
+-    WRITE_TARGET = "write_target"
+-
+-
+-class ColumnMetadataEvidenceStatus(
+-    str,
+-    Enum,
+-):
+-    """
+-    字段 Metadata Evidence 状态。
+-
+-    注意：
+-    这是事实状态，
+-    不是 Review Severity。
+-    """
+-
+-    FOUND = "found"
+-
+-    NOT_FOUND = "not_found"
+-
+-    UNRESOLVED = "unresolved"
+-
+-    SOURCE_NOT_FOUND = (
+-        "source_not_found"
+-    )
+-
+-    SOURCE_ERROR = "source_error"
+-
+-    NON_PHYSICAL_SOURCE = (
+-        "non_physical_source"
+-    )
+-
+-
+-@dataclass(
+-    frozen=True,
+-    slots=True,
+-)
+-class TableMetadataEvidence:
+-    """
+-    一个物理表的 Metadata 查询证据。
+-    """
+-
+-    role: MetadataObjectRole
+-
+-    requested_table: str
+-
+-    status: MetadataLookupStatus
+-
+-    metadata: TableMetadata | None = None
+-
+-    error_message: str | None = None
+-
+-
+-@dataclass(
+-    frozen=True,
+-    slots=True,
+-)
+-class ColumnMetadataEvidence:
+-    """
+-    一个 Scope 内字段引用的 Metadata Evidence。
+-    """
+-
+-    scope_id: str
+-
+-    column: ColumnReference
+-
+-    status: (
+-        ColumnMetadataEvidenceStatus
+-    )
+-
+-    source_alias: str | None = None
+-
+-    physical_table: str | None = None
+-
+-    source_scope_id: str | None = None
+-
+-    metadata: ColumnMetadata | None = None
+-
+-    error_message: str | None = None
+-
+-
+-@dataclass(
+-    frozen=True,
+-    slots=True,
+-)
+-class ProgramMetadataCoverage:
+-    """
+-    SQLProgram 与 Metadata Plane
+-    建立出的确定性 Coverage Evidence。
+-
+-    不生成：
+-    - Issue
+-    - Severity
+-    - BLOCK / WARNING
+-    """
+-
+-    table_evidence: tuple[
+-        TableMetadataEvidence,
+-        ...,
+-    ]
+-
+-    column_evidence: tuple[
+-        ColumnMetadataEvidence,
+-        ...,
+-    ]
+-
+-
+-class ProgramMetadataCoverageService:
+-    """
+-    SQLProgram → Metadata Evidence。
+-
+-    【架构位置】
+-
+-        ProgramAnalysisService
+-                ↓
+-            SQLProgram
+-                ↓
+-    ProgramMetadataCoverageService
+-                ↓
+-      ProgramMetadataCoverage
+-
+-    这里只回答：
+-
+-        Metadata 能证明什么？
+-
+-    不回答：
+-
+-        这是不是一个 SQL 问题？
+-    """
+-
+-    def __init__(
+-        self,
+-        provider: MetadataProvider,
+-    ) -> None:
+-        self._provider = provider
+-
+-    def collect(
+-        self,
+-        program: SQLProgram,
+-    ) -> ProgramMetadataCoverage:
+-
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ] = {}
+-
+-        table_evidence = (
+-            self._collect_table_evidence(
+-                program=program,
+-                lookup_cache=(
+-                    lookup_cache
+-                ),
+-            )
+-        )
+-
+-        column_evidence = (
+-            self._collect_column_evidence(
+-                program=program,
+-                lookup_cache=(
+-                    lookup_cache
+-                ),
+-            )
+-        )
+-
+-        return ProgramMetadataCoverage(
+-            table_evidence=(
+-                table_evidence
+-            ),
+-            column_evidence=(
+-                column_evidence
+-            ),
+-        )
+-
+-    def _collect_table_evidence(
+-        self,
+-        *,
+-        program: SQLProgram,
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
+-    ) -> tuple[
+-        TableMetadataEvidence,
+-        ...,
+-    ]:
+-
+-        requested: list[
+-            tuple[
+-                MetadataObjectRole,
+-                str,
+-            ]
+-        ] = []
+-
+-        seen: set[
+-            tuple[
+-                MetadataObjectRole,
+-                str,
+-            ]
+-        ] = set()
+-
+-        # -----------------------------------------------
+-        # READ SOURCE
+-        # -----------------------------------------------
+-
+-        for scope in (
+-            program.scope_analyses
+-        ):
+-            for binding in (
+-                scope.source_bindings
+-            ):
+-                if (
+-                    binding.physical_table
+-                    is None
+-                ):
+-                    continue
+-
+-                key = (
+-                    MetadataObjectRole
+-                    .READ_SOURCE,
+-                    binding.physical_table,
+-                )
+-
+-                if key in seen:
+-                    continue
+-
+-                seen.add(
+-                    key
+-                )
+-
+-                requested.append(
+-                    key
+-                )
+-
+-        # -----------------------------------------------
+-        # WRITE TARGET
+-        # -----------------------------------------------
+-
+-        for statement in (
+-            program.statements
+-        ):
+-            target = (
+-                statement.write_target
+-            )
+-
+-            if target is None:
+-                continue
+-
+-            table_name = (
+-                target.table_name
+-                .strip()
+-                .lower()
+-            )
+-
+-            key = (
+-                MetadataObjectRole
+-                .WRITE_TARGET,
+-                table_name,
+-            )
+-
+-            if key in seen:
+-                continue
+-
+-            seen.add(
+-                key
+-            )
+-
+-            requested.append(
+-                key
+-            )
+-
+-        evidence: list[
+-            TableMetadataEvidence
+-        ] = []
+-
+-        for (
+-            role,
+-            table_name,
+-        ) in requested:
+-
+-            lookup = self._lookup_table(
+-                table_name=table_name,
+-                lookup_cache=(
+-                    lookup_cache
+-                ),
+-            )
+-
+-            evidence.append(
+-                TableMetadataEvidence(
+-                    role=role,
+-                    requested_table=(
+-                        table_name
+-                    ),
+-                    status=(
+-                        lookup.status
+-                    ),
+-                    metadata=(
+-                        lookup.table
+-                    ),
+-                    error_message=(
+-                        lookup.error_message
+-                    ),
+-                )
+-            )
+-
+-        return tuple(
+-            evidence
+-        )
+-
+-    def _collect_column_evidence(
+-        self,
+-        *,
+-        program: SQLProgram,
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
+-    ) -> tuple[
+-        ColumnMetadataEvidence,
+-        ...,
+-    ]:
+-
+-        evidence: list[
+-            ColumnMetadataEvidence
+-        ] = []
+-
+-        for scope in (
+-            program.scope_analyses
+-        ):
+-
+-            for column in (
+-                scope
+-                .facts
+-                .column_references
+-            ):
+-
+-                evidence.append(
+-                    self._resolve_column(
+-                        scope=scope,
+-                        column=column,
+-                        lookup_cache=(
+-                            lookup_cache
+-                        ),
+-                    )
+-                )
+-
+-        return tuple(
+-            evidence
+-        )
+-
+-    def _resolve_column(
+-        self,
+-        *,
+-        scope: ProgramScopeAnalysis,
+-        column: ColumnReference,
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
+-    ) -> ColumnMetadataEvidence:
+-
+-        binding = (
+-            self._resolve_source_binding(
+-                scope=scope,
+-                column=column,
+-            )
+-        )
+-
+-        if binding is None:
+-
+-            return (
+-                ColumnMetadataEvidence(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnMetadataEvidenceStatus
+-                        .UNRESOLVED
+-                    ),
+-                )
+-            )
+-
+-        if (
+-            binding.physical_table
+-            is None
+-        ):
+-
+-            return (
+-                ColumnMetadataEvidence(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnMetadataEvidenceStatus
+-                        .NON_PHYSICAL_SOURCE
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    source_scope_id=(
+-                        binding
+-                        .source_scope_id
+-                    ),
+-                )
+-            )
+-
+-        table_name = (
+-            binding.physical_table
+-        )
+-
+-        lookup = self._lookup_table(
+-            table_name=table_name,
+-            lookup_cache=(
+-                lookup_cache
+-            ),
+-        )
+-
+-        if (
+-            lookup.status
+-            is MetadataLookupStatus.NOT_FOUND
+-        ):
+-            return (
+-                ColumnMetadataEvidence(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnMetadataEvidenceStatus
+-                        .SOURCE_NOT_FOUND
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    physical_table=(
+-                        table_name
+-                    ),
+-                )
+-            )
+-
+-        if (
+-            lookup.status
+-            is MetadataLookupStatus.ERROR
+-        ):
+-            return (
+-                ColumnMetadataEvidence(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnMetadataEvidenceStatus
+-                        .SOURCE_ERROR
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    physical_table=(
+-                        table_name
+-                    ),
+-                    error_message=(
+-                        lookup.error_message
+-                    ),
+-                )
+-            )
+-
+-        table = lookup.table
+-
+-        if table is None:
+-            raise RuntimeError(
+-                "MetadataProvider returned "
+-                "FOUND without TableMetadata."
+-            )
+-
+-        column_metadata = (
+-            table.get_column(
+-                column.name
+-            )
+-        )
+-
+-        if column_metadata is None:
+-
+-            return (
+-                ColumnMetadataEvidence(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnMetadataEvidenceStatus
+-                        .NOT_FOUND
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    physical_table=(
+-                        table_name
+-                    ),
+-                )
+-            )
+-
+-        return (
+-            ColumnMetadataEvidence(
+-                scope_id=(
+-                    scope.scope_id
+-                ),
+-                column=column,
+-                status=(
+-                    ColumnMetadataEvidenceStatus
+-                    .FOUND
+-                ),
+-                source_alias=(
+-                    binding.alias
+-                ),
+-                physical_table=(
+-                    table_name
+-                ),
+-                metadata=(
+-                    column_metadata
+-                ),
+-            )
+-        )
+-
+-    @staticmethod
+-    def _resolve_source_binding(
+-        *,
+-        scope: ProgramScopeAnalysis,
+-        column: ColumnReference,
+-    ) -> ScopeSourceBinding | None:
+-        """
+-        字段 → Source 的保守解析。
+-
+-        1. 有 qualifier：
+-           必须精确匹配 alias。
+-
+-        2. 无 qualifier：
+-           只有当前 Scope 恰好一个 Source
+-           时才能确定来源。
+-
+-        3. 多 Source：
+-           UNRESOLVED。
+-
+-        不允许“任选一张表”。
+-        """
+-
+-        if column.qualifier:
+-
+-            qualifier = (
+-                column.qualifier
+-                .strip()
+-                .lower()
+-            )
+-
+-            for binding in (
+-                scope.source_bindings
+-            ):
+-                if (
+-                    binding.alias
+-                    == qualifier
+-                ):
+-                    return binding
+-
+-            return None
+-
+-        if (
+-            len(
+-                scope.source_bindings
+-            )
+-            != 1
+-        ):
+-            return None
+-
+-        return (
+-            scope
+-            .source_bindings[0]
+-        )
+-
+-    def _lookup_table(
+-        self,
+-        *,
+-        table_name: str,
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
+-    ) -> TableLookupResult:
+-
+-        normalized = (
+-            table_name
+-            .strip()
+-            .lower()
+-        )
+-
+-        cached = (
+-            lookup_cache.get(
+-                normalized
+-            )
+-        )
+-
+-        if cached is not None:
+-            return cached
+-
+-        result = (
+-            self._provider
+-            .get_table(
+-                normalized
+-            )
+-        )
+-
+-        lookup_cache[
+-            normalized
+-        ] = result
+-
+-        return result
+\ No newline at end of file
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' agent3_original/Agent3.0-main/sql_pilot_engine/program/scope_resolver.py agent3_calibrate/Agent3.0-main/sql_pilot_engine/program/scope_resolver.py
+--- agent3_original/Agent3.0-main/sql_pilot_engine/program/scope_resolver.py	2026-09-08 07:18:23.000000000 +0000
++++ agent3_calibrate/Agent3.0-main/sql_pilot_engine/program/scope_resolver.py	2026-09-08 15:21:32.940197123 +0000
+@@ -16,13 +16,15 @@
+ from sql_pilot_engine.analysis.sql_parser import (
+     SQLParseResult,
+ )
++from sql_pilot_engine.program.enums import (
++    SourceBindingKind,
++)
+ from sql_pilot_engine.program.models import (
+     CTENode,
+     ProgramScopeAnalysis,
+     SQLProgram,
+-    ScopeSourceBinding,
+-    SourceBindingKind,
+     ScopeOutputProjection,
++    ScopeSourceBinding,
+ )
+ 
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' agent3_original/Agent3.0-main/tests/test_program_metadata_coverage.py agent3_calibrate/Agent3.0-main/tests/test_program_metadata_coverage.py
+--- agent3_original/Agent3.0-main/tests/test_program_metadata_coverage.py	2026-09-08 07:18:23.000000000 +0000
++++ agent3_calibrate/Agent3.0-main/tests/test_program_metadata_coverage.py	1970-01-01 00:00:00.000000000 +0000
+@@ -1,653 +0,0 @@
+-from __future__ import annotations
+-
+-from dataclasses import dataclass
+-from enum import Enum
+-
+-from sql_pilot_engine.analysis.facts import (
+-    ColumnReference,
+-)
+-from sql_pilot_engine.metadata.models import (
+-    ColumnMetadata,
+-    MetadataLookupStatus,
+-    TableLookupResult,
+-    TableMetadata,
+-)
+-from sql_pilot_engine.metadata.provider import (
+-    MetadataProvider,
+-)
+-from sql_pilot_engine.program.models import (
+-    ProgramScopeAnalysis,
+-    ScopeSourceBinding,
+-    SQLProgram,
+-)
+-
+-
+-class MetadataObjectRole(
+-    str,
+-    Enum,
+-):
+-    """
+-    Program 中物理表的角色。
+-
+-    同一张表可能同时作为：
+-    - READ_SOURCE
+-    - WRITE_TARGET
+-
+-    两种 Evidence 必须保留为不同角色。
+-    """
+-
+-    READ_SOURCE = "read_source"
+-    WRITE_TARGET = "write_target"
+-
+-
+-class ColumnMetadataEvidenceStatus(
+-    str,
+-    Enum,
+-):
+-    """
+-    字段 Metadata Evidence 状态。
+-
+-    注意：
+-    这是事实状态，
+-    不是 Review Severity。
+-    """
+-
+-    FOUND = "found"
+-
+-    NOT_FOUND = "not_found"
+-
+-    UNRESOLVED = "unresolved"
+-
+-    SOURCE_NOT_FOUND = (
+-        "source_not_found"
+-    )
+-
+-    SOURCE_ERROR = "source_error"
+-
+-    NON_PHYSICAL_SOURCE = (
+-        "non_physical_source"
+-    )
+-
+-
+-@dataclass(
+-    frozen=True,
+-    slots=True,
+-)
+-class TableMetadataEvidence:
+-    """
+-    一个物理表的 Metadata 查询证据。
+-    """
+-
+-    role: MetadataObjectRole
+-
+-    requested_table: str
+-
+-    status: MetadataLookupStatus
+-
+-    metadata: TableMetadata | None = None
+-
+-    error_message: str | None = None
+-
+-
+-@dataclass(
+-    frozen=True,
+-    slots=True,
+-)
+-class ColumnMetadataEvidence:
+-    """
+-    一个 Scope 内字段引用的 Metadata Evidence。
+-    """
+-
+-    scope_id: str
+-
+-    column: ColumnReference
+-
+-    status: (
+-        ColumnMetadataEvidenceStatus
+-    )
+-
+-    source_alias: str | None = None
+-
+-    physical_table: str | None = None
+-
+-    source_scope_id: str | None = None
+-
+-    metadata: ColumnMetadata | None = None
+-
+-    error_message: str | None = None
+-
+-
+-@dataclass(
+-    frozen=True,
+-    slots=True,
+-)
+-class ProgramMetadataCoverage:
+-    """
+-    SQLProgram 与 Metadata Plane
+-    建立出的确定性 Coverage Evidence。
+-
+-    不生成：
+-    - Issue
+-    - Severity
+-    - BLOCK / WARNING
+-    """
+-
+-    table_evidence: tuple[
+-        TableMetadataEvidence,
+-        ...,
+-    ]
+-
+-    column_evidence: tuple[
+-        ColumnMetadataEvidence,
+-        ...,
+-    ]
+-
+-
+-class ProgramMetadataCoverageService:
+-    """
+-    SQLProgram → Metadata Evidence。
+-
+-    【架构位置】
+-
+-        ProgramAnalysisService
+-                ↓
+-            SQLProgram
+-                ↓
+-    ProgramMetadataCoverageService
+-                ↓
+-      ProgramMetadataCoverage
+-
+-    这里只回答：
+-
+-        Metadata 能证明什么？
+-
+-    不回答：
+-
+-        这是不是一个 SQL 问题？
+-    """
+-
+-    def __init__(
+-        self,
+-        provider: MetadataProvider,
+-    ) -> None:
+-        self._provider = provider
+-
+-    def collect(
+-        self,
+-        program: SQLProgram,
+-    ) -> ProgramMetadataCoverage:
+-
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ] = {}
+-
+-        table_evidence = (
+-            self._collect_table_evidence(
+-                program=program,
+-                lookup_cache=(
+-                    lookup_cache
+-                ),
+-            )
+-        )
+-
+-        column_evidence = (
+-            self._collect_column_evidence(
+-                program=program,
+-                lookup_cache=(
+-                    lookup_cache
+-                ),
+-            )
+-        )
+-
+-        return ProgramMetadataCoverage(
+-            table_evidence=(
+-                table_evidence
+-            ),
+-            column_evidence=(
+-                column_evidence
+-            ),
+-        )
+-
+-    def _collect_table_evidence(
+-        self,
+-        *,
+-        program: SQLProgram,
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
+-    ) -> tuple[
+-        TableMetadataEvidence,
+-        ...,
+-    ]:
+-
+-        requested: list[
+-            tuple[
+-                MetadataObjectRole,
+-                str,
+-            ]
+-        ] = []
+-
+-        seen: set[
+-            tuple[
+-                MetadataObjectRole,
+-                str,
+-            ]
+-        ] = set()
+-
+-        # -----------------------------------------------
+-        # READ SOURCE
+-        # -----------------------------------------------
+-
+-        for scope in (
+-            program.scope_analyses
+-        ):
+-            for binding in (
+-                scope.source_bindings
+-            ):
+-                if (
+-                    binding.physical_table
+-                    is None
+-                ):
+-                    continue
+-
+-                key = (
+-                    MetadataObjectRole
+-                    .READ_SOURCE,
+-                    binding.physical_table,
+-                )
+-
+-                if key in seen:
+-                    continue
+-
+-                seen.add(
+-                    key
+-                )
+-
+-                requested.append(
+-                    key
+-                )
+-
+-        # -----------------------------------------------
+-        # WRITE TARGET
+-        # -----------------------------------------------
+-
+-        for statement in (
+-            program.statements
+-        ):
+-            target = (
+-                statement.write_target
+-            )
+-
+-            if target is None:
+-                continue
+-
+-            table_name = (
+-                target.table_name
+-                .strip()
+-                .lower()
+-            )
+-
+-            key = (
+-                MetadataObjectRole
+-                .WRITE_TARGET,
+-                table_name,
+-            )
+-
+-            if key in seen:
+-                continue
+-
+-            seen.add(
+-                key
+-            )
+-
+-            requested.append(
+-                key
+-            )
+-
+-        evidence: list[
+-            TableMetadataEvidence
+-        ] = []
+-
+-        for (
+-            role,
+-            table_name,
+-        ) in requested:
+-
+-            lookup = self._lookup_table(
+-                table_name=table_name,
+-                lookup_cache=(
+-                    lookup_cache
+-                ),
+-            )
+-
+-            evidence.append(
+-                TableMetadataEvidence(
+-                    role=role,
+-                    requested_table=(
+-                        table_name
+-                    ),
+-                    status=(
+-                        lookup.status
+-                    ),
+-                    metadata=(
+-                        lookup.table
+-                    ),
+-                    error_message=(
+-                        lookup.error_message
+-                    ),
+-                )
+-            )
+-
+-        return tuple(
+-            evidence
+-        )
+-
+-    def _collect_column_evidence(
+-        self,
+-        *,
+-        program: SQLProgram,
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
+-    ) -> tuple[
+-        ColumnMetadataEvidence,
+-        ...,
+-    ]:
+-
+-        evidence: list[
+-            ColumnMetadataEvidence
+-        ] = []
+-
+-        for scope in (
+-            program.scope_analyses
+-        ):
+-
+-            for column in (
+-                scope
+-                .facts
+-                .column_references
+-            ):
+-
+-                evidence.append(
+-                    self._resolve_column(
+-                        scope=scope,
+-                        column=column,
+-                        lookup_cache=(
+-                            lookup_cache
+-                        ),
+-                    )
+-                )
+-
+-        return tuple(
+-            evidence
+-        )
+-
+-    def _resolve_column(
+-        self,
+-        *,
+-        scope: ProgramScopeAnalysis,
+-        column: ColumnReference,
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
+-    ) -> ColumnMetadataEvidence:
+-
+-        binding = (
+-            self._resolve_source_binding(
+-                scope=scope,
+-                column=column,
+-            )
+-        )
+-
+-        if binding is None:
+-
+-            return (
+-                ColumnMetadataEvidence(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnMetadataEvidenceStatus
+-                        .UNRESOLVED
+-                    ),
+-                )
+-            )
+-
+-        if (
+-            binding.physical_table
+-            is None
+-        ):
+-
+-            return (
+-                ColumnMetadataEvidence(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnMetadataEvidenceStatus
+-                        .NON_PHYSICAL_SOURCE
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    source_scope_id=(
+-                        binding
+-                        .source_scope_id
+-                    ),
+-                )
+-            )
+-
+-        table_name = (
+-            binding.physical_table
+-        )
+-
+-        lookup = self._lookup_table(
+-            table_name=table_name,
+-            lookup_cache=(
+-                lookup_cache
+-            ),
+-        )
+-
+-        if (
+-            lookup.status
+-            is MetadataLookupStatus.NOT_FOUND
+-        ):
+-            return (
+-                ColumnMetadataEvidence(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnMetadataEvidenceStatus
+-                        .SOURCE_NOT_FOUND
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    physical_table=(
+-                        table_name
+-                    ),
+-                )
+-            )
+-
+-        if (
+-            lookup.status
+-            is MetadataLookupStatus.ERROR
+-        ):
+-            return (
+-                ColumnMetadataEvidence(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnMetadataEvidenceStatus
+-                        .SOURCE_ERROR
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    physical_table=(
+-                        table_name
+-                    ),
+-                    error_message=(
+-                        lookup.error_message
+-                    ),
+-                )
+-            )
+-
+-        table = lookup.table
+-
+-        if table is None:
+-            raise RuntimeError(
+-                "MetadataProvider returned "
+-                "FOUND without TableMetadata."
+-            )
+-
+-        column_metadata = (
+-            table.get_column(
+-                column.name
+-            )
+-        )
+-
+-        if column_metadata is None:
+-
+-            return (
+-                ColumnMetadataEvidence(
+-                    scope_id=(
+-                        scope.scope_id
+-                    ),
+-                    column=column,
+-                    status=(
+-                        ColumnMetadataEvidenceStatus
+-                        .NOT_FOUND
+-                    ),
+-                    source_alias=(
+-                        binding.alias
+-                    ),
+-                    physical_table=(
+-                        table_name
+-                    ),
+-                )
+-            )
+-
+-        return (
+-            ColumnMetadataEvidence(
+-                scope_id=(
+-                    scope.scope_id
+-                ),
+-                column=column,
+-                status=(
+-                    ColumnMetadataEvidenceStatus
+-                    .FOUND
+-                ),
+-                source_alias=(
+-                    binding.alias
+-                ),
+-                physical_table=(
+-                    table_name
+-                ),
+-                metadata=(
+-                    column_metadata
+-                ),
+-            )
+-        )
+-
+-    @staticmethod
+-    def _resolve_source_binding(
+-        *,
+-        scope: ProgramScopeAnalysis,
+-        column: ColumnReference,
+-    ) -> ScopeSourceBinding | None:
+-        """
+-        字段 → Source 的保守解析。
+-
+-        1. 有 qualifier：
+-           必须精确匹配 alias。
+-
+-        2. 无 qualifier：
+-           只有当前 Scope 恰好一个 Source
+-           时才能确定来源。
+-
+-        3. 多 Source：
+-           UNRESOLVED。
+-
+-        不允许“任选一张表”。
+-        """
+-
+-        if column.qualifier:
+-
+-            qualifier = (
+-                column.qualifier
+-                .strip()
+-                .lower()
+-            )
+-
+-            for binding in (
+-                scope.source_bindings
+-            ):
+-                if (
+-                    binding.alias
+-                    == qualifier
+-                ):
+-                    return binding
+-
+-            return None
+-
+-        if (
+-            len(
+-                scope.source_bindings
+-            )
+-            != 1
+-        ):
+-            return None
+-
+-        return (
+-            scope
+-            .source_bindings[0]
+-        )
+-
+-    def _lookup_table(
+-        self,
+-        *,
+-        table_name: str,
+-        lookup_cache: dict[
+-            str,
+-            TableLookupResult,
+-        ],
+-    ) -> TableLookupResult:
+-
+-        normalized = (
+-            table_name
+-            .strip()
+-            .lower()
+-        )
+-
+-        cached = (
+-            lookup_cache.get(
+-                normalized
+-            )
+-        )
+-
+-        if cached is not None:
+-            return cached
+-
+-        result = (
+-            self._provider
+-            .get_table(
+-                normalized
+-            )
+-        )
+-
+-        lookup_cache[
+-            normalized
+-        ] = result
+-
+-        return result
+\ No newline at end of file
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' agent3_original/Agent3.0-main/tests/test_program_metadata_evidence.py agent3_calibrate/Agent3.0-main/tests/test_program_metadata_evidence.py
+--- agent3_original/Agent3.0-main/tests/test_program_metadata_evidence.py	2026-09-08 07:18:23.000000000 +0000
++++ agent3_calibrate/Agent3.0-main/tests/test_program_metadata_evidence.py	2026-09-08 15:22:16.561094251 +0000
+@@ -1,328 +1,280 @@
++from __future__ import annotations
++
++from collections.abc import Iterable
++
+ from sql_pilot_engine.evidence.program_metadata import (
+     ColumnResolutionStatus,
+     MetadataObjectRole,
+     ProgramMetadataResolver,
++    TableResolutionStatus,
+ )
+-from sql_pilot_engine.metadata.mock_provider import (
+-    MockMetadataProvider,
+-)
++from sql_pilot_engine.metadata.catalog import TableSearchResult
+ from sql_pilot_engine.metadata.models import (
+     ColumnMetadata,
+-    MetadataLookupStatus,
++    TableLookupResult,
+     TableMetadata,
+ )
+-from sql_pilot_engine.program.service import (
+-    ProgramAnalysisService,
+-)
++from sql_pilot_engine.program.service import ProgramAnalysisService
+ 
+ 
+-def _provider():
+-    return MockMetadataProvider(
+-        tables=(
+-            TableMetadata(
+-                full_name=(
+-                    "ods.loan_detail"
+-                ),
+-                columns={
+-                    "id": ColumnMetadata(
+-                        name="id",
+-                        data_type="bigint",
+-                    ),
+-                    "amount": ColumnMetadata(
+-                        name="amount",
+-                        data_type="decimal(18,2)",
+-                    ),
+-                    "dt": ColumnMetadata(
+-                        name="dt",
+-                        data_type="string",
+-                    ),
+-                },
+-                partition_fields=(
+-                    "dt",
+-                ),
+-            ),
+-            TableMetadata(
+-                full_name=(
+-                    "dws.loan_summary"
+-                ),
+-                columns={
+-                    "id": ColumnMetadata(
+-                        name="id",
+-                        data_type="bigint",
+-                    ),
+-                    "amount": ColumnMetadata(
+-                        name="amount",
+-                        data_type="decimal(18,2)",
+-                    ),
+-                    "dt": ColumnMetadata(
+-                        name="dt",
+-                        data_type="string",
+-                    ),
+-                },
+-                partition_fields=(
+-                    "dt",
+-                ),
+-            ),
++class _InMemoryMetadataRepository:
++    """测试用权威 Metadata：同时实现 exact Provider 与 identifier Catalog。"""
++
++    def __init__(self, tables: Iterable[TableMetadata]) -> None:
++        self._tables = {
++            table.full_name.lower(): table
++            for table in tables
++        }
++
++    def get_table(self, full_name: str) -> TableLookupResult:
++        table = self._tables.get(full_name.strip().lower())
++        if table is None:
++            return TableLookupResult.not_found()
++        return TableLookupResult.found(table)
++
++    def find_table_identifiers(
++        self,
++        table_name: str,
++    ) -> tuple[TableSearchResult, ...]:
++        normalized = table_name.strip().lower()
++        matches = [
++            table
++            for table in self._tables.values()
++            if (
++                table.full_name == normalized
++                or table.full_name.rsplit(".", 1)[-1] == normalized
++            )
++        ]
++        return tuple(
++            TableSearchResult(
++                full_name=table.full_name,
++                description=table.description,
++                layer=table.layer,
++            )
++            for table in sorted(matches, key=lambda item: item.full_name)
+         )
+-    )
+ 
+ 
+-def _resolve(
+-    sql: str,
+-):
+-    analysis = (
+-        ProgramAnalysisService()
+-        .analyze(sql)
++def _table(
++    full_name: str,
++    *,
++    columns: tuple[str, ...],
++    partition_fields: tuple[str, ...] = (),
++) -> TableMetadata:
++    return TableMetadata(
++        full_name=full_name,
++        columns={
++            name: ColumnMetadata(name=name, data_type="string")
++            for name in columns
++        },
++        partition_fields=partition_fields,
+     )
+ 
++
++def _resolve(sql: str, *tables: TableMetadata):
++    analysis = ProgramAnalysisService().analyze(sql)
+     assert analysis.program is not None
+ 
+-    return (
+-        ProgramMetadataResolver(
+-            _provider()
+-        )
+-        .resolve(
+-            analysis.program
+-        )
+-    )
++    repository = _InMemoryMetadataRepository(tables)
++    return ProgramMetadataResolver(
++        provider=repository,
++        catalog=repository,
++    ).resolve(analysis.program)
+ 
+ 
+-def test_physical_read_table_resolves():
++def test_unqualified_table_name_resolves_unique_canonical_name():
+     evidence = _resolve(
+-        """
+-        SELECT id
+-        FROM ods.loan_detail
+-        """
++        "SELECT id FROM loan_detail",
++        _table("odps_prd_dwd.loan_detail", columns=("id",)),
+     )
+ 
+     table = next(
+         item
+-        for item
+-        in evidence.tables
+-        if (
+-            item.role
+-            is MetadataObjectRole.READ_SOURCE
+-        )
+-    )
+-
+-    assert (
+-        table.status
+-        is MetadataLookupStatus.FOUND
++        for item in evidence.tables
++        if item.role is MetadataObjectRole.READ_SOURCE
+     )
+ 
+-    assert (
+-        table.requested_table
+-        == "ods.loan_detail"
+-    )
++    assert table.status is TableResolutionStatus.RESOLVED
++    assert table.requested_table == "loan_detail"
++    assert table.canonical_table == "odps_prd_dwd.loan_detail"
+ 
+ 
+-def test_write_target_is_resolved_separately():
++def test_unqualified_table_name_reports_ambiguity():
+     evidence = _resolve(
+-        """
+-        INSERT OVERWRITE TABLE
+-            dws.loan_summary
+-        PARTITION(dt='202609')
+-        SELECT
+-            id,
+-            amount
+-        FROM ods.loan_detail
+-        """
++        "SELECT id FROM loan_detail",
++        _table("project_a.loan_detail", columns=("id",)),
++        _table("project_b.loan_detail", columns=("id",)),
+     )
+ 
+-    roles = {
+-        (
+-            item.role,
+-            item.requested_table,
+-            item.status,
+-        )
+-        for item
+-        in evidence.tables
+-    }
+-
+-    assert (
+-        MetadataObjectRole.READ_SOURCE,
+-        "ods.loan_detail",
+-        MetadataLookupStatus.FOUND,
+-    ) in roles
+-
+-    assert (
+-        MetadataObjectRole.WRITE_TARGET,
+-        "dws.loan_summary",
+-        MetadataLookupStatus.FOUND,
+-    ) in roles
++    table = next(
++        item
++        for item in evidence.tables
++        if item.role is MetadataObjectRole.READ_SOURCE
++    )
++
++    assert table.status is TableResolutionStatus.AMBIGUOUS
++    assert table.candidates == (
++        "project_a.loan_detail",
++        "project_b.loan_detail",
++    )
+ 
+ 
+-def test_qualified_column_resolves_by_alias():
++def test_qualified_table_name_requires_exact_metadata_identity():
+     evidence = _resolve(
+-        """
+-        SELECT l.amount
+-        FROM ods.loan_detail l
+-        """
++        "SELECT id FROM project_b.loan_detail",
++        _table("project_a.loan_detail", columns=("id",)),
+     )
+ 
+-    column = next(
++    table = next(
+         item
+-        for item
+-        in evidence.columns
+-        if item.column.name == "amount"
++        for item in evidence.tables
++        if item.role is MetadataObjectRole.READ_SOURCE
+     )
+ 
+-    assert (
+-        column.status
+-        is ColumnResolutionStatus.RESOLVED
+-    )
++    assert table.status is TableResolutionStatus.ABSENT
+ 
+-    assert (
+-        column.source_alias
+-        == "l"
+-    )
+ 
+-    assert (
+-        column.physical_table
+-        == "ods.loan_detail"
++def test_unqualified_column_resolves_unique_physical_owner():
++    evidence = _resolve(
++        """
++        SELECT amount
++        FROM loan_detail a
++        JOIN customer b
++          ON a.customer_id = b.customer_id
++        """,
++        _table(
++            "odps_prd_dwd.loan_detail",
++            columns=("customer_id", "amount"),
++        ),
++        _table(
++            "odps_prd_dim.customer",
++            columns=("customer_id", "name"),
++        ),
+     )
+ 
+-    assert (
+-        column.metadata
+-        is not None
++    column = next(
++        item
++        for item in evidence.columns
++        if item.column.name == "amount"
+     )
+ 
+-    assert (
+-        column.metadata.data_type
+-        == "decimal(18,2)"
+-    )
++    assert column.status is ColumnResolutionStatus.RESOLVED
++    assert column.source_alias == "a"
++    assert column.physical_table == "odps_prd_dwd.loan_detail"
+ 
+ 
+-def test_single_source_unqualified_column_resolves():
++def test_unqualified_column_reports_ambiguous_physical_owners():
+     evidence = _resolve(
+         """
+         SELECT amount
+-        FROM ods.loan_detail
+-        """
++        FROM loan_detail a
++        JOIN customer b
++          ON a.customer_id = b.customer_id
++        """,
++        _table(
++            "odps_prd_dwd.loan_detail",
++            columns=("customer_id", "amount"),
++        ),
++        _table(
++            "odps_prd_dim.customer",
++            columns=("customer_id", "amount"),
++        ),
+     )
+ 
+     column = next(
+         item
+-        for item
+-        in evidence.columns
++        for item in evidence.columns
+         if item.column.name == "amount"
++        and item.column.qualifier is None
+     )
+ 
+-    assert (
+-        column.status
+-        is ColumnResolutionStatus.RESOLVED
++    assert column.status is ColumnResolutionStatus.AMBIGUOUS
++    assert column.candidate_tables == (
++        "odps_prd_dim.customer",
++        "odps_prd_dwd.loan_detail",
+     )
+ 
+ 
+-def test_absent_column_is_authoritative_absent():
++def test_qualified_column_uses_alias_then_canonical_metadata():
+     evidence = _resolve(
+-        """
+-        SELECT fake_column
+-        FROM ods.loan_detail
+-        """
++        "SELECT l.amount FROM loan_detail l",
++        _table("odps_prd_dwd.loan_detail", columns=("amount",)),
+     )
+ 
+     column = next(
+         item
+-        for item
+-        in evidence.columns
+-        if (
+-            item.column.name
+-            == "fake_column"
+-        )
++        for item in evidence.columns
++        if item.column.name == "amount"
+     )
+ 
+-    assert (
+-        column.status
+-        is ColumnResolutionStatus.ABSENT
+-    )
++    assert column.status is ColumnResolutionStatus.RESOLVED
++    assert column.source_alias == "l"
++    assert column.physical_table == "odps_prd_dwd.loan_detail"
+ 
+ 
+-def test_multiple_sources_without_qualifier_does_not_guess():
++def test_absent_column_is_authoritative_absent():
+     evidence = _resolve(
+-        """
+-        SELECT id
+-        FROM ods.loan_detail a
+-        JOIN dws.loan_summary b
+-          ON a.id = b.id
+-        """
++        "SELECT fake_column FROM loan_detail",
++        _table("odps_prd_dwd.loan_detail", columns=("id",)),
+     )
+ 
+     column = next(
+         item
+-        for item
+-        in evidence.columns
+-        if (
+-            item.column.name == "id"
+-            and item.column.qualifier
+-            is None
+-        )
++        for item in evidence.columns
++        if item.column.name == "fake_column"
+     )
+ 
+-    assert (
+-        column.status
+-        is (
+-            ColumnResolutionStatus
+-            .UNRESOLVED_SOURCE
+-        )
+-    )
++    assert column.status is ColumnResolutionStatus.ABSENT
+ 
+ 
+-def test_cte_source_is_not_queried_as_physical_metadata():
++def test_cte_source_stays_non_physical_until_lineage():
+     evidence = _resolve(
+         """
+         WITH base AS (
+-            SELECT
+-                id,
+-                amount
+-            FROM ods.loan_detail
++            SELECT id, amount
++            FROM loan_detail
+         )
+         SELECT b.amount
+         FROM base b
+-        """
++        """,
++        _table(
++            "odps_prd_dwd.loan_detail",
++            columns=("id", "amount"),
++        ),
+     )
+ 
+-    column = next(
++    outer_amount = next(
+         item
+-        for item
+-        in evidence.columns
+-        if (
+-            item.column.name == "amount"
+-            and item.source_scope_id
+-            is not None
+-        )
++        for item in evidence.columns
++        if item.column.name == "amount"
++        and item.source_scope_id is not None
+     )
+ 
+-    assert (
+-        column.status
+-        is (
+-            ColumnResolutionStatus
+-            .NON_PHYSICAL_SOURCE
+-        )
+-    )
++    assert outer_amount.status is ColumnResolutionStatus.NON_PHYSICAL_SOURCE
+ 
+ 
+-def test_select_alias_is_not_validated_as_physical_column():
++def test_write_target_is_resolved_independently_from_read_source():
+     evidence = _resolve(
+         """
+-        SELECT
+-            SUM(amount) AS total_amount
+-        FROM ods.loan_detail
+-        ORDER BY total_amount
+-        """
++        INSERT OVERWRITE TABLE loan_summary
++        PARTITION(dt='202609')
++        SELECT id, amount
++        FROM loan_detail
++        """,
++        _table("odps_prd_dwd.loan_detail", columns=("id", "amount")),
++        _table(
++            "odps_prd_dws.loan_summary",
++            columns=("id", "amount", "dt"),
++            partition_fields=("dt",),
++        ),
+     )
+ 
+-    alias_ref = next(
++    targets = [
+         item
+-        for item
+-        in evidence.columns
+-        if (
+-            item.column.name
+-            == "total_amount"
+-        )
+-    )
+-
+-    assert (
+-        alias_ref.status
+-        is ColumnResolutionStatus.SELECT_ALIAS
+-    )
+\ No newline at end of file
++        for item in evidence.tables
++        if item.role is MetadataObjectRole.WRITE_TARGET
++    ]
++
++    assert len(targets) == 1
++    assert targets[0].status is TableResolutionStatus.RESOLVED
++    assert targets[0].canonical_table == "odps_prd_dws.loan_summary"
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' agent3_original/Agent3.0-main/tests/test_sqlite_metadata_repository.py agent3_calibrate/Agent3.0-main/tests/test_sqlite_metadata_repository.py
+--- agent3_original/Agent3.0-main/tests/test_sqlite_metadata_repository.py	1970-01-01 00:00:00.000000000 +0000
++++ agent3_calibrate/Agent3.0-main/tests/test_sqlite_metadata_repository.py	2026-09-08 15:22:26.987591381 +0000
+@@ -0,0 +1,80 @@
++from __future__ import annotations
++
++import sqlite3
++
++from sql_pilot_engine.metadata.models import MetadataLookupStatus
++from sql_pilot_engine.metadata.schema import (
++    initialize_metadata_database,
++    write_build_info,
++)
++from sql_pilot_engine.metadata.sqlite_repository import (
++    SQLiteMetadataRepository,
++)
++
++
++def _repository(tmp_path, *table_names: str) -> SQLiteMetadataRepository:
++    database_path = tmp_path / "metadata.db"
++    initialize_metadata_database(database_path)
++
++    with sqlite3.connect(database_path) as connection:
++        write_build_info(connection, metadata_source_name="test")
++
++        for table_name in table_names:
++            connection.execute(
++                """
++                INSERT INTO metadata_table (
++                    full_name,
++                    description,
++                    layer
++                )
++                VALUES (?, '', 'dwd')
++                """,
++                (table_name,),
++            )
++
++    return SQLiteMetadataRepository(database_path)
++
++
++def test_get_table_requires_exact_canonical_identity(tmp_path):
++    repository = _repository(
++        tmp_path,
++        "project_a.loan_detail",
++    )
++
++    assert (
++        repository.get_table("project_a.loan_detail").status
++        is MetadataLookupStatus.FOUND
++    )
++
++    assert (
++        repository.get_table("loan_detail").status
++        is MetadataLookupStatus.NOT_FOUND
++    )
++
++
++def test_find_table_identifiers_returns_unique_canonical_candidate(tmp_path):
++    repository = _repository(
++        tmp_path,
++        "project_a.loan_detail",
++    )
++
++    matches = repository.find_table_identifiers("loan_detail")
++
++    assert tuple(item.full_name for item in matches) == (
++        "project_a.loan_detail",
++    )
++
++
++def test_find_table_identifiers_returns_all_ambiguous_candidates(tmp_path):
++    repository = _repository(
++        tmp_path,
++        "project_a.loan_detail",
++        "project_b.loan_detail",
++    )
++
++    matches = repository.find_table_identifiers("loan_detail")
++
++    assert tuple(item.full_name for item in matches) == (
++        "project_a.loan_detail",
++        "project_b.loan_detail",
++    )

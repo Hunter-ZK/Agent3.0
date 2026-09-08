@@ -558,8 +558,8 @@ class ProgramBuilder:
             1 ParameterBinding
             occurrences = 3
 
-        usage_kinds 当前保持为空。
-        参数用途必须在具有 AST / Scope 上下文后再分析。
+        Program 层只聚合同名参数的 occurrence。
+        参数用途不属于 SQLProgram Contract。
         """
 
         grouped: dict[

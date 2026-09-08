@@ -56,10 +56,15 @@ def _infer_layer(
     table_name: str,
 ) -> str:
 
-    prefix = (
+    base_table_name = (
         table_name
         .strip()
         .lower()
+        .split(".")[-1]
+    )
+
+    prefix = (
+        base_table_name
         .split("_", 1)[0]
     )
 
