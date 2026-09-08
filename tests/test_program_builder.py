@@ -285,10 +285,7 @@ def test_same_parameter_is_grouped():
         parameter.occurrences
     ) == 2
 
-    assert (
-        parameter.usage_kinds
-        == ()
-    )
+
 
 
 def test_different_parameters_remain_separate():

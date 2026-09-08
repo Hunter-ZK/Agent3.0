@@ -778,6 +778,104 @@ class SQLiteMetadataRepository:
 
             return tuple(results)
 
+    def find_table_identifiers(
+        self,
+        table_name: str,
+    ) -> tuple[
+        TableSearchResult,
+        ...,
+    ]:
+        """
+        查询一个表标识符对应的全部 canonical physical tables。
+
+        支持：
+
+            loan_detail
+
+        匹配：
+
+            loan_detail
+            project_a.loan_detail
+            project_b.loan_detail
+            catalog.project_a.loan_detail
+
+        但不会匹配：
+
+            loan_detail_history
+            my_loan_detail
+
+        这是 Complete Fact Query，
+        不允许 Top-N。
+        """
+
+        normalized = (
+            table_name
+            .strip()
+            .lower()
+        )
+
+        if not normalized:
+            return ()
+
+        with self._connect() as connection:
+
+            rows = (
+                connection.execute(
+                    """
+                    SELECT
+                        full_name,
+                        description,
+                        layer
+                    FROM metadata_table
+                    WHERE
+                        full_name = ?
+                        OR (
+                            length(full_name)
+                                > length(?)
+
+                            AND substr(
+                                full_name,
+                                -length(?)
+                            ) = ?
+
+                            AND substr(
+                                full_name,
+                                length(full_name)
+                                    - length(?),
+                                1
+                            ) = '.'
+                        )
+                    ORDER BY full_name
+                    """,
+                    (
+                        normalized,
+                        normalized,
+                        normalized,
+                        normalized,
+                        normalized,
+                    ),
+                )
+                .fetchall()
+            )
+
+            return tuple(
+                TableSearchResult(
+                    full_name=(
+                        row["full_name"]
+                    ),
+                    description=(
+                        row["description"]
+                        or ""
+                    ),
+                    layer=(
+                        row["layer"]
+                        or ""
+                    ),
+                )
+                for row
+                in rows
+            )
+
     def find_column_usages(
         self,
         column_name: str,

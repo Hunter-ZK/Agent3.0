@@ -11,6 +11,7 @@ from sql_pilot_engine.program.models import (
     PartitionBinding,
     ProgramAnalysisResult,
     ScopeSourceBinding,
+    ScopeOutputProjection,
 )
 
 
@@ -165,4 +166,60 @@ def test_unresolved_source_binding_keeps_explicit_reason():
     assert (
         binding.unresolved_reason
         == "Unsupported source type."
+    )
+    
+
+def test_output_projection_normalizes_names():
+    projection = (
+        ScopeOutputProjection(
+            column_names=(
+                "ID",
+                " Total_Amount ",
+            ),
+        )
+    )
+
+    assert (
+        projection.column_names
+        == (
+            "id",
+            "total_amount",
+        )
+    )
+
+    assert (
+        projection.complete
+        is True
+    )
+
+
+def test_output_projection_with_wildcard_is_incomplete():
+    projection = (
+        ScopeOutputProjection(
+            column_names=(
+                "id",
+            ),
+            has_wildcard=True,
+        )
+    )
+
+    assert (
+        projection.complete
+        is False
+    )
+
+
+def test_output_projection_with_unnamed_expression_is_incomplete():
+    projection = (
+        ScopeOutputProjection(
+            column_names=(
+                "id",
+            ),
+            unnamed_expression_count=1,
+        )
+    )
+
+    assert (
+        projection.complete
+        is False
     )

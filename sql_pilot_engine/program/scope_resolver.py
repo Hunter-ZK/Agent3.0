@@ -288,6 +288,11 @@ class ScopeResolver:
                             ),
                         )
                     ),
+                    output_projection=(
+                        self._output_projection(
+                            scope
+                        )
+                    ),
                 )
             )
 

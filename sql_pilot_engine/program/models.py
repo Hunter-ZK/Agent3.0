@@ -6,7 +6,6 @@ from sql_pilot_engine.analysis.facts import (
     SQLFacts,
 )
 from sql_pilot_engine.program.enums import (
-    ParameterUsageKind,
     ProgramAnalysisStatus,
     SourceBindingKind,
     StatementKind,
@@ -991,23 +990,21 @@ def build_source_span(
         ),
     )
 
-
 @dataclass(
     frozen=True,
     slots=True,
 )
 class ParameterBinding:
     """
-    Program 级调度参数。
+    SQL Program 中一个同名调度参数的聚合。
 
-    A1 的 ParameterOccurrence 表示“出现一次”。
+    Program 层只保存：
+    - 参数名称；
+    - 所有真实 occurrence。
 
-    ParameterBinding 表示：
-        同一个参数在整个 SQL Program 中的聚合视图。
-
-    例如 `${p_month_yyyymm}` 出现 25 次：
-        A1 = 25 个 ParameterOccurrence
-        B  = 1 个 ParameterBinding
+    参数在 SQL 中承担什么语义，
+    由后续 ParameterUsageEvidence 解析，
+    不属于 SQLProgram Contract。
     """
 
     name: str
@@ -1017,17 +1014,15 @@ class ParameterBinding:
         ...,
     ]
 
-    usage_kinds: tuple[
-        ParameterUsageKind,
-        ...,
-    ] = ()
-
-    inferred_format: str | None = None
-
     def __post_init__(
         self,
     ) -> None:
-        if not self.name.strip():
+        name = (
+            self.name
+            .strip()
+        )
+
+        if not name:
             raise ValueError(
                 "ParameterBinding.name "
                 "cannot be empty."
@@ -1035,10 +1030,15 @@ class ParameterBinding:
 
         if not self.occurrences:
             raise ValueError(
-                "ParameterBinding must contain "
+                "ParameterBinding requires "
                 "at least one occurrence."
             )
 
+        object.__setattr__(
+            self,
+            "name",
+            name,
+        )
 
 @dataclass(
     frozen=True,

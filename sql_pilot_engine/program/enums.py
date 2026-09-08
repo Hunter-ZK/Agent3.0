@@ -47,20 +47,6 @@ class WriteStrategy(str, Enum):
     APPEND = "append"
 
 
-class ParameterUsageKind(str, Enum):
-    """
-    DataWorks / MaxCompute 调度参数在 Program 中的用途。
-
-    A1 只识别 occurrence；
-    Program Analysis 才负责判断 usage。
-    """
-
-    READ_PARTITION_FILTER = "read_partition_filter"
-    WRITE_PARTITION = "write_partition"
-    PERIOD_CLASSIFICATION = "period_classification"
-    DATE_ARITHMETIC = "date_arithmetic"
-    OTHER = "other"
-    
     
 class SourceBindingKind(str, Enum):
     """
@@ -85,3 +71,4 @@ class SourceBindingKind(str, Enum):
     PHYSICAL_TABLE = "physical_table"
     SCOPE = "scope"
     UNRESOLVED = "unresolved"
+    

@@ -47,6 +47,37 @@ class MetadataCatalog(Protocol):
         ...
     ]:
         ...
+            
+    def find_table_identifiers(
+        self,
+        table_name: str,
+    ) -> tuple[
+        TableSearchResult,
+        ...,
+    ]:
+        """
+        根据精确表标识符或精确 base table name，
+        查询全部 canonical physical table identities。
+
+        与 find_tables() 不同：
+
+        - 不做 FTS；
+        - 不做模糊匹配；
+        - 不使用 Top-N；
+        - 必须返回所有精确候选。
+
+        示例：
+
+            输入 loan_detail
+
+            可能返回：
+            project_a.loan_detail
+            project_b.loan_detail
+
+        该接口用于权威 identifier resolution，
+        不是资产搜索。
+        """
+        ...
 
     def find_columns(
         self,

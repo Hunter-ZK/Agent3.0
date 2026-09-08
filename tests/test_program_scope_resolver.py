@@ -569,3 +569,212 @@ def test_scope_preserves_cte_source_binding():
         binding.source_scope_id
         == base_scope.scope_id
     )
+    
+
+def test_scope_output_projection_keeps_named_columns():
+    program = _analyze_scopes(
+        """
+        SELECT
+            id,
+            SUM(amount) AS total_amount
+        FROM ods.loan_detail
+        GROUP BY id
+        """
+    )
+
+    root = next(
+        scope
+        for scope
+        in program.scope_analyses
+        if (
+            scope.scope_id
+            == "statement:0:root"
+        )
+    )
+
+    projection = (
+        root.output_projection
+    )
+
+    assert (
+        projection.column_names
+        == (
+            "id",
+            "total_amount",
+        )
+    )
+
+    assert (
+        projection.has_wildcard
+        is False
+    )
+
+    assert (
+        projection
+        .unnamed_expression_count
+        == 0
+    )
+
+    assert (
+        projection.complete
+        is True
+    )
+    
+    
+def test_select_star_marks_output_projection_incomplete():
+    program = _analyze_scopes(
+        """
+        SELECT *
+        FROM ods.loan_detail
+        """
+    )
+
+    root = next(
+        scope
+        for scope
+        in program.scope_analyses
+        if (
+            scope.scope_id
+            == "statement:0:root"
+        )
+    )
+
+    projection = (
+        root.output_projection
+    )
+
+    assert (
+        projection.column_names
+        == ()
+    )
+
+    assert (
+        projection.has_wildcard
+        is True
+    )
+
+    assert (
+        projection.complete
+        is False
+    )
+    
+    
+def test_unnamed_expression_is_not_given_fake_output_name():
+    program = _analyze_scopes(
+        """
+        SELECT
+            id,
+            amount + tax
+        FROM ods.loan_detail
+        """
+    )
+
+    root = next(
+        scope
+        for scope
+        in program.scope_analyses
+        if (
+            scope.scope_id
+            == "statement:0:root"
+        )
+    )
+
+    projection = (
+        root.output_projection
+    )
+
+    assert (
+        projection.column_names
+        == (
+            "id",
+        )
+    )
+
+    assert (
+        projection
+        .unnamed_expression_count
+        == 1
+    )
+
+    assert (
+        projection.complete
+        is False
+    )
+    
+    
+def test_count_star_is_not_output_wildcard():
+    program = _analyze_scopes(
+        """
+        SELECT
+            COUNT(*) AS row_count
+        FROM ods.loan_detail
+        """
+    )
+
+    root = next(
+        scope
+        for scope
+        in program.scope_analyses
+        if (
+            scope.scope_id
+            == "statement:0:root"
+        )
+    )
+
+    projection = (
+        root.output_projection
+    )
+
+    assert (
+        projection.column_names
+        == (
+            "row_count",
+        )
+    )
+
+    assert (
+        projection.has_wildcard
+        is False
+    )
+
+    assert (
+        projection.complete
+        is True
+    )
+    
+def test_union_uses_set_operation_output_projection():
+    program = _analyze_scopes(
+        """
+        SELECT
+            id,
+            amount AS value
+        FROM ods.loan_a
+
+        UNION ALL
+
+        SELECT
+            loan_id,
+            balance
+        FROM ods.loan_b
+        """
+    )
+
+    root = next(
+        scope
+        for scope
+        in program.scope_analyses
+        if (
+            scope.scope_id
+            == "statement:0:root"
+        )
+    )
+
+    assert (
+        root
+        .output_projection
+        .column_names
+        == (
+            "id",
+            "value",
+        )
+    )

@@ -429,3 +429,41 @@ def test_unresolved_source_binding_downgrades_program_to_partial():
         for diagnostic
         in result.diagnostics
     )
+    
+def test_incomplete_output_projection_does_not_make_program_partial():
+    result = (
+        ProgramAnalysisService()
+        .analyze(
+            """
+            SELECT *
+            FROM ods.loan_detail
+            """
+        )
+    )
+
+    assert (
+        result.status
+        is ProgramAnalysisStatus.COMPLETE
+    )
+
+    assert result.program is not None
+
+    root = next(
+        scope
+        for scope
+        in result
+        .program
+        .scope_analyses
+        if (
+            scope.scope_id
+            == "statement:0:root"
+        )
+    )
+
+    assert (
+        root
+        .output_projection
+        .complete
+        is False
+    )
+    
