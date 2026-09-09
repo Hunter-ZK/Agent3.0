@@ -365,7 +365,7 @@ def build_metadata_context_text(
 
         lines.append(
             "  Description: "
-            f"{table.description}"
+            f"{table.business.description}"
         )
 
         # 当前 Metadata Context 只输出
@@ -393,7 +393,7 @@ def build_metadata_context_text(
             lines.append(
                 "  Partition Fields: "
                 + ", ".join(
-                    table.partition_fields
+                    table.technical.partition_fields
                 )
             )
 
@@ -407,8 +407,8 @@ def build_metadata_context_text(
             lines.append(
                 "    - "
                 f"{column.name} "
-                f"({column.data_type}): "
-                f"{column.description}"
+                f"({column.technical.data_type}): "
+                f"{column.business.description}"
             )
 
     return "\n".join(

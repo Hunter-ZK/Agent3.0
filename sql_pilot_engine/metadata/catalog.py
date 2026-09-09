@@ -11,7 +11,6 @@ from typing import Protocol
 class TableSearchResult:
     full_name: str
     description: str
-    layer: str
 
 
 @dataclass(

@@ -1,5 +1,9 @@
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("pyspark")
+
 from sql_pilot_engine.metadata.models import (
     ColumnMetadata,
     TableMetadata,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from pathlib import Path
@@ -10,9 +11,18 @@ from sql_pilot_engine.metadata.catalog import (
 )
 
 from sql_pilot_engine.metadata.models import (
+    ColumnBusinessMetadata,
+    ColumnManagementMetadata,
     ColumnMetadata,
+    ColumnSemanticMetadata,
+    ColumnTechnicalMetadata,
+    PhysicalColumnRef,
+    TableBusinessMetadata,
     TableLookupResult,
+    TableManagementMetadata,
     TableMetadata,
+    TableOperationalMetadata,
+    TableTechnicalMetadata,
 )
 
 from sql_pilot_engine.metadata.schema import (
@@ -24,9 +34,10 @@ def _fts_phrase(
     value: str,
 ) -> str:
     """
-    将用户输入作为完整 FTS phrase，
-    避免 AND / OR / NOT 等字符串
-    被解释成 FTS 查询语法。
+    将查询内容转成完整 FTS phrase。
+
+    防止 AND / OR / NOT 等普通字符串
+    被 SQLite FTS 当成查询语法。
     """
 
     escaped = value.replace(
@@ -35,6 +46,70 @@ def _fts_phrase(
     )
 
     return f'"{escaped}"'
+
+
+def _decode_text_tuple(
+    raw_value: str | None,
+) -> tuple[str, ...]:
+    """
+    解码普通业务文本数组。
+
+    不主动 lowercase，
+    避免修改业务名称等原始文本。
+    """
+
+    if not raw_value:
+        return ()
+
+    value = json.loads(
+        raw_value
+    )
+
+    if not isinstance(
+        value,
+        list,
+    ):
+        raise ValueError(
+            "Metadata JSON value "
+            "must be a list."
+        )
+
+    return tuple(
+        str(item).strip()
+        for item
+        in value
+        if str(item).strip()
+    )
+
+
+def _decode_identifier_tuple(
+    raw_value: str | None,
+) -> tuple[str, ...]:
+    """
+    解码物理标识符数组。
+
+    字段名 / 分区字段等 canonical identifier
+    统一 lowercase。
+    """
+
+    return tuple(
+        item.lower()
+        for item
+        in _decode_text_tuple(
+            raw_value
+        )
+    )
+
+
+def _optional_bool(
+    value: object,
+) -> bool | None:
+    if value is None:
+        return None
+
+    return bool(
+        int(value)
+    )
 
 
 class SQLiteMetadataRepository:
@@ -51,7 +126,9 @@ class SQLiteMetadataRepository:
     - Schema Init
     - Excel Import
     - Database Rebuild
-    - Standards Import
+    - Schema Migration
+
+    Runtime 永远只读正式构建完成的 metadata.db。
     """
 
     def __init__(
@@ -67,16 +144,12 @@ class SQLiteMetadataRepository:
         self,
     ) -> sqlite3.Connection:
         """
-        Runtime 必须以只读方式打开事实库。
+        以 SQLite read-only mode 打开事实库。
 
-        如果：
-        - DB 不存在；
-        - DB 未完成 Build；
-        - Schema Version 不一致；
+        Runtime 不执行 migration。
 
-        直接报错。
-
-        Runtime 不进行 Migration。
+        DB 不存在、Build 未完成、
+        Schema Version 不一致均直接报错。
         """
 
         uri = (
@@ -97,7 +170,8 @@ class SQLiteMetadataRepository:
         try:
             row = connection.execute(
                 """
-                SELECT schema_version
+                SELECT
+                    schema_version
                 FROM metadata_build_info
                 WHERE id = 1
                 """
@@ -161,12 +235,7 @@ class SQLiteMetadataRepository:
                     connection.execute(
                         """
                         SELECT
-                            id,
-                            full_name,
-                            description,
-                            layer,
-                            row_count,
-                            size_bytes
+                            *
                         FROM metadata_table
                         WHERE full_name = ?
                         LIMIT 1
@@ -179,23 +248,45 @@ class SQLiteMetadataRepository:
                 )
 
                 if table_row is None:
-
                     return (
                         TableLookupResult
                         .not_found()
                     )
 
+                table_id = int(
+                    table_row["id"]
+                )
+
+                upstream_table_rows = (
+                    connection.execute(
+                        """
+                        SELECT
+                            upstream_full_name
+                        FROM metadata_table_upstream
+                        WHERE table_id = ?
+                        ORDER BY
+                            ordinal_position
+                        """,
+                        (
+                            table_id,
+                        ),
+                    )
+                    .fetchall()
+                )
+
+                declared_upstream_tables = tuple(
+                    row[
+                        "upstream_full_name"
+                    ]
+                    for row
+                    in upstream_table_rows
+                )
+
                 column_rows = (
                     connection.execute(
                         """
                         SELECT
-                            name,
-                            description,
-                            data_type,
-                            nullable,
-                            ordinal_position,
-                            is_partition,
-                            distinct_count
+                            *
                         FROM metadata_column
                         WHERE table_id = ?
                         ORDER BY
@@ -203,73 +294,326 @@ class SQLiteMetadataRepository:
                             id
                         """,
                         (
-                            table_row["id"],
+                            table_id,
                         ),
                     )
                     .fetchall()
                 )
 
-                columns = {
-                    row["name"]:
-                        ColumnMetadata(
-                            name=(
-                                row["name"]
-                            ),
+                column_upstream_rows = (
+                    connection.execute(
+                        """
+                        SELECT
+                            column_id,
+                            upstream_table_full_name,
+                            upstream_column_name
+                        FROM metadata_column_upstream
+                        WHERE column_id IN (
+                            SELECT id
+                            FROM metadata_column
+                            WHERE table_id = ?
+                        )
+                        ORDER BY
+                            column_id,
+                            ordinal_position
+                        """,
+                        (
+                            table_id,
+                        ),
+                    )
+                    .fetchall()
+                )
 
-                            description=(
-                                row["description"]
-                                or ""
-                            ),
+                upstream_by_column: dict[
+                    int,
+                    list[
+                        PhysicalColumnRef
+                    ],
+                ] = {}
 
-                            data_type=(
-                                row["data_type"]
-                                or ""
-                            ),
+                for row in column_upstream_rows:
 
-                            nullable=(
-                                None
-                                if row["nullable"]
-                                is None
-                                else bool(
+                    column_id = int(
+                        row["column_id"]
+                    )
+
+                    upstream_by_column.setdefault(
+                        column_id,
+                        [],
+                    ).append(
+                        PhysicalColumnRef(
+                            table_full_name=(
+                                row[
+                                    "upstream_table_full_name"
+                                ]
+                            ),
+                            column_name=(
+                                row[
+                                    "upstream_column_name"
+                                ]
+                            ),
+                        )
+                    )
+
+                columns: dict[
+                    str,
+                    ColumnMetadata,
+                ] = {}
+
+                for row in column_rows:
+
+                    column_id = int(
+                        row["id"]
+                    )
+
+                    column = ColumnMetadata(
+                        name=(
+                            row["name"]
+                        ),
+
+                        technical=(
+                            ColumnTechnicalMetadata(
+                                ordinal_position=(
+                                    int(
+                                        row[
+                                            "ordinal_position"
+                                        ]
+                                    )
+                                ),
+
+                                data_type=(
                                     row[
-                                        "nullable"
+                                        "data_type"
+                                    ]
+                                    or ""
+                                ),
+
+                                nullable=(
+                                    _optional_bool(
+                                        row[
+                                            "nullable"
+                                        ]
+                                    )
+                                ),
+
+                                is_partition=(
+                                    bool(
+                                        row[
+                                            "is_partition"
+                                        ]
+                                    )
+                                ),
+
+                                declared_upstream_columns=(
+                                    tuple(
+                                        upstream_by_column
+                                        .get(
+                                            column_id,
+                                            [],
+                                        )
+                                    )
+                                ),
+
+                                processing_kind=(
+                                    row[
+                                        "processing_kind"
+                                    ]
+                                ),
+                            )
+                        ),
+
+                        business=(
+                            ColumnBusinessMetadata(
+                                description=(
+                                    row[
+                                        "description"
+                                    ]
+                                    or ""
+                                ),
+
+                                definition=(
+                                    row[
+                                        "definition"
+                                    ]
+                                ),
+
+                                collection_rule=(
+                                    row[
+                                        "collection_rule"
+                                    ]
+                                ),
+
+                                validation_rule=(
+                                    row[
+                                        "validation_rule"
+                                    ]
+                                ),
+
+                                processing_logic=(
+                                    row[
+                                        "processing_logic"
+                                    ]
+                                ),
+
+                                data_format=(
+                                    row[
+                                        "data_format"
+                                    ]
+                                ),
+
+                                unit=(
+                                    row["unit"]
+                                ),
+                            )
+                        ),
+
+                        semantic=(
+                            ColumnSemanticMetadata(
+                                is_code_field=(
+                                    bool(
+                                        row[
+                                            "is_code_field"
+                                        ]
+                                    )
+                                ),
+
+                                code_table_id=(
+                                    row[
+                                        "code_table_id"
+                                    ]
+                                ),
+
+                                is_dimension=(
+                                    bool(
+                                        row[
+                                            "is_dimension"
+                                        ]
+                                    )
+                                ),
+
+                                dimension_table=(
+                                    row[
+                                        "dimension_table"
+                                    ]
+                                ),
+
+                                dimension_column=(
+                                    row[
+                                        "dimension_column"
+                                    ]
+                                ),
+
+                                is_metric=(
+                                    bool(
+                                        row[
+                                            "is_metric"
+                                        ]
+                                    )
+                                ),
+
+                                metric_formula=(
+                                    row[
+                                        "metric_formula"
+                                    ]
+                                ),
+
+                                metric_aggregation=(
+                                    row[
+                                        "metric_aggregation"
+                                    ]
+                                ),
+                            )
+                        ),
+
+                        management=(
+                            ColumnManagementMetadata(
+                                lineage_source=(
+                                    row[
+                                        "lineage_source"
+                                    ]
+                                ),
+
+                                lineage_confirmation_status=(
+                                    row[
+                                        "lineage_confirmation_status"
+                                    ]
+                                ),
+
+                                remark=(
+                                    row["remark"]
+                                ),
+                            )
+                        ),
+                    )
+
+                    columns[
+                        column.name
+                    ] = column
+
+                table = TableMetadata(
+                    full_name=(
+                        table_row[
+                            "full_name"
+                        ]
+                    ),
+
+                    technical=(
+                        TableTechnicalMetadata(
+                            project=(
+                                table_row[
+                                    "project"
+                                ]
+                                or ""
+                            ),
+
+                            table_name=(
+                                table_row[
+                                    "table_name"
+                                ]
+                            ),
+
+                            code_path=(
+                                table_row[
+                                    "code_path"
+                                ]
+                            ),
+
+                            partition_fields=(
+                                _decode_identifier_tuple(
+                                    table_row[
+                                        "partition_fields_json"
                                     ]
                                 )
                             ),
 
-                            distinct_count=(
-                                row[
-                                    "distinct_count"
+                            column_count=(
+                                int(
+                                    table_row[
+                                        "column_count"
+                                    ]
+                                )
+                            ),
+
+                            source_system=(
+                                table_row[
+                                    "source_system"
+                                ]
+                            ),
+
+                            declared_upstream_tables=(
+                                declared_upstream_tables
+                            ),
+
+                            processing_node=(
+                                table_row[
+                                    "processing_node"
                                 ]
                             ),
                         )
+                    ),
 
-                    for row in column_rows
-                }
-
-                partition_fields = tuple(
-                    row["name"]
-
-                    for row in column_rows
-
-                    if (
-                        row[
-                            "is_partition"
-                        ]
-                        == 1
-                    )
-                )
-
-                return (
-                    TableLookupResult
-                    .found(
-                        TableMetadata(
-                            full_name=(
-                                table_row[
-                                    "full_name"
-                                ]
-                            ),
-
+                    business=(
+                        TableBusinessMetadata(
                             description=(
                                 table_row[
                                     "description"
@@ -277,11 +621,120 @@ class SQLiteMetadataRepository:
                                 or ""
                             ),
 
-                            layer=(
+                            statistical_regime=(
                                 table_row[
-                                    "layer"
+                                    "statistical_regime"
                                 ]
-                                or ""
+                            ),
+
+                            business_name=(
+                                table_row[
+                                    "business_name"
+                                ]
+                            ),
+
+                            related_business=(
+                                _decode_text_tuple(
+                                    table_row[
+                                        "related_business_json"
+                                    ]
+                                )
+                            ),
+
+                            asset_category=(
+                                table_row[
+                                    "asset_category"
+                                ]
+                            ),
+
+                            report_name=(
+                                table_row[
+                                    "report_name"
+                                ]
+                            ),
+
+                            purpose=(
+                                table_row[
+                                    "purpose"
+                                ]
+                            ),
+
+                            grain=(
+                                table_row[
+                                    "grain"
+                                ]
+                            ),
+
+                            business_key=(
+                                _decode_identifier_tuple(
+                                    table_row[
+                                        "business_key_json"
+                                    ]
+                                )
+                            ),
+
+                            owning_department=(
+                                table_row[
+                                    "owning_department"
+                                ]
+                            ),
+
+                            data_origin=(
+                                table_row[
+                                    "data_origin"
+                                ]
+                            ),
+                        )
+                    ),
+
+                    operational=(
+                        TableOperationalMetadata(
+                            data_cycle=(
+                                table_row[
+                                    "data_cycle"
+                                ]
+                            ),
+
+                            schedule_cycle=(
+                                table_row[
+                                    "schedule_cycle"
+                                ]
+                            ),
+
+                            update_mode=(
+                                table_row[
+                                    "update_mode"
+                                ]
+                            ),
+
+                            data_period_field=(
+                                table_row[
+                                    "data_period_field"
+                                ]
+                            ),
+
+                            first_period=(
+                                table_row[
+                                    "first_period"
+                                ]
+                            ),
+
+                            latest_period=(
+                                table_row[
+                                    "latest_period"
+                                ]
+                            ),
+
+                            period_note=(
+                                table_row[
+                                    "period_note"
+                                ]
+                            ),
+
+                            last_updated_at=(
+                                table_row[
+                                    "last_updated_at"
+                                ]
                             ),
 
                             row_count=(
@@ -295,18 +748,48 @@ class SQLiteMetadataRepository:
                                     "size_bytes"
                                 ]
                             ),
+                        )
+                    ),
 
-                            columns=columns,
+                    management=(
+                        TableManagementMetadata(
+                            maintainer=(
+                                table_row[
+                                    "maintainer"
+                                ]
+                            ),
 
-                            partition_fields=(
-                                partition_fields
+                            asset_status=(
+                                table_row[
+                                    "asset_status"
+                                ]
+                            ),
+
+                            last_verified_at=(
+                                table_row[
+                                    "last_verified_at"
+                                ]
+                            ),
+
+                            remark=(
+                                table_row[
+                                    "remark"
+                                ]
                             ),
                         )
+                    ),
+
+                    columns=columns,
+                )
+
+                return (
+                    TableLookupResult
+                    .found(
+                        table
                     )
                 )
 
         except Exception as exc:
-
             return (
                 TableLookupResult
                 .failed(
@@ -325,7 +808,7 @@ class SQLiteMetadataRepository:
         limit: int = 20,
     ) -> tuple[
         TableSearchResult,
-        ...
+        ...,
     ]:
 
         query = (
@@ -348,22 +831,23 @@ class SQLiteMetadataRepository:
 
             seen: set[str] = set()
 
-            # ------------------------------------------------
-            # 1. Exact Identifier 优先
-            # ------------------------------------------------
-
             exact_rows = (
                 connection.execute(
                     """
                     SELECT
                         full_name,
-                        description,
-                        layer
+                        description
                     FROM metadata_table
-                    WHERE full_name = ?
+                    WHERE
+                        full_name = ?
+                        OR table_name = ?
+                    ORDER BY full_name
+                    LIMIT ?
                     """,
                     (
                         query,
+                        query,
+                        limit,
                     ),
                 )
                 .fetchall()
@@ -371,26 +855,23 @@ class SQLiteMetadataRepository:
 
             for row in exact_rows:
 
-                name = row[
-                    "full_name"
-                ]
+                name = (
+                    row[
+                        "full_name"
+                    ]
+                )
+
+                if name in seen:
+                    continue
 
                 seen.add(name)
 
                 results.append(
                     TableSearchResult(
                         full_name=name,
-
                         description=(
                             row[
                                 "description"
-                            ]
-                            or ""
-                        ),
-
-                        layer=(
-                            row[
-                                "layer"
                             ]
                             or ""
                         ),
@@ -407,10 +888,6 @@ class SQLiteMetadataRepository:
                     results[:limit]
                 )
 
-            # ------------------------------------------------
-            # 2. <3 字符：LIKE fallback
-            # ------------------------------------------------
-
             if len(query) < 3:
 
                 value = (
@@ -422,16 +899,17 @@ class SQLiteMetadataRepository:
                         """
                         SELECT
                             full_name,
-                            description,
-                            layer
+                            description
                         FROM metadata_table
                         WHERE
                             full_name LIKE ?
+                            OR table_name LIKE ?
                             OR description LIKE ?
                         ORDER BY full_name
                         LIMIT ?
                         """,
                         (
+                            value,
                             value,
                             value,
                             remaining * 2,
@@ -440,10 +918,6 @@ class SQLiteMetadataRepository:
                     .fetchall()
                 )
 
-            # ------------------------------------------------
-            # 3. >=3 字符：FTS5 trigram
-            # ------------------------------------------------
-
             else:
 
                 rows = (
@@ -451,8 +925,7 @@ class SQLiteMetadataRepository:
                         """
                         SELECT
                             t.full_name,
-                            t.description,
-                            t.layer
+                            t.description
                         FROM metadata_table_fts
                         JOIN metadata_table t
                             ON t.id =
@@ -480,7 +953,9 @@ class SQLiteMetadataRepository:
             for row in rows:
 
                 name = (
-                    row["full_name"]
+                    row[
+                        "full_name"
+                    ]
                 )
 
                 if name in seen:
@@ -491,17 +966,9 @@ class SQLiteMetadataRepository:
                 results.append(
                     TableSearchResult(
                         full_name=name,
-
                         description=(
                             row[
                                 "description"
-                            ]
-                            or ""
-                        ),
-
-                        layer=(
-                            row[
-                                "layer"
                             ]
                             or ""
                         ),
@@ -514,7 +981,86 @@ class SQLiteMetadataRepository:
                 ):
                     break
 
-            return tuple(results)
+            return tuple(
+                results
+            )
+
+    def find_table_identifiers(
+        self,
+        table_name: str,
+    ) -> tuple[
+        TableSearchResult,
+        ...,
+    ]:
+        """
+        Complete Fact Query。
+
+        qualified:
+            project.loan_detail
+
+        只匹配 full_name。
+
+        bare:
+            loan_detail
+
+        返回所有 table_name 精确等于
+        loan_detail 的 canonical candidates。
+
+        不做：
+        - fuzzy
+        - FTS
+        - Top-N
+        """
+
+        normalized = (
+            table_name
+            .strip()
+            .lower()
+        )
+
+        if not normalized:
+            return ()
+
+        with self._connect() as connection:
+
+            rows = (
+                connection.execute(
+                    """
+                    SELECT
+                        full_name,
+                        description
+                    FROM metadata_table
+                    WHERE
+                        full_name = ?
+                        OR table_name = ?
+                    ORDER BY
+                        full_name
+                    """,
+                    (
+                        normalized,
+                        normalized,
+                    ),
+                )
+                .fetchall()
+            )
+
+            return tuple(
+                TableSearchResult(
+                    full_name=(
+                        row[
+                            "full_name"
+                        ]
+                    ),
+                    description=(
+                        row[
+                            "description"
+                        ]
+                        or ""
+                    ),
+                )
+                for row
+                in rows
+            )
 
     def find_columns(
         self,
@@ -523,7 +1069,7 @@ class SQLiteMetadataRepository:
         limit: int = 50,
     ) -> tuple[
         ColumnSearchResult,
-        ...
+        ...,
     ]:
 
         query = (
@@ -547,10 +1093,6 @@ class SQLiteMetadataRepository:
             seen: set[
                 tuple[str, str]
             ] = set()
-
-            # ------------------------------------------------
-            # 1. Exact column identifier
-            # ------------------------------------------------
 
             exact_rows = (
                 connection.execute(
@@ -595,7 +1137,9 @@ class SQLiteMetadataRepository:
                     row[
                         "full_name"
                     ],
-                    row["name"],
+                    row[
+                        "name"
+                    ],
                 )
 
                 seen.add(key)
@@ -612,14 +1156,9 @@ class SQLiteMetadataRepository:
             )
 
             if remaining <= 0:
-
                 return tuple(
                     results[:limit]
                 )
-
-            # ------------------------------------------------
-            # 2. Short query fallback
-            # ------------------------------------------------
 
             if len(query) < 3:
 
@@ -712,7 +1251,6 @@ class SQLiteMetadataRepository:
                             _fts_phrase(
                                 query
                             ),
-
                             remaining * 2,
                         ),
                     )
@@ -725,7 +1263,9 @@ class SQLiteMetadataRepository:
                     row[
                         "full_name"
                     ],
-                    row["name"],
+                    row[
+                        "name"
+                    ],
                 )
 
                 if key in seen:
@@ -745,104 +1285,8 @@ class SQLiteMetadataRepository:
                 ):
                     break
 
-            return tuple(results)
-
-    def find_table_identifiers(
-        self,
-        table_name: str,
-    ) -> tuple[
-        TableSearchResult,
-        ...,
-    ]:
-        """
-        查询一个表标识符对应的全部 canonical physical tables。
-
-        支持：
-
-            loan_detail
-
-        匹配：
-
-            loan_detail
-            project_a.loan_detail
-            project_b.loan_detail
-            catalog.project_a.loan_detail
-
-        但不会匹配：
-
-            loan_detail_history
-            my_loan_detail
-
-        这是 Complete Fact Query，
-        不允许 Top-N。
-        """
-
-        normalized = (
-            table_name
-            .strip()
-            .lower()
-        )
-
-        if not normalized:
-            return ()
-
-        with self._connect() as connection:
-
-            rows = (
-                connection.execute(
-                    """
-                    SELECT
-                        full_name,
-                        description,
-                        layer
-                    FROM metadata_table
-                    WHERE
-                        full_name = ?
-                        OR (
-                            length(full_name)
-                                > length(?)
-
-                            AND substr(
-                                full_name,
-                                -length(?)
-                            ) = ?
-
-                            AND substr(
-                                full_name,
-                                length(full_name)
-                                    - length(?),
-                                1
-                            ) = '.'
-                        )
-                    ORDER BY full_name
-                    """,
-                    (
-                        normalized,
-                        normalized,
-                        normalized,
-                        normalized,
-                        normalized,
-                    ),
-                )
-                .fetchall()
-            )
-
             return tuple(
-                TableSearchResult(
-                    full_name=(
-                        row["full_name"]
-                    ),
-                    description=(
-                        row["description"]
-                        or ""
-                    ),
-                    layer=(
-                        row["layer"]
-                        or ""
-                    ),
-                )
-                for row
-                in rows
+                results
             )
 
     def find_column_usages(
@@ -850,13 +1294,13 @@ class SQLiteMetadataRepository:
         column_name: str,
     ) -> tuple[
         ColumnSearchResult,
-        ...
+        ...,
     ]:
         """
-        Exact Fact Query。
+        Complete Fact Query。
 
-        不使用 limit，
-        必须返回所有物理使用位置。
+        不使用 Top-N，
+        返回全部精确字段使用位置。
         """
 
         normalized = (
@@ -907,8 +1351,8 @@ class SQLiteMetadataRepository:
                 self._column_result(
                     row
                 )
-
-                for row in rows
+                for row
+                in rows
             )
 
     @staticmethod
@@ -931,7 +1375,9 @@ class SQLiteMetadataRepository:
             ),
 
             column_name=(
-                row["name"]
+                row[
+                    "name"
+                ]
             ),
 
             column_description=(

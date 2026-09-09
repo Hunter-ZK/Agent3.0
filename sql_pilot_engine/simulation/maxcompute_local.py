@@ -1023,7 +1023,7 @@ class MaxComputeLocalSimulator:
         partition_names = tuple(
             name.strip().lower()
             for name
-            in metadata.partition_fields
+            in metadata.technical.partition_fields
         )
 
         # --------------------------------------------------
@@ -1141,6 +1141,7 @@ class MaxComputeLocalSimulator:
                     ).cast(
                         self._spark_type(
                             column_metadata
+                            .technical
                             .data_type
                         )
                     ),
@@ -2030,7 +2031,7 @@ class MaxComputeLocalSimulator:
         return ", ".join(
             (
                 f"`{column.name}` "
-                f"{self._spark_type(column.data_type)}"
+                f"{self._spark_type(column.technical.data_type)}"
             )
             for column
             in metadata.columns.values()

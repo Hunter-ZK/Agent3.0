@@ -73,14 +73,14 @@ def render_linked_schema(
         if table.description:
             lines.append(
                 "Description: "
-                f"{table.description}"
+                f"{table.business.description}"
             )
 
         if table.partition_fields:
             lines.append(
                 "Partition fields: "
                 + ", ".join(
-                    table.partition_fields
+                    table.technical.partition_fields
                 )
             )
             
@@ -95,12 +95,12 @@ def render_linked_schema(
             
             if column.data_type:
                 line += (
-                    f" [{column.data_type}]"
+                    f" [{column.technical.data_type}]"
                 )
             
             if column.description:
                 line += (
-                    f": {column.description}"
+                    f": {column.business.description}"
                 )
             
             lines.append(line)

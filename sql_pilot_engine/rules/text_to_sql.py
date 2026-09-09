@@ -1059,7 +1059,7 @@ def check_partition_constraint(
         )
 
         if not (
-            metadata.partition_fields
+            metadata.technical.partition_fields
         ):
             continue
 
@@ -1086,6 +1086,7 @@ def check_partition_constraint(
                 ),
                 partition_fields=(
                     metadata
+                    .technical
                     .partition_fields
                 ),
             )
@@ -1132,7 +1133,7 @@ def check_partition_constraint(
                     f"table="
                     f"{metadata.full_name}; "
                     f"partition_fields="
-                    f"{metadata.partition_fields}; "
+                    f"{metadata.technical.partition_fields}; "
                     f"predicate_facts="
                     f"{facts.predicate_facts!r}"
                 ),
