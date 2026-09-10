@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from metadata_test_factory import (
+    make_column_metadata,
+    make_table_metadata,
+)
+
 import pytest
 
 from sql_pilot_engine.context.builder import (
@@ -50,7 +55,7 @@ class RecordingModel:
 def build_linked_schema(
 ) -> LinkedSchema:
 
-    table = TableMetadata(
+    table = make_table_metadata(
         full_name=(
             "odps_prd_dwd."
             "ods_hd_100_cldkxx"
@@ -62,7 +67,7 @@ def build_linked_schema(
 
         columns={
             "loan_bal_rmb": (
-                ColumnMetadata(
+                make_column_metadata(
                     name=(
                         "loan_bal_rmb"
                     ),
@@ -76,7 +81,7 @@ def build_linked_schema(
             ),
 
             "dt": (
-                ColumnMetadata(
+                make_column_metadata(
                     name="dt",
                     data_type="STRING",
                     description=(

@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from metadata_test_factory import (
+    make_column_metadata,
+    make_table_metadata,
+)
+
 from collections.abc import Iterable
 
 from sql_pilot_engine.evidence.program_metadata import (
@@ -48,8 +53,7 @@ class _InMemoryMetadataRepository:
         return tuple(
             TableSearchResult(
                 full_name=table.full_name,
-                description=table.description,
-                layer=table.layer,
+                description=table.business.description,
             )
             for table in sorted(matches, key=lambda item: item.full_name)
         )
@@ -61,10 +65,10 @@ def _table(
     columns: tuple[str, ...],
     partition_fields: tuple[str, ...] = (),
 ) -> TableMetadata:
-    return TableMetadata(
+    return make_table_metadata(
         full_name=full_name,
         columns={
-            name: ColumnMetadata(name=name, data_type="string")
+            name: make_column_metadata(name=name, data_type="string")
             for name in columns
         },
         partition_fields=partition_fields,

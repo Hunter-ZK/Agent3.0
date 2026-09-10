@@ -8,9 +8,34 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from sql_pilot_engine.metadata.ingestion.writer import (
+    write_metadata_tables,
+)
+
+from sql_pilot_engine.metadata.models import (
+    ColumnBusinessMetadata,
+    ColumnManagementMetadata,
+    ColumnMetadata,
+    ColumnSemanticMetadata,
+    ColumnTechnicalMetadata,
+    TableBusinessMetadata,
+    TableManagementMetadata,
+    TableMetadata,
+    TableOperationalMetadata,
+    TableTechnicalMetadata,
+)
+
+from sql_pilot_engine.metadata.schema import (
+    MetadataProvenance,
+)
 
 
-REQUIRED_COLUMNS = {
+LEGACY_FORMAT_NAME = (
+    "legacy_4_column"
+)
+
+
+LEGACY_REQUIRED_COLUMNS = {
     "字段英文",
     "字段中文",
     "英文表名",
@@ -18,14 +43,9 @@ REQUIRED_COLUMNS = {
 }
 
 
-KNOWN_LAYERS = {
-    "ods",
-    "dim",
-    "dwd",
-    "dws",
-    "ads",
-    "ver",
-}
+LEGACY_PREFERRED_SHEET = (
+    "每个表的字段"
+)
 
 
 @dataclass(
@@ -33,6 +53,20 @@ KNOWN_LAYERS = {
     slots=True,
 )
 class ExcelMetadataImportResult:
+    """
+    一次 Excel Metadata Import 的结果摘要。
+
+    provenance：
+        描述本次 Excel Source 的可信等级。
+
+    source_format：
+        描述本次识别到的外部文件格式。
+
+    注意：
+        provenance 是 build-level fact，
+        不进入 TableLookupResult。
+    """
+
     table_count: int
     column_count: int
 
@@ -41,57 +75,68 @@ class ExcelMetadataImportResult:
     duplicate_rows: int
     skipped_rows: int
 
+    provenance: MetadataProvenance
+    source_format: str
+
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
+class _LegacyParseResult:
+    """
+    Legacy Excel Adapter 的内部结果。
+
+    前导下划线表示：
+
+    这不是 Metadata Domain Contract，
+    只是 Excel Adapter 内部临时结构。
+    """
+
+    tables: tuple[
+        TableMetadata,
+        ...,
+    ]
+
+    raw_rows: int
+    accepted_rows: int
+    duplicate_rows: int
+    skipped_rows: int
+
 
 def _clean(
-    value,
+    value: object,
 ) -> str:
-
     if value is None:
         return ""
 
-    return str(value).strip()
-
-
-def _infer_layer(
-    table_name: str,
-) -> str:
-
-    base_table_name = (
-        table_name
-        .strip()
-        .lower()
-        .split(".")[-1]
-    )
-
-    prefix = (
-        base_table_name
-        .split("_", 1)[0]
-    )
-
-    if prefix in KNOWN_LAYERS:
-        return prefix
-
-    return ""
+    return str(
+        value
+    ).strip()
 
 
 def _primary_description(
     counter: Counter[str],
 ) -> str:
     """
-    一个物理对象只保留一个主描述。
+    一个物理对象仍然只保留一个主中文描述。
 
-    规则：
-    1. 出现次数最多；
-    2. 次数相同时使用最早出现的描述。
+    Legacy 文件中如果同一对象存在多个描述：
 
-    Counter保持插入顺序，
-    因此most_common在并列时会保留首次顺序。
+    1. 选择出现次数最多的；
+    2. 次数一致时选择最早出现的。
+
+    这是旧 Metadata Import 既有规则，
+    本轮不改变其业务含义。
     """
 
     if not counter:
         return ""
 
-    return counter.most_common(1)[0][0]
+    return (
+        counter
+        .most_common(1)[0][0]
+    )
 
 
 def import_metadata_excel(
@@ -99,15 +144,108 @@ def import_metadata_excel(
     database_path: str | Path,
 ) -> ExcelMetadataImportResult:
     """
-    将Excel元数据持久化导入SQLite。
+    Excel Metadata 的统一入口。
 
-    注意：
-    这是维护流程，不应该由Agent Runtime调用。
+    当前能够确认的实际格式只有：
+
+        legacy_4_column
+
+    即：
+
+        字段英文
+        字段中文
+        英文表名
+        中文表名
+
+    未来正式盘点模板接入时，
+    在这里增加新的 Adapter Dispatch。
+
+    Persistence Writer 不需要改变。
     """
 
-    source = Path(source_path)
-    database = Path(database_path)
+    source = Path(
+        source_path
+    )
 
+    database = Path(
+        database_path
+    )
+
+    if not source.exists():
+        raise FileNotFoundError(
+            source
+        )
+
+    parse_result = (
+        _parse_legacy_excel(
+            source
+        )
+    )
+
+    with sqlite3.connect(
+        database
+    ) as connection:
+
+        connection.execute(
+            "PRAGMA foreign_keys = ON"
+        )
+
+        (
+            table_count,
+            column_count,
+        ) = (
+            write_metadata_tables(
+                connection,
+                parse_result.tables,
+            )
+        )
+
+    return ExcelMetadataImportResult(
+        table_count=table_count,
+        column_count=column_count,
+
+        raw_rows=(
+            parse_result.raw_rows
+        ),
+
+        accepted_rows=(
+            parse_result
+            .accepted_rows
+        ),
+
+        duplicate_rows=(
+            parse_result
+            .duplicate_rows
+        ),
+
+        skipped_rows=(
+            parse_result
+            .skipped_rows
+        ),
+
+        provenance=(
+            MetadataProvenance
+            .PARTIAL
+        ),
+
+        source_format=(
+            LEGACY_FORMAT_NAME
+        ),
+    )
+
+
+def _parse_legacy_excel(
+    source: Path,
+) -> _LegacyParseResult:
+    """
+    Legacy Excel Adapter。
+
+    External representation
+        ↓
+    TableMetadata[]
+
+    本函数不执行任何 SQLite INSERT。
+    """
 
     workbook = load_workbook(
         source,
@@ -117,51 +255,73 @@ def import_metadata_excel(
 
     try:
 
-        sheet = (
-            workbook["每个表的字段"]
-            if "每个表的字段"
+        if (
+            LEGACY_PREFERRED_SHEET
             in workbook.sheetnames
-            else workbook.active
-        )
+        ):
+            sheet = workbook[
+                LEGACY_PREFERRED_SHEET
+            ]
+        else:
+            sheet = (
+                workbook.active
+            )
 
         rows = sheet.iter_rows(
             values_only=True
         )
 
+        try:
+            header_row = next(
+                rows
+            )
+        except StopIteration as exc:
+            raise ValueError(
+                "Metadata Excel is empty."
+            ) from exc
+
         headers = tuple(
             _clean(value)
-            for value in next(rows)
+            for value
+            in header_row
         )
 
         column_indexes = {
             name: index
             for index, name
             in enumerate(headers)
+            if name
         }
 
         missing_columns = (
-            REQUIRED_COLUMNS
+            LEGACY_REQUIRED_COLUMNS
             - set(column_indexes)
         )
 
         if missing_columns:
             raise ValueError(
-                "Missing required columns: "
+                "Unsupported metadata Excel "
+                "format. "
+                "The current adapter only "
+                "recognizes legacy_4_column. "
+                "Missing columns: "
                 + ", ".join(
-                    sorted(missing_columns)
+                    sorted(
+                        missing_columns
+                    )
                 )
             )
 
-        # --------------------------------------------------
-        # 先在内存中按物理表 / 字段聚合。
+        # ----------------------------------------------
+        # Legacy Source Aggregation
         #
-        # 这里不是Runtime缓存，
-        # 只是一次Excel导入过程中的临时结构。
-        # --------------------------------------------------
+        # 这里只存在于 Adapter 内部，
+        # 不作为 Runtime Cache。
+        # ----------------------------------------------
 
         tables: dict[
             str,
-            dict,
+            dict[str, object],
         ] = {}
 
         seen_records: set[
@@ -182,36 +342,32 @@ def import_metadata_excel(
 
             raw_rows += 1
 
-            column_name = _clean(
-                row[
-                    column_indexes[
-                        "字段英文"
-                    ]
-                ]
+            column_name = _cell(
+                row,
+                column_indexes[
+                    "字段英文"
+                ],
             )
 
-            column_description = _clean(
-                row[
-                    column_indexes[
-                        "字段中文"
-                    ]
-                ]
+            column_description = _cell(
+                row,
+                column_indexes[
+                    "字段中文"
+                ],
             )
 
-            table_name = _clean(
-                row[
-                    column_indexes[
-                        "英文表名"
-                    ]
-                ]
+            table_name = _cell(
+                row,
+                column_indexes[
+                    "英文表名"
+                ],
             )
 
-            table_description = _clean(
-                row[
-                    column_indexes[
-                        "中文表名"
-                    ]
-                ]
+            table_description = _cell(
+                row,
+                column_indexes[
+                    "中文表名"
+                ],
             )
 
             if (
@@ -236,179 +392,349 @@ def import_metadata_excel(
                 column_description,
             )
 
-            # 完全相同的原始记录只保留一次。
             if record in seen_records:
                 duplicate_rows += 1
                 continue
 
-            seen_records.add(record)
+            seen_records.add(
+                record
+            )
 
             accepted_rows += 1
 
-            table_data = tables.setdefault(
-                normalized_table_name,
-                {
-                    "descriptions": Counter(),
-                    "columns": {},
-                },
+            table_data = (
+                tables.setdefault(
+                    normalized_table_name,
+                    {
+                        "descriptions": (
+                            Counter()
+                        ),
+                        "columns": {},
+                    },
+                )
             )
 
-            if table_description:
+            descriptions = (
                 table_data[
                     "descriptions"
-                ][table_description] += 1
+                ]
+            )
 
-            columns = table_data[
-                "columns"
-            ]
+            if not isinstance(
+                descriptions,
+                Counter,
+            ):
+                raise TypeError(
+                    "Internal legacy "
+                    "adapter error."
+                )
+
+            if table_description:
+                descriptions[
+                    table_description
+                ] += 1
+
+            raw_columns = (
+                table_data[
+                    "columns"
+                ]
+            )
+
+            if not isinstance(
+                raw_columns,
+                dict,
+            ):
+                raise TypeError(
+                    "Internal legacy "
+                    "adapter error."
+                )
 
             if (
                 normalized_column_name
-                not in columns
+                not in raw_columns
             ):
-                columns[
+                raw_columns[
                     normalized_column_name
                 ] = {
-                    "descriptions": Counter(),
+                    "descriptions": (
+                        Counter()
+                    ),
 
-                    # 按第一次遇到字段的顺序保存。
                     "ordinal_position": (
-                        len(columns) + 1
+                        len(raw_columns)
+                        + 1
                     ),
                 }
 
-            column_data = columns[
-                normalized_column_name
-            ]
+            column_data = (
+                raw_columns[
+                    normalized_column_name
+                ]
+            )
 
-            if column_description:
+            if not isinstance(
+                column_data,
+                dict,
+            ):
+                raise TypeError(
+                    "Internal legacy "
+                    "adapter error."
+                )
+
+            column_descriptions = (
                 column_data[
                     "descriptions"
-                ][column_description] += 1
+                ]
+            )
 
-    finally:
+            if not isinstance(
+                column_descriptions,
+                Counter,
+            ):
+                raise TypeError(
+                    "Internal legacy "
+                    "adapter error."
+                )
 
-        workbook.close()
+            if column_description:
+                column_descriptions[
+                    column_description
+                ] += 1
 
-    # ------------------------------------------------------
-    # 持久化
-    #
-    # 注意：
-    # 这里写入的是 Rebuild 阶段创建的临时数据库。
-    # Runtime 不调用这个函数。
-    # ------------------------------------------------------
-
-    with sqlite3.connect(
-        database
-    ) as connection:
-
-        connection.execute(
-            "PRAGMA foreign_keys = ON"
+        domain_tables = (
+            _build_legacy_domain_tables(
+                tables
+            )
         )
 
-        table_count = 0
-        column_count = 0
+        return _LegacyParseResult(
+            tables=domain_tables,
+
+            raw_rows=raw_rows,
+            accepted_rows=(
+                accepted_rows
+            ),
+            duplicate_rows=(
+                duplicate_rows
+            ),
+            skipped_rows=(
+                skipped_rows
+            ),
+        )
+
+    finally:
+        workbook.close()
+
+
+def _cell(
+    row: tuple[object, ...],
+    index: int,
+) -> str:
+    """
+    安全读取 Excel Row。
+
+    某些 Excel 行尾可能比 Header 短，
+    这种情况按空单元格处理。
+    """
+
+    if index >= len(row):
+        return ""
+
+    return _clean(
+        row[index]
+    )
+
+
+def _build_legacy_domain_tables(
+    tables: dict[
+        str,
+        dict[str, object],
+    ],
+) -> tuple[
+    TableMetadata,
+    ...,
+]:
+    """
+    Legacy aggregate
+        ↓
+    Agent3 Metadata Domain
+
+    Legacy Source 没有：
+
+    - project
+    - data_type
+    - partition
+    - row_count
+    - lineage
+    - business metadata
+
+    因此：
+
+        project = ""
+        data_type = ""
+        provenance = PARTIAL
+
+    绝不猜测这些事实。
+    """
+
+    result: list[
+        TableMetadata
+    ] = []
+
+    for (
+        table_name,
+        table_data,
+    ) in tables.items():
+
+        descriptions = (
+            table_data[
+                "descriptions"
+            ]
+        )
+
+        raw_columns = (
+            table_data[
+                "columns"
+            ]
+        )
+
+        if (
+            not isinstance(
+                descriptions,
+                Counter,
+            )
+            or not isinstance(
+                raw_columns,
+                dict,
+            )
+        ):
+            raise TypeError(
+                "Internal legacy "
+                "adapter error."
+            )
+
+        columns: dict[
+            str,
+            ColumnMetadata,
+        ] = {}
 
         for (
-            table_name,
-            table_data,
-        ) in tables.items():
+            column_name,
+            raw_column_data,
+        ) in raw_columns.items():
 
-            table_cursor = (
-                connection.execute(
-                    """
-                    INSERT INTO metadata_table (
-                        full_name,
-                        description,
-                        layer,
-                        row_count,
-                        size_bytes
-                    )
-                    VALUES (
-                        ?,
-                        ?,
-                        ?,
-                        NULL,
-                        NULL
-                    )
-                    """,
-                    (
-                        table_name,
-
-                        _primary_description(
-                            table_data[
-                                "descriptions"
-                            ]
-                        ),
-
-                        _infer_layer(
-                            table_name
-                        ),
-                    ),
-                )
-            )
-
-            table_id = int(
-                table_cursor.lastrowid
-            )
-
-            table_count += 1
-
-            for (
-                column_name,
-                column_data,
-            ) in table_data[
-                "columns"
-            ].items():
-
-                connection.execute(
-                    """
-                    INSERT INTO metadata_column (
-                        table_id,
-                        name,
-                        description,
-                        data_type,
-                        nullable,
-                        ordinal_position,
-                        is_partition,
-                        distinct_count
-                    )
-                    VALUES (
-                        ?,
-                        ?,
-                        ?,
-                        '',
-                        NULL,
-                        ?,
-                        NULL,
-                        NULL
-                    )
-                    """,
-                    (
-                        table_id,
-
-                        column_name,
-
-                        _primary_description(
-                            column_data[
-                                "descriptions"
-                            ]
-                        ),
-
-                        column_data[
-                            "ordinal_position"
-                        ],
-                    ),
+            if not isinstance(
+                raw_column_data,
+                dict,
+            ):
+                raise TypeError(
+                    "Internal legacy "
+                    "adapter error."
                 )
 
-                column_count += 1
+            column_descriptions = (
+                raw_column_data[
+                    "descriptions"
+                ]
+            )
 
-    return ExcelMetadataImportResult(
-        table_count=table_count,
-        column_count=column_count,
+            ordinal_position = int(
+                raw_column_data[
+                    "ordinal_position"
+                ]
+            )
 
-        raw_rows=raw_rows,
-        accepted_rows=accepted_rows,
-        duplicate_rows=duplicate_rows,
-        skipped_rows=skipped_rows,
+            if not isinstance(
+                column_descriptions,
+                Counter,
+            ):
+                raise TypeError(
+                    "Internal legacy "
+                    "adapter error."
+                )
+
+            columns[
+                column_name
+            ] = ColumnMetadata(
+                name=column_name,
+
+                technical=(
+                    ColumnTechnicalMetadata(
+                        ordinal_position=(
+                            ordinal_position
+                        ),
+
+                        # Legacy Source
+                        # 没有字段类型。
+                        #
+                        # 不允许猜。
+                        data_type="",
+
+                        nullable=None,
+                        is_partition=False,
+                    )
+                ),
+
+                business=(
+                    ColumnBusinessMetadata(
+                        description=(
+                            _primary_description(
+                                column_descriptions
+                            )
+                        )
+                    )
+                ),
+
+                semantic=(
+                    ColumnSemanticMetadata()
+                ),
+
+                management=(
+                    ColumnManagementMetadata()
+                ),
+            )
+
+        result.append(
+            TableMetadata(
+                # Legacy Source 没有 project，
+                # 所以这里只能保留 bare name。
+                full_name=table_name,
+
+                technical=(
+                    TableTechnicalMetadata(
+                        project="",
+                        table_name=table_name,
+
+                        partition_fields=(),
+
+                        column_count=(
+                            len(columns)
+                        ),
+                    )
+                ),
+
+                business=(
+                    TableBusinessMetadata(
+                        description=(
+                            _primary_description(
+                                descriptions
+                            )
+                        )
+                    )
+                ),
+
+                operational=(
+                    TableOperationalMetadata()
+                ),
+
+                management=(
+                    TableManagementMetadata()
+                ),
+
+                columns=columns,
+            )
+        )
+
+    return tuple(
+        result
     )

@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from metadata_test_factory import (
+    make_column_metadata,
+    make_table_metadata,
+)
+
 from sql_pilot_engine.context.semantic.models import (
     SemanticFilter,
     SemanticMetric,
@@ -37,12 +42,12 @@ TABLE_NAME = (
 
 def _table() -> TableMetadata:
 
-    return TableMetadata(
+    return make_table_metadata(
         full_name=TABLE_NAME,
 
         columns={
             "loan_bal_rmb": (
-                ColumnMetadata(
+                make_column_metadata(
                     name=(
                         "loan_bal_rmb"
                     ),
@@ -58,7 +63,7 @@ def _table() -> TableMetadata:
             ),
 
             "ent_code": (
-                ColumnMetadata(
+                make_column_metadata(
                     name="ent_code",
 
                     data_type="STRING",
@@ -70,7 +75,7 @@ def _table() -> TableMetadata:
             ),
 
             "dt": (
-                ColumnMetadata(
+                make_column_metadata(
                     name="dt",
 
                     data_type="STRING",
@@ -83,7 +88,7 @@ def _table() -> TableMetadata:
                 "is_high_tech_"
                 "mfg_loan_code"
             ): (
-                ColumnMetadata(
+                make_column_metadata(
                     name=(
                         "is_high_tech_"
                         "mfg_loan_code"
@@ -98,7 +103,7 @@ def _table() -> TableMetadata:
             ),
 
             "region_code": (
-                ColumnMetadata(
+                make_column_metadata(
                     name="region_code",
 
                     data_type="STRING",

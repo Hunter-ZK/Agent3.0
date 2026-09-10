@@ -1,3 +1,7 @@
+from metadata_test_factory import (
+    make_column_metadata,
+    make_table_metadata,
+)
 import pytest
 
 pytest.importorskip("pyspark")
@@ -18,18 +22,18 @@ def _loan_metadata(
     ),
 ) -> TableMetadata:
 
-    return TableMetadata(
+    return make_table_metadata(
         full_name=full_name,
         columns={
-            "customer_id": ColumnMetadata(
+            "customer_id": make_column_metadata(
                 name="customer_id",
                 data_type="string",
             ),
-            "amount": ColumnMetadata(
+            "amount": make_column_metadata(
                 name="amount",
                 data_type="bigint",
             ),
-            "dt": ColumnMetadata(
+            "dt": make_column_metadata(
                 name="dt",
                 data_type="string",
             ),
@@ -42,20 +46,20 @@ def _loan_metadata(
 
 def _result_metadata() -> TableMetadata:
 
-    return TableMetadata(
+    return make_table_metadata(
         full_name=(
             "odps_prd_dws.loan_result"
         ),
         columns={
-            "customer_id": ColumnMetadata(
+            "customer_id": make_column_metadata(
                 name="customer_id",
                 data_type="string",
             ),
-            "total_amount": ColumnMetadata(
+            "total_amount": make_column_metadata(
                 name="total_amount",
                 data_type="bigint",
             ),
-            "dt": ColumnMetadata(
+            "dt": make_column_metadata(
                 name="dt",
                 data_type="string",
             ),
@@ -279,19 +283,19 @@ def test_duplicate_bare_table_is_rejected():
 def test_unique_unqualified_column_is_resolved_by_spark():
 
     customer_metadata = (
-        TableMetadata(
+        make_table_metadata(
             full_name=(
                 "odps_prd_dim.customer"
             ),
             columns={
                 "customer_id": (
-                    ColumnMetadata(
+                    make_column_metadata(
                         name="customer_id",
                         data_type="string",
                     )
                 ),
                 "customer_name": (
-                    ColumnMetadata(
+                    make_column_metadata(
                         name="customer_name",
                         data_type="string",
                     )
@@ -350,19 +354,19 @@ def test_unique_unqualified_column_is_resolved_by_spark():
 def test_duplicate_unqualified_column_is_rejected_by_spark():
 
     other_metadata = (
-        TableMetadata(
+        make_table_metadata(
             full_name=(
                 "odps_prd_dws.other_loan"
             ),
             columns={
                 "customer_id": (
-                    ColumnMetadata(
+                    make_column_metadata(
                         name="customer_id",
                         data_type="string",
                     )
                 ),
                 "amount": (
-                    ColumnMetadata(
+                    make_column_metadata(
                         name="amount",
                         data_type="bigint",
                     )

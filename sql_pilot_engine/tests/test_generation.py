@@ -1,3 +1,7 @@
+from metadata_test_factory import (
+    make_column_metadata,
+    make_table_metadata,
+)
 from sql_pilot_engine.context.builder import QueryContext
 from sql_pilot_engine.generation.planner import QueryPlanner
 from sql_pilot_engine.generation.sql_generator import SQLGenerator
@@ -47,14 +51,14 @@ def build_context() -> QueryContext:
 def build_linked_schema(
 ) -> LinkedSchema:
 
-    table = TableMetadata(
+    table = make_table_metadata(
         full_name=(
             "dwd_order_detail"
         ),
 
         columns={
             "user_id": (
-                ColumnMetadata(
+                make_column_metadata(
                     name="user_id",
                     data_type="STRING",
                     description="用户ID",
@@ -62,7 +66,7 @@ def build_linked_schema(
             ),
 
             "order_amount": (
-                ColumnMetadata(
+                make_column_metadata(
                     name="order_amount",
                     data_type="DECIMAL(18,2)",
                     description="订单金额",

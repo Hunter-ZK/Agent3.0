@@ -1,8 +1,12 @@
-from pathlib import Path
+from metadata_test_factory import (
+    make_column_metadata,
+    make_table_metadata,
+)
 
 import pytest
 
 pytest.importorskip("pyspark")
+from pathlib import Path
 
 from sql_pilot_engine.metadata.models import (
     ColumnMetadata,
@@ -28,36 +32,36 @@ FIXTURE_SQL = (
 
 def _fact_sales_metadata() -> TableMetadata:
 
-    return TableMetadata(
+    return make_table_metadata(
         full_name=(
             "odps_prd_dwd.fact_sales"
         ),
         columns={
-            "customer_id": ColumnMetadata(
+            "customer_id": make_column_metadata(
                 name="customer_id",
                 data_type="string",
             ),
-            "region": ColumnMetadata(
+            "region": make_column_metadata(
                 name="region",
                 data_type="string",
             ),
-            "product": ColumnMetadata(
+            "product": make_column_metadata(
                 name="product",
                 data_type="string",
             ),
-            "amount": ColumnMetadata(
+            "amount": make_column_metadata(
                 name="amount",
                 data_type="bigint",
             ),
-            "tags": ColumnMetadata(
+            "tags": make_column_metadata(
                 name="tags",
                 data_type="string",
             ),
-            "batch_num": ColumnMetadata(
+            "batch_num": make_column_metadata(
                 name="batch_num",
                 data_type="string",
             ),
-            "dt": ColumnMetadata(
+            "dt": make_column_metadata(
                 name="dt",
                 data_type="string",
             ),
@@ -70,16 +74,16 @@ def _fact_sales_metadata() -> TableMetadata:
 
 def _customer_metadata() -> TableMetadata:
 
-    return TableMetadata(
+    return make_table_metadata(
         full_name=(
             "odps_prd_dim.dim_customer"
         ),
         columns={
-            "customer_id": ColumnMetadata(
+            "customer_id": make_column_metadata(
                 name="customer_id",
                 data_type="string",
             ),
-            "customer_name": ColumnMetadata(
+            "customer_name": make_column_metadata(
                 name="customer_name",
                 data_type="string",
             ),
@@ -89,28 +93,28 @@ def _customer_metadata() -> TableMetadata:
 
 def _production_result_metadata() -> TableMetadata:
 
-    return TableMetadata(
+    return make_table_metadata(
         full_name=(
             "odps_prd_dws.production_result"
         ),
         columns={
-            "region": ColumnMetadata(
+            "region": make_column_metadata(
                 name="region",
                 data_type="string",
             ),
-            "product": ColumnMetadata(
+            "product": make_column_metadata(
                 name="product",
                 data_type="string",
             ),
-            "total_amount": ColumnMetadata(
+            "total_amount": make_column_metadata(
                 name="total_amount",
                 data_type="bigint",
             ),
-            "batch_num": ColumnMetadata(
+            "batch_num": make_column_metadata(
                 name="batch_num",
                 data_type="string",
             ),
-            "dt": ColumnMetadata(
+            "dt": make_column_metadata(
                 name="dt",
                 data_type="string",
             ),
@@ -124,24 +128,24 @@ def _production_result_metadata() -> TableMetadata:
 
 def _production_tag_result_metadata() -> TableMetadata:
 
-    return TableMetadata(
+    return make_table_metadata(
         full_name=(
             "odps_prd_dws.production_tag_result"
         ),
         columns={
-            "tag": ColumnMetadata(
+            "tag": make_column_metadata(
                 name="tag",
                 data_type="string",
             ),
-            "cnt": ColumnMetadata(
+            "cnt": make_column_metadata(
                 name="cnt",
                 data_type="bigint",
             ),
-            "batch_num": ColumnMetadata(
+            "batch_num": make_column_metadata(
                 name="batch_num",
                 data_type="string",
             ),
-            "dt": ColumnMetadata(
+            "dt": make_column_metadata(
                 name="dt",
                 data_type="string",
             ),

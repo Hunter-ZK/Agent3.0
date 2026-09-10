@@ -1,3 +1,4 @@
+from metadata_test_factory import make_column_metadata, make_table_metadata
 from langgraph.checkpoint.serde.jsonplus import (
     JsonPlusSerializer,
 )
@@ -13,12 +14,12 @@ from sql_pilot_engine.metadata.models import (
 )
 
 
-column = ColumnMetadata(
+column = make_column_metadata(
     name="loan_bal_rmb",
     data_type="DECIMAL(22,2)",
 )
 
-table = TableMetadata(
+table = make_table_metadata(
     full_name="test_table",
     columns={
         "loan_bal_rmb": column,

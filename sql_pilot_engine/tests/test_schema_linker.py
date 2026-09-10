@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from metadata_test_factory import (
+    make_column_metadata,
+    make_table_metadata,
+)
+
 import pytest
 
 from sql_pilot_engine.context.semantic.models import (
@@ -108,7 +113,7 @@ class FakeMetadataProvider:
 def build_physical_table(
 ) -> TableMetadata:
 
-    return TableMetadata(
+    return make_table_metadata(
         full_name=(
             "odps_prd_dwd."
             "ods_hd_100_cldkxx"
@@ -120,7 +125,7 @@ def build_physical_table(
 
         columns={
             "loan_bal_rmb": (
-                ColumnMetadata(
+                make_column_metadata(
                     name=(
                         "loan_bal_rmb"
                     ),
@@ -134,7 +139,7 @@ def build_physical_table(
             ),
 
             "dt": (
-                ColumnMetadata(
+                make_column_metadata(
                     name="dt",
                     data_type="STRING",
                     description=(
@@ -144,7 +149,7 @@ def build_physical_table(
             ),
 
             "fin_org_code": (
-                ColumnMetadata(
+                make_column_metadata(
                     name=(
                         "fin_org_code"
                     ),
@@ -593,11 +598,11 @@ def test_schema_linker_reports_metadata_system_error():
     
 def test_schema_linker_reports_ambiguous_physical_column():
 
-    first_table = TableMetadata(
+    first_table = make_table_metadata(
         full_name="project.table_a",
         columns={
             "fin_org_code": (
-                ColumnMetadata(
+                make_column_metadata(
                     name="fin_org_code",
                     data_type="STRING",
                     description=(
@@ -608,11 +613,11 @@ def test_schema_linker_reports_ambiguous_physical_column():
         },
     )
 
-    second_table = TableMetadata(
+    second_table = make_table_metadata(
         full_name="project.table_b",
         columns={
             "fin_org_code": (
-                ColumnMetadata(
+                make_column_metadata(
                     name="fin_org_code",
                     data_type="STRING",
                     description=(

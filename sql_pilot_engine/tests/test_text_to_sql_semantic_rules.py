@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from metadata_test_factory import (
+    make_column_metadata,
+    make_table_metadata,
+)
+
 from sql_pilot_engine.analysis.sql_analysis import (
     SQLAnalysisAdapter,
 )
@@ -52,7 +57,7 @@ def _physical_table(
     ] = (),
 ) -> TableMetadata:
 
-    return TableMetadata(
+    return make_table_metadata(
         full_name=name,
         columns={},
         partition_fields=(

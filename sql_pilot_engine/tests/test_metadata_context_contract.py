@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from metadata_test_factory import (
+    make_column_metadata,
+    make_table_metadata,
+)
+
 from sql_pilot_engine.analysis.facts import (
     SQLFacts,
 )
@@ -64,11 +69,11 @@ def build_facts() -> SQLFacts:
 
 def test_missing_partition_fact_is_not_rendered_as_false():
 
-    table = TableMetadata(
+    table = make_table_metadata(
         full_name="ods_test_table",
         description="测试表",
         columns={
-            "dt": ColumnMetadata(
+            "dt": make_column_metadata(
                 name="dt",
                 data_type="",
                 description=(
@@ -111,11 +116,11 @@ def test_missing_partition_fact_is_not_rendered_as_false():
 
 def test_declared_partition_fields_are_rendered():
 
-    table = TableMetadata(
+    table = make_table_metadata(
         full_name="ods_test_table",
         description="测试表",
         columns={
-            "dt": ColumnMetadata(
+            "dt": make_column_metadata(
                 name="dt",
                 data_type="STRING",
                 description=(

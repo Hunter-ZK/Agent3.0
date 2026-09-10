@@ -4,8 +4,8 @@ import argparse
 
 from pathlib import Path
 
-from sql_pilot_engine.metadata.ingestion.excel import (
-    import_metadata_excel,
+from sql_pilot_engine.metadata.ingestion.rebuild import (
+    rebuild_metadata_database,
 )
 
 
@@ -13,102 +13,144 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Import metadata Excel "
-            "into persistent SQLite DB."
+            "Rebuild Agent3 metadata.db "
+            "from metadata Excel."
         )
     )
 
     parser.add_argument(
         "source",
         type=Path,
-
         help=(
-            "Metadata Excel file."
+            "Metadata Excel source file."
         ),
     )
 
     parser.add_argument(
         "database",
         type=Path,
-
         help=(
-            "Persistent SQLite "
-            "metadata database."
+            "Target metadata SQLite "
+            "database."
         ),
     )
 
     parser.add_argument(
         "--snapshot-label",
-        required=True,
-
+        default="",
         help=(
-            "Metadata version label, "
-            "for example 2026-05."
+            "Metadata source version "
+            "label, for example "
+            "2026-09."
+        ),
+    )
+
+    parser.add_argument(
+        "--standards-source",
+        type=Path,
+        default=None,
+        help=(
+            "Optional standards Excel "
+            "source."
+        ),
+    )
+
+    parser.add_argument(
+        "--standards-label",
+        default="",
+        help=(
+            "Optional standards "
+            "version label."
         ),
     )
 
     args = parser.parse_args()
 
-    result = import_metadata_excel(
-        args.source,
+    result = (
+        rebuild_metadata_database(
+            metadata_source_path=(
+                args.source
+            ),
 
-        args.database,
+            database_path=(
+                args.database
+            ),
 
-        snapshot_label=(
-            args.snapshot_label
-        ),
+            metadata_source_label=(
+                args.snapshot_label
+            ),
+
+            standards_source_path=(
+                args.standards_source
+            ),
+
+            standards_source_label=(
+                args.standards_label
+            ),
+        )
     )
 
     print()
     print(
-        "Metadata import completed."
-    )
-    print(
-        "=" * 50
+        "Metadata rebuild completed."
     )
 
     print(
-        f"Batch ID:       "
-        f"{result.batch_id}"
+        "=" * 60
     )
 
     print(
-        f"Tables:         "
-        f"{result.table_count}"
+        f"Schema version: "
+        f"{result.schema_version}"
     )
 
     print(
-        f"Columns:        "
-        f"{result.column_count}"
+        f"Provenance: "
+        f"{result.provenance.value}"
     )
 
     print(
-        f"Raw rows:       "
-        f"{result.raw_rows}"
+        f"Source format: "
+        f"{result.metadata.source_format}"
     )
 
     print(
-        f"Accepted rows:  "
-        f"{result.accepted_rows}"
+        f"Tables: "
+        f"{result.metadata.table_count}"
+    )
+
+    print(
+        f"Columns: "
+        f"{result.metadata.column_count}"
+    )
+
+    print(
+        f"Raw rows: "
+        f"{result.metadata.raw_rows}"
+    )
+
+    print(
+        f"Accepted rows: "
+        f"{result.metadata.accepted_rows}"
     )
 
     print(
         f"Duplicate rows: "
-        f"{result.duplicate_rows}"
+        f"{result.metadata.duplicate_rows}"
     )
 
     print(
-        f"Skipped rows:   "
-        f"{result.skipped_rows}"
+        f"Skipped rows: "
+        f"{result.metadata.skipped_rows}"
     )
 
     print(
-        "=" * 50
+        "=" * 60
     )
 
     print(
         f"Database: "
-        f"{args.database}"
+        f"{result.database_path}"
     )
 
 
