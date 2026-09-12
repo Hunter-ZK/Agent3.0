@@ -14,6 +14,7 @@ from sql_pilot_engine.metadata.models import (
     TableMetadata,
     TableOperationalMetadata,
     TableTechnicalMetadata,
+    PhysicalColumnRef,
 )
 
 
@@ -26,23 +27,54 @@ def make_column_metadata(
     *,
     ordinal_position: int = 1,
     is_partition: bool = False,
+    declared_upstream_columns: tuple[
+        PhysicalColumnRef,
+        ...,
+    ] = (),
+    lineage_confirmation_status: (
+        str | None
+    ) = None,
 ) -> ColumnMetadata:
-    """测试专用 Builder；distinct_count 仅兼容旧测试输入，不进入新 Contract。"""
 
     _ = distinct_count
+
     return ColumnMetadata(
         name=name,
-        technical=ColumnTechnicalMetadata(
-            ordinal_position=ordinal_position,
-            data_type=data_type,
-            nullable=nullable,
-            is_partition=is_partition,
-        ),
-        business=ColumnBusinessMetadata(description=description),
-        semantic=ColumnSemanticMetadata(),
-        management=ColumnManagementMetadata(),
-    )
 
+        technical=(
+            ColumnTechnicalMetadata(
+                ordinal_position=(
+                    ordinal_position
+                ),
+                data_type=data_type,
+                nullable=nullable,
+                is_partition=(
+                    is_partition
+                ),
+                declared_upstream_columns=(
+                    declared_upstream_columns
+                ),
+            )
+        ),
+
+        business=(
+            ColumnBusinessMetadata(
+                description=description
+            )
+        ),
+
+        semantic=(
+            ColumnSemanticMetadata()
+        ),
+
+        management=(
+            ColumnManagementMetadata(
+                lineage_confirmation_status=(
+                    lineage_confirmation_status
+                )
+            )
+        ),
+    )
 
 def make_table_metadata(
     full_name: str,
