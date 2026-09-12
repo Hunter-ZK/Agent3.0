@@ -39,6 +39,6 @@ temp.md
 
 .history/
 
-benchmarks/
+# benchmarks/
 
 tests_legacy/
