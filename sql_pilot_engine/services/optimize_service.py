@@ -3,12 +3,8 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
-from sql_pilot_engine.analysis.sql_analysis import (
-    SQLAnalysisAdapter,
-)
-from sql_pilot_engine.core.execution_context import (
-    SQLExecutionContext,
-)
+from sql_pilot_engine.analysis.sql_analysis import SQLAnalysisAdapter
+from sql_pilot_engine.core.execution_context import SQLExecutionContext
 from sql_pilot_engine.evidence.program_context import (
     ProgramEvidenceContext,
     ProgramEvidenceContextBuilder,
@@ -17,35 +13,31 @@ from sql_pilot_engine.llm.context_builder import (
     build_analysis_context_text,
     build_metadata_context_text,
 )
-from sql_pilot_engine.llm.optimizer import (
-    LLMOptimizer,
-)
-from sql_pilot_engine.llm.protocols import (
-    StructuredGenerationModel,
-)
+from sql_pilot_engine.llm.optimization_advisor import LLMOptimizationAdvisor
+from sql_pilot_engine.llm.optimizer import LLMOptimizer
+from sql_pilot_engine.llm.protocols import StructuredGenerationModel
 from sql_pilot_engine.optimization.models import (
     OptimizationResult,
+    OptimizationSuggestion,
 )
-from sql_pilot_engine.schemas.responses import (
-    SQLExplainResponse,
-)
-from sql_pilot_engine.services.review_service import (
-    ReviewService,
-)
+from sql_pilot_engine.schemas.responses import SQLExplainResponse
+from sql_pilot_engine.services.review_service import ReviewService
 
 
 class OptimizeService:
     """
-    Production SQL Optimization 主服务。
+    Production SQL Optimization。
 
-    Candidate 只有同时满足以下条件才保留：
-    - 原 SQL 可构造 Production Program/Evidence；
-    - Candidate 可重新 Program Analysis；
-    - business Statement 数不变；
-    - write target identity 不变；
-    - Candidate Review 不产生 blocking issue。
+    Flow:
+        Evidence / Explain
+            -> Opportunity Advisor
+            -> rewrite-safe Gate
+            -> Candidate / Scoped Patch
+            -> Program Gate
+            -> Trusted SQL Review Gate
+            -> Candidate/HITL
 
-    即使通过，也仍只是 candidate，不自动替换 Trusted SQL。
+    Statistics / Execution 依赖的机会只能成为建议，不能自动改写。
     """
 
     def __init__(
@@ -59,8 +51,7 @@ class OptimizeService:
         self.analysis_adapter = analysis_adapter or SQLAnalysisAdapter()
         self.review_service = review_service
         self.program_context_builder = (
-            program_context_builder
-            or ProgramEvidenceContextBuilder()
+            program_context_builder or ProgramEvidenceContextBuilder()
         )
 
     def optimize(
@@ -74,12 +65,8 @@ class OptimizeService:
             sql=context.sql,
             dialect=context.dialect,
         )
-
         if not analysis.parse_result.success:
-            raise ValueError(
-                "Trusted SQL cannot be parsed during optimization."
-            )
-
+            raise ValueError("Trusted SQL cannot be parsed during optimization.")
         facts = analysis.facts
         if facts is None:
             raise RuntimeError(
@@ -91,7 +78,6 @@ class OptimizeService:
             dialect=context.dialect,
             metadata_provider=context.metadata_provider,
         )
-
         analysis_context_text = build_analysis_context_text(
             facts=facts,
             dialect=context.dialect,
@@ -100,29 +86,83 @@ class OptimizeService:
             facts=facts,
             metadata_provider=context.metadata_provider,
         )
-        explain_context_text = self._build_explain_context_text(
-            explain_response
-        )
+        explain_context_text = self._build_explain_context_text(explain_response)
+        program_context_text = program_context.render_for_llm()
 
-        optimizer = LLMOptimizer(
-            client=self.llm_client
+        advisor_summary, opportunities = LLMOptimizationAdvisor(
+            self.llm_client
+        ).analyze(
+            dialect=context.dialect,
+            optimization_goals=optimization_goals,
+            analysis_context_text=analysis_context_text,
+            metadata_context_text=metadata_context_text,
+            explain_context_text=explain_context_text,
+            program_evidence_context_text=program_context_text,
         )
+        safe_opportunities = [
+            item for item in opportunities if item["rewrite_safe"] is True
+        ]
 
-        result = optimizer.optimize(
+        if not safe_opportunities:
+            suggestions = tuple(
+                self._opportunity_to_suggestion(item)
+                for item in opportunities
+            )
+            execution_required = any(
+                item["requires_execution_validation"]
+                or item["requires_statistics"]
+                for item in opportunities
+            )
+            return OptimizationResult(
+                original_sql=context.sql,
+                summary=(
+                    advisor_summary
+                    or "Optimization analysis produced suggestions but no rewrite-safe candidate."
+                ),
+                suggestions=suggestions,
+                candidate_sql=None,
+                rewrite_reason=None,
+                assumptions=(),
+                confidence=max(
+                    (item["confidence"] or 0.0 for item in opportunities),
+                    default=0.0,
+                ),
+                opportunities=tuple(opportunities),
+                validation={
+                    "advisor_gate": "suggestions_only",
+                    "rewrite_safe_opportunity_count": 0,
+                    "program_structure": "not_run",
+                    "trusted_sql_review": "not_run",
+                    "execution_validation": (
+                        "required" if execution_required else "not_required"
+                    ),
+                },
+                raw_output={},
+            )
+
+        result = LLMOptimizer(client=self.llm_client).optimize(
             sql=context.sql,
             dialect=context.dialect,
             optimization_goals=optimization_goals,
             analysis_context_text=analysis_context_text,
             metadata_context_text=metadata_context_text,
             explain_context_text=explain_context_text,
-            program_evidence_context_text=(
-                program_context.render_for_llm()
-            ),
+            program_evidence_context_text=program_context_text,
+            opportunities=safe_opportunities,
+        )
+        result = replace(
+            result,
+            opportunities=tuple(opportunities),
+            validation={
+                **result.validation,
+                "advisor_gate": "passed",
+                "total_opportunity_count": len(opportunities),
+                "rewrite_safe_opportunity_count": len(safe_opportunities),
+            },
         )
 
         if result.candidate_sql is None:
             return result
-
         return self._validate_candidate(
             context=context,
             original_program_context=program_context,
@@ -146,15 +186,11 @@ class OptimizeService:
         except Exception as exc:
             return self._reject_candidate(
                 result,
-                reason=(
-                    "Optimization candidate failed Program Analysis: "
-                    f"{exc}"
-                ),
+                reason=f"Optimization candidate failed Program Analysis: {exc}",
             )
 
         original_program = original_program_context.program
         candidate_program = candidate_context.program
-
         if len(candidate_program.statements) != len(original_program.statements):
             return self._reject_candidate(
                 result,
@@ -180,10 +216,15 @@ class OptimizeService:
         if candidate_targets != original_targets:
             return self._reject_candidate(
                 result,
-                reason=(
-                    "Optimization candidate changed write-target identity."
-                ),
+                reason="Optimization candidate changed write-target identity.",
             )
+
+        validation = {
+            **result.validation,
+            "program_structure": "passed",
+            "statement_count_preserved": True,
+            "write_targets_preserved": True,
+        }
 
         if self.review_service is not None:
             candidate_review = self.review_service.review(
@@ -193,14 +234,10 @@ class OptimizeService:
                     fix_sql=False,
                 )
             )
-            blocking = [
-                issue
-                for issue in candidate_review.issues
-                if issue.blocking
-            ]
+            blocking = [issue for issue in candidate_review.issues if issue.blocking]
             if blocking:
                 return self._reject_candidate(
-                    result,
+                    replace(result, validation=validation),
                     reason=(
                         "Optimization candidate failed Trusted SQL Review: "
                         + "; ".join(
@@ -209,8 +246,19 @@ class OptimizeService:
                         )
                     ),
                 )
+            validation["trusted_sql_review"] = "passed"
+        else:
+            validation["trusted_sql_review"] = "not_configured"
 
-        return result
+        validation["execution_validation"] = (
+            "required"
+            if any(
+                item.requires_execution_validation
+                for item in result.suggestions
+            )
+            else "not_required"
+        )
+        return replace(result, validation=validation)
 
     @staticmethod
     def _reject_candidate(
@@ -229,17 +277,44 @@ class OptimizeService:
                 "Candidate rejected by production gate: " + reason,
             ),
             confidence=min(result.confidence, 0.5),
+            opportunities=result.opportunities,
+            validation={
+                **result.validation,
+                "candidate_gate": "rejected",
+                "rejection_reason": reason,
+            },
             raw_output=result.raw_output,
+        )
+
+    @staticmethod
+    def _opportunity_to_suggestion(
+        opportunity: dict,
+    ) -> OptimizationSuggestion:
+        evidence = opportunity.get("evidence")
+        semantic_argument = opportunity.get("semantic_argument")
+        reason_parts = [
+            text
+            for text in (evidence, semantic_argument)
+            if text
+        ]
+        return OptimizationSuggestion(
+            category=str(opportunity.get("category") or "general"),
+            priority=str(opportunity.get("priority") or "medium"),
+            description=str(opportunity.get("description") or ""),
+            reason="; ".join(reason_parts),
+            expected_benefit=str(opportunity.get("expected_benefit") or ""),
+            risk=str(opportunity.get("risk") or ""),
+            requires_execution_validation=bool(
+                opportunity.get("requires_execution_validation")
+                or opportunity.get("requires_statistics")
+            ),
         )
 
     @staticmethod
     def _build_explain_context_text(
         explain_response: SQLExplainResponse | None,
     ) -> str:
-        if (
-            explain_response is None
-            or not explain_response.success
-        ):
+        if explain_response is None or not explain_response.success:
             return "无可用 Explain Context。"
 
         payload = {
@@ -247,15 +322,13 @@ class OptimizeService:
             "business_purpose": explain_response.business_purpose,
             "main_tables": explain_response.main_tables,
             "output_columns": explain_response.output_columns,
+            "statement_explanations": explain_response.statement_explanations,
             "cte_steps": explain_response.cte_steps,
             "cte_dependencies": explain_response.cte_dependencies,
+            "data_flow": explain_response.data_flow,
+            "key_transformations": explain_response.key_transformations,
             "suspicious_points": explain_response.suspicious_points,
             "uncertainties": explain_response.uncertainties,
             "evidence": explain_response.evidence,
         }
-
-        return json.dumps(
-            payload,
-            ensure_ascii=False,
-            indent=2,
-        )
+        return json.dumps(payload, ensure_ascii=False, indent=2)
