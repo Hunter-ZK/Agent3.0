@@ -30,11 +30,20 @@ class _CaptureModel:
         self.payload = payload
         self.system_prompt = ""
         self.user_prompt = ""
+        self.calls: list[tuple[str, str]] = []
 
-    def generate_json(self, system_prompt: str, user_prompt: str, json_schema: dict) -> dict:
-        _ = json_schema
+    def generate_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        json_schema: dict,
+    ) -> dict:
         self.system_prompt = system_prompt
         self.user_prompt = user_prompt
+        self.calls.append((system_prompt, user_prompt))
+        required = set(json_schema.get("required", []))
+        if "cte_explanations" in required:
+            return {"cte_explanations": []}
         return self.payload
 
 
@@ -43,7 +52,12 @@ class _SequenceModel:
         self.payloads = list(payloads)
         self.calls: list[tuple[str, str]] = []
 
-    def generate_json(self, system_prompt: str, user_prompt: str, json_schema: dict) -> dict:
+    def generate_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        json_schema: dict,
+    ) -> dict:
         _ = json_schema
         self.calls.append((system_prompt, user_prompt))
         if not self.payloads:
@@ -84,9 +98,6 @@ def _large_existing_program() -> str:
         )
         previous = name
 
-    # The large comment stays inside the first business statement. Keeping the
-    # padding inside a statement avoids creating a comment-only parse artifact
-    # while still exercising the >16K production rewrite threshold.
     padding = (
         "/*\n"
         + "\n".join(
@@ -127,10 +138,12 @@ def _explain_payload() -> dict:
     return {
         "sql_summary": "Synthetic production-scale program",
         "business_purpose": "规模级能力验证",
-        "main_tables": [{"table": "hallucinated.table"}],
-        "output_columns": [{"target": "hallucinated.column"}],
-        "cte_steps": [{"name": "hallucinated_cte"}],
-        "cte_dependencies": [],
+        "statement_explanations": [],
+        "table_roles": [{"table": "hallucinated.table"}],
+        "output_column_explanations": [
+            {"target": "hallucinated.column"}
+        ],
+        "key_transformations": [],
         "suspicious_points": [],
         "uncertainties": [],
         "route_signals": {},
@@ -142,8 +155,6 @@ def test_production_scale_program_context_and_explain_are_stable() -> None:
     context = ProgramEvidenceContextBuilder().build(sql)
     payload = context.to_prompt_payload()
 
-    # The leading SET is extracted into preprocessing session hints, so the
-    # stable Program contract contains the two business INSERT statements.
     assert context.statement_count == 2
     assert context.cte_count == 37
     assert context.scope_count > context.cte_count
@@ -167,8 +178,22 @@ def test_production_scale_program_context_and_explain_are_stable() -> None:
     assert {"project_dwd.scale_result", "project_dwd.scale_audit"} <= {
         item["table"] for item in response.main_tables
     }
-    assert all(item.get("table") != "hallucinated.table" for item in response.main_tables)
-    assert "SQL EXCERPT TRUNCATED" in model.user_prompt
+    assert all(
+        item.get("table") != "hallucinated.table"
+        for item in response.main_tables
+    )
+
+    # 37 CTEs / batch size 6 => 7 chunk calls + one program synthesis.
+    assert len(model.calls) == 8
+    cte_prompts = "\n".join(prompt for _, prompt in model.calls[:-1])
+    for expected_name in ("base", "exploded", "grouped", "unioned", "stage_34"):
+        assert expected_name in cte_prompts
+
+    # Production Explain no longer passes one giant whole-program SQL excerpt.
+    # Each model call is bounded, and the final call consumes structured context.
+    assert max(len(prompt) for _, prompt in model.calls) < 50000
+    assert "CTE deterministic chunks" in model.calls[0][1]
+    assert "Deterministic Program / Evidence Context" in model.calls[-1][1]
 
 
 def test_production_scale_fix_and_optimize_use_scoped_patch_by_default() -> None:
