@@ -52,6 +52,7 @@ PROGRAM_PLAN_SCHEMA = {
                     },
                     "final_select_purpose": {"type": "string"},
                     "final_dependencies": {"type": "array"},
+                    "final_source_tables": {"type": "array"},
                 },
                 "required": [
                     "target_index",
@@ -87,8 +88,9 @@ PLAN_SYSTEM_PROMPT = """
 - 一个 write target 对应一个 statement plan；
 - target_index 只能引用 Spec 中现有 write target；
 - CTE 必须组成无环 DAG；
-- source_tables 只能来自 Spec.source_tables；
+- 每个 CTE 的 source_tables 只能来自 Spec.source_tables；
 - final_dependencies 只能引用当前 statement 的 CTE；
+- final_source_tables 必须显式声明最终 SELECT 直接读取的物理表，且只能来自 Spec.source_tables；
 - 不创造新的物理源表、写入目标、字段或业务口径；
 - 复杂需求应拆成多个职责单一的 CTE，而不是设计一个巨型 SELECT；
 - 不确定的业务口径放入 assumptions，不要猜。
@@ -100,7 +102,7 @@ PLAN_SYSTEM_PROMPT = """
 STAGE_SYSTEM_PROMPT = """
 你是生产级 MaxCompute SQL staged generator。
 
-你只生成一个 SELECT / query body，不生成 INSERT、CREATE、DROP、SET。
+你只生成一个 SELECT / query body，不生成 INSERT、CREATE、DROP、SET，也不在 Stage 内创建新的 WITH CTE。
 系统会确定性地组装 CTE 名称、INSERT 目标和 PARTITION，因此你无权修改这些结构。
 
 必须遵守：
@@ -133,6 +135,7 @@ class ProductionProgramGenerator:
     FixedReportSpec -> ProgramPlan -> staged SQL -> Program/Review Gate。
 
     与 Text-to-SQL Query Line 分离：这里生成的是完整 DataWorks / MaxCompute SQL Program。
+    Target / Partition / SET 由系统持有；LLM 只规划并生成局部 Query body。
     """
 
     def __init__(
@@ -158,7 +161,7 @@ class ProductionProgramGenerator:
         try:
             plan = self._plan(spec)
             self._validate_plan_against_spec(plan=plan, spec=spec)
-            candidate = self._generate_program(
+            candidate, stage_assumptions = self._generate_program(
                 spec=spec,
                 plan=plan,
                 dialect=dialect,
@@ -169,6 +172,7 @@ class ProductionProgramGenerator:
                 candidate_sql=candidate,
                 dialect=dialect,
                 metadata_provider=metadata_provider,
+                stage_assumptions=stage_assumptions,
             )
         except ProgramGenerationError as exc:
             return ProgramGenerationResult(
@@ -241,6 +245,12 @@ class ProductionProgramGenerator:
                                 raw_statement.get("final_dependencies") or []
                             )
                         ),
+                        final_source_tables=tuple(
+                            str(value)
+                            for value in (
+                                raw_statement.get("final_source_tables") or []
+                            )
+                        ),
                     )
                 )
 
@@ -284,14 +294,24 @@ class ProductionProgramGenerator:
                         f"{sorted(unexpected)!r}."
                     )
 
+            unexpected_final = (
+                set(statement.final_source_tables) - allowed_sources
+            )
+            if unexpected_final:
+                raise ProgramGenerationError(
+                    "Final SELECT planned undeclared physical sources: "
+                    f"{sorted(unexpected_final)!r}."
+                )
+
     def _generate_program(
         self,
         *,
         spec: FixedReportSpec,
         plan: ProgramPlan,
         dialect: str,
-    ) -> str:
+    ) -> tuple[str, tuple[str, ...]]:
         chunks: list[str] = []
+        stage_assumptions: list[str] = []
 
         for name, value in spec.session_settings:
             chunks.append(f"SET {name}={value};")
@@ -301,16 +321,25 @@ class ProductionProgramGenerator:
             key=lambda item: item.target_index,
         ):
             target = spec.write_targets[statement_plan.target_index]
-            chunks.append(
-                self._generate_statement(
-                    spec=spec,
-                    plan=statement_plan,
-                    target=target,
-                    dialect=dialect,
-                )
+            statement_sql, assumptions = self._generate_statement(
+                spec=spec,
+                plan=statement_plan,
+                target=target,
+                dialect=dialect,
             )
+            chunks.append(statement_sql)
+            stage_assumptions.extend(assumptions)
 
-        return "\n\n".join(chunks).strip()
+        return (
+            "\n\n".join(chunks).strip(),
+            tuple(
+                dict.fromkeys(
+                    item.strip()
+                    for item in stage_assumptions
+                    if item.strip()
+                )
+            ),
+        )
 
     def _generate_statement(
         self,
@@ -319,7 +348,7 @@ class ProductionProgramGenerator:
         plan: ProgramStatementPlan,
         target: FixedReportWriteTarget,
         dialect: str,
-    ) -> str:
+    ) -> tuple[str, tuple[str, ...]]:
         generated_ctes: dict[str, str] = {}
         stage_assumptions: list[str] = []
 
@@ -355,6 +384,7 @@ class ProductionProgramGenerator:
             stage={
                 "kind": "final_select",
                 "purpose": plan.final_select_purpose,
+                "source_tables": list(plan.final_source_tables),
                 "dependency_ctes": list(plan.final_dependencies),
                 "required_output_columns": [
                     field.name
@@ -369,6 +399,11 @@ class ProductionProgramGenerator:
             dialect=dialect,
         )
         stage_assumptions.extend(final_payload["assumptions"])
+        self._validate_final_projection_count(
+            final_payload["select_sql"],
+            target=target,
+            dialect=dialect,
+        )
 
         with_clause = ""
         if generated_ctes:
@@ -388,7 +423,14 @@ class ProductionProgramGenerator:
             with_clause
             + insert
             + final_payload["select_sql"].rstrip("; \n")
-            + "\n;"
+            + "\n;",
+            tuple(
+                dict.fromkeys(
+                    item.strip()
+                    for item in stage_assumptions
+                    if item.strip()
+                )
+            ),
         )
 
     def _generate_stage_query(
@@ -435,7 +477,15 @@ class ProductionProgramGenerator:
             raise ProgramGenerationError(
                 "Stage generator returned empty select_sql."
             )
-        self._validate_query_body(select_sql, dialect=dialect)
+
+        self._validate_query_body(
+            select_sql,
+            dialect=dialect,
+            allowed_sources=tuple(stage.get("source_tables") or ()),
+            allowed_dependencies=tuple(
+                stage.get("dependency_ctes") or ()
+            ),
+        )
 
         assumptions = raw.get("assumptions") or []
         if not isinstance(assumptions, list):
@@ -453,6 +503,8 @@ class ProductionProgramGenerator:
         sql: str,
         *,
         dialect: str,
+        allowed_sources: tuple[str, ...],
+        allowed_dependencies: tuple[str, ...],
     ) -> None:
         parsed = self._parser.parse(sql, dialect=dialect)
         if not parsed.success or parsed.statement_count != 1:
@@ -460,10 +512,63 @@ class ProductionProgramGenerator:
                 "Generated stage is not one valid query: "
                 f"{parsed.error_message or 'unknown parse failure'}"
             )
-        if not isinstance(parsed.first_statement, exp.Query):
+
+        expression = parsed.first_statement
+        if not isinstance(expression, exp.Query):
             raise ProgramGenerationError(
                 "Generated stage must be a SELECT/query body; DML/DDL is forbidden."
             )
+
+        referenced_tables = {
+            self._table_identity(table)
+            for table in expression.find_all(exp.Table)
+        }
+        allowed = {
+            item.strip().lower()
+            for item in (*allowed_sources, *allowed_dependencies)
+            if item.strip()
+        }
+        unexpected = referenced_tables - allowed
+        if unexpected:
+            raise ProgramGenerationError(
+                "Generated stage referenced tables outside its declared boundary: "
+                f"{sorted(unexpected)!r}."
+            )
+
+    def _validate_final_projection_count(
+        self,
+        sql: str,
+        *,
+        target: FixedReportWriteTarget,
+        dialect: str,
+    ) -> None:
+        parsed = self._parser.parse(sql, dialect=dialect)
+        expression = parsed.first_statement
+        if not isinstance(expression, exp.Query):
+            raise ProgramGenerationError(
+                "Final Stage must be a Query."
+            )
+
+        expected = len(target.fields) + sum(
+            1
+            for item in target.partitions
+            if item.is_dynamic
+        )
+        actual = len(expression.selects)
+        if actual != expected:
+            raise ProgramGenerationError(
+                "Final SELECT projection count does not match target fields and "
+                f"dynamic partitions: expected={expected}, actual={actual}."
+            )
+
+    @staticmethod
+    def _table_identity(table: exp.Table) -> str:
+        parts = [
+            part.name.strip().lower()
+            for part in table.parts
+            if part.name
+        ]
+        return ".".join(parts)
 
     @staticmethod
     def _partition_clause(target: FixedReportWriteTarget) -> str:
@@ -488,11 +593,18 @@ class ProductionProgramGenerator:
         candidate_sql: str,
         dialect: str,
         metadata_provider,
+        stage_assumptions: tuple[str, ...],
     ) -> ProgramGenerationResult:
         analysis = self._program_analysis.analyze(
             candidate_sql,
             dialect=dialect,
         )
+        combined_assumptions = tuple(
+            dict.fromkeys(
+                (*plan.assumptions, *stage_assumptions)
+            )
+        )
+
         if analysis.program is None:
             return ProgramGenerationResult(
                 success=False,
@@ -500,6 +612,7 @@ class ProductionProgramGenerator:
                 plan=plan,
                 candidate_sql=candidate_sql,
                 diagnostics=(
+                    *combined_assumptions,
                     "Generated Program failed Program Analysis: "
                     + (analysis.failure_reason or "unknown failure"),
                 ),
@@ -513,6 +626,7 @@ class ProductionProgramGenerator:
                 plan=plan,
                 candidate_sql=candidate_sql,
                 diagnostics=(
+                    *combined_assumptions,
                     "Generated Program statement count does not match FixedReportSpec.",
                 ),
             )
@@ -534,6 +648,7 @@ class ProductionProgramGenerator:
                 plan=plan,
                 candidate_sql=candidate_sql,
                 diagnostics=(
+                    *combined_assumptions,
                     "Generated Program write targets differ from FixedReportSpec: "
                     f"expected={expected_targets!r}, actual={actual_targets!r}.",
                 ),
@@ -556,6 +671,7 @@ class ProductionProgramGenerator:
                 plan=plan,
                 candidate_sql=candidate_sql,
                 diagnostics=(
+                    *combined_assumptions,
                     "Generated Program used undeclared physical source tables: "
                     f"{sorted(unexpected_reads)!r}.",
                 ),
@@ -579,15 +695,11 @@ class ProductionProgramGenerator:
             if any(item.blocking for item in review.issues):
                 blocking = True
 
-        diagnostics = tuple(
-            plan.assumptions
-        )
-
         return ProgramGenerationResult(
             success=True,
             trusted_candidate=not blocking,
             plan=plan,
             candidate_sql=candidate_sql,
-            diagnostics=diagnostics,
+            diagnostics=combined_assumptions,
             review_issues=tuple(review_issues),
         )
