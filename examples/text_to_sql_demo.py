@@ -19,6 +19,10 @@ from sql_pilot_engine.llm.clients import DeepSeekLLMClient, MockLLMClient
 from sql_pilot_engine.llm.transport import OpenAICompatibleTransport
 from sql_pilot_engine.metadata.demo_provider import build_loan_demo_metadata_provider
 from sql_pilot_engine.observability.logging import configure_logging
+from sql_pilot_engine.runtime.human_approval import (
+    HumanApprovalGate,
+    HumanApprovalRequest,
+)
 from sql_pilot_engine.schemas.text_to_sql import (
     TextToSQLClarification,
     TextToSQLRequest,
@@ -208,6 +212,12 @@ def parse_args() -> argparse.Namespace:
         help="是否调用真实大模型；默认离线 synthetic demo。",
     )
     parser.add_argument(
+        "--require-human-approval",
+        action=argparse.BooleanOptionalAction,
+        default=read_env_bool("AGENT3_REQUIRE_HUMAN_APPROVAL"),
+        help="最终 Trusted SQL 是否必须经过显式 Human Approval Gate。",
+    )
+    parser.add_argument(
         "--log-level",
         type=str,
         default="INFO",
@@ -273,11 +283,40 @@ def main() -> None:
     print("status:", result.semantic_validation_status)
     print("missing requirements:", result.semantic_missing_requirements)
     print("issues:", result.semantic_issues)
-    print("\n[6] Trusted SQL")
+    print("\n[6] Machine Trusted SQL")
     if result.trusted_sql is None:
-        print("SQL 未通过可信审查，当前没有 Trusted SQL。")
+        print("SQL 未通过可信审查，当前没有 Machine Trusted SQL。")
     else:
         print(result.trusted_sql)
+
+    if args.require_human_approval:
+        print("\n[7] FINAL HUMAN APPROVAL")
+        if result.trusted_sql is None:
+            raise SystemExit(
+                "Human approval cannot run because there is no machine-trusted candidate."
+            )
+
+        approval_request = HumanApprovalRequest(
+            stage="text_to_sql_final",
+            summary="Approve the final Text-to-SQL candidate.",
+            candidate_sql=result.trusted_sql,
+            metadata={
+                "question": result.question,
+                "validation_status": result.validation_status,
+                "semantic_validation_status": result.semantic_validation_status,
+            },
+        )
+        print("Type exactly APPROVE to approve this SQL, or REJECT to reject it.")
+        approval = HumanApprovalGate.decide(
+            approval_request,
+            input("Human decision > "),
+        )
+        print("approval_status:", approval.status.value)
+        if not approval.approved:
+            raise SystemExit(2)
+        print("\n[8] Human Approved SQL")
+        print(approval.human_approved_sql)
+
     print("\n" + "=" * 70)
 
 
