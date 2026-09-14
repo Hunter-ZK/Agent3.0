@@ -74,7 +74,7 @@ def test_program_context_builds_deterministic_structure_without_metadata():
     assert payload["program"]["write_targets"][0]["partitions"] == [
         {
             "name": "dt",
-            "value": "202609",
+            "value": "'202609'",
             "dynamic": False,
         }
     ]
