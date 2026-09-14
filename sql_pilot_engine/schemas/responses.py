@@ -4,9 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sql_pilot_engine.core.models import ReviewResult
-from sql_pilot_engine.optimization.models import (
-    OptimizationResult,
-)
+from sql_pilot_engine.optimization.models import OptimizationResult
 
 
 def default_explain_route_signals() -> dict[str, Any]:
@@ -51,7 +49,11 @@ class SQLReviewResponse:
     error_message: str | None = None
 
     @classmethod
-    def from_review_result(cls, result: ReviewResult, trace_id: str | None = None,) -> "SQLReviewResponse":
+    def from_review_result(
+        cls,
+        result: ReviewResult,
+        trace_id: str | None = None,
+    ) -> "SQLReviewResponse":
         return cls(
             success=True,
             task_type="review",
@@ -69,7 +71,13 @@ class SQLReviewResponse:
         )
 
     @classmethod
-    def failed(cls, task_type: str, file_path: str, error_message: str, trace_id: str | None = None) -> "SQLReviewResponse":
+    def failed(
+        cls,
+        task_type: str,
+        file_path: str,
+        error_message: str,
+        trace_id: str | None = None,
+    ) -> "SQLReviewResponse":
         return cls(
             success=False,
             task_type=task_type,
@@ -90,13 +98,17 @@ class SQLReviewResponse:
             "file_path": self.file_path,
             "risk_level": self.risk_level,
             "issue_count": self.issue_count,
-            "trace_id":self.trace_id,
+            "trace_id": self.trace_id,
             "issues": self.issues,
             "summary": self.summary,
             "error_message": self.error_message,
         }
         if include_raw_result:
-            data["raw_result"] = self.raw_result.to_dict() if self.raw_result is not None else None
+            data["raw_result"] = (
+                self.raw_result.to_dict()
+                if self.raw_result is not None
+                else None
+            )
         return data
 
 
@@ -110,7 +122,11 @@ class SQLFixResponse(SQLReviewResponse):
     fix_source: str | None = None
 
     @classmethod
-    def from_review_result(cls, result: ReviewResult, trace_id: str|None = None,) -> "SQLFixResponse":
+    def from_review_result(
+        cls,
+        result: ReviewResult,
+        trace_id: str | None = None,
+    ) -> "SQLFixResponse":
         fixed_sql_result = result.fixed_sql_result
         return cls(
             success=True,
@@ -126,14 +142,36 @@ class SQLFixResponse(SQLReviewResponse):
                 "has_fixed_sql": fixed_sql_result is not None,
             },
             raw_result=result,
-            fixed_sql=fixed_sql_result.fixed_sql if fixed_sql_result is not None else None,
-            applied_fixes=fixed_sql_result.applied_fixes if fixed_sql_result is not None else [],
-            manual_notes=fixed_sql_result.manual_notes if fixed_sql_result is not None else [],
-            fix_source=fixed_sql_result.source if fixed_sql_result is not None else None,
+            fixed_sql=(
+                fixed_sql_result.fixed_sql
+                if fixed_sql_result is not None
+                else None
+            ),
+            applied_fixes=(
+                fixed_sql_result.applied_fixes
+                if fixed_sql_result is not None
+                else []
+            ),
+            manual_notes=(
+                fixed_sql_result.manual_notes
+                if fixed_sql_result is not None
+                else []
+            ),
+            fix_source=(
+                fixed_sql_result.source
+                if fixed_sql_result is not None
+                else None
+            ),
         )
 
     @classmethod
-    def failed(cls, task_type: str, file_path: str, error_message: str, trace_id: str|None = None) -> "SQLFixResponse":
+    def failed(
+        cls,
+        task_type: str,
+        file_path: str,
+        error_message: str,
+        trace_id: str | None = None,
+    ) -> "SQLFixResponse":
         return cls(
             success=False,
             task_type=task_type,
@@ -160,13 +198,12 @@ class SQLFixResponse(SQLReviewResponse):
         return data
 
 
-
 @dataclass
 class SQLExplainResponse:
-    """SQL Explain Agent 的结构化输出。
+    """Production SQL Explain 的稳定结构化输出。
 
-    Explain 不是单纯生成自然语言说明，而是为后续 Review / Metadata / RAG /
-    Critic / Human-in-the-loop 提供可消费的结构化状态。
+    deterministic Program / Metadata / Lineage / Hint 是结构事实；LLM 只补充
+    statement、CTE、字段和业务处理语义。新增字段均为向后兼容的可选增强。
     """
 
     success: bool
@@ -183,10 +220,14 @@ class SQLExplainResponse:
 
     cte_steps: list[dict[str, Any]] = field(default_factory=list)
     cte_dependencies: list[dict[str, Any]] = field(default_factory=list)
+    statement_explanations: list[dict[str, Any]] = field(default_factory=list)
+    data_flow: list[dict[str, Any]] = field(default_factory=list)
+    key_transformations: list[dict[str, Any]] = field(default_factory=list)
 
     suspicious_points: list[dict[str, Any]] = field(default_factory=list)
     uncertainties: list[str] = field(default_factory=list)
 
+    explain_quality: dict[str, Any] = field(default_factory=dict)
     route_signals: dict[str, Any] = field(default_factory=dict)
     evidence: list[dict[str, Any]] = field(default_factory=list)
 
@@ -199,27 +240,35 @@ class SQLExplainResponse:
         file_path: str = "<memory>",
         trace_id: str | None = None,
     ) -> "SQLExplainResponse":
-        
-        route_signals = payload.get("route_signals") or default_explain_route_signals()
-
+        route_signals = (
+            payload.get("route_signals")
+            or default_explain_route_signals()
+        )
         return cls(
             success=True,
             file_path=file_path,
             trace_id=trace_id,
             error_message=None,
-            sql_summary=payload.get('sql_summary',""),
-            business_purpose=payload.get('business_purpose'),
-            main_tables=payload.get('main_tables',[]),
-            output_columns=payload.get('output_columns',[]),
-            cte_steps=payload.get('cte_steps',[]),
-            cte_dependencies=payload.get('cte_dependencies',[]),
-            suspicious_points=payload.get('suspicious_points',[]),
-            uncertainties=payload.get('uncertainties',[]),
+            sql_summary=payload.get("sql_summary", ""),
+            business_purpose=payload.get("business_purpose"),
+            main_tables=payload.get("main_tables", []),
+            output_columns=payload.get("output_columns", []),
+            cte_steps=payload.get("cte_steps", []),
+            cte_dependencies=payload.get("cte_dependencies", []),
+            statement_explanations=payload.get(
+                "statement_explanations", []
+            ),
+            data_flow=payload.get("data_flow", []),
+            key_transformations=payload.get(
+                "key_transformations", []
+            ),
+            suspicious_points=payload.get("suspicious_points", []),
+            uncertainties=payload.get("uncertainties", []),
+            explain_quality=payload.get("explain_quality", {}),
             route_signals=route_signals,
-            evidence=payload.get('evidence',[]),
+            evidence=payload.get("evidence", []),
             raw_output=payload,
         )
-
 
     @classmethod
     def failed(
@@ -236,20 +285,23 @@ class SQLExplainResponse:
             error_message=error_message,
             sql_summary="",
             business_purpose=None,
+            main_tables=[],
             output_columns=[],
             cte_steps=[],
             cte_dependencies=[],
+            statement_explanations=[],
+            data_flow=[],
+            key_transformations=[],
             suspicious_points=[],
             uncertainties=[],
+            explain_quality={},
             route_signals=failed_explain_route_signals(),
             evidence=[],
             raw_output=raw_output,
-
         )
 
-
     def to_dict(self) -> dict[str, Any]:
-        data = {
+        return {
             "success": self.success,
             "task_type": self.task_type,
             "file_path": self.file_path,
@@ -261,53 +313,38 @@ class SQLExplainResponse:
             "output_columns": self.output_columns,
             "cte_steps": self.cte_steps,
             "cte_dependencies": self.cte_dependencies,
+            "statement_explanations": self.statement_explanations,
+            "data_flow": self.data_flow,
+            "key_transformations": self.key_transformations,
             "suspicious_points": self.suspicious_points,
             "uncertainties": self.uncertainties,
+            "explain_quality": self.explain_quality,
             "route_signals": self.route_signals,
             "evidence": self.evidence,
             "raw_output": self.raw_output,
         }
-        return data
-    
+
+
 @dataclass
 class SQLOptimizeResponse:
     """
     Engine Optimize 的外部响应。
 
-    candidate_sql 仍是候选，
-    不是最终 Workflow SQL。
+    candidate_sql 仍是候选，不是最终 Workflow SQL。
     """
 
     success: bool
-
     task_type: str = "optimize"
-
     file_path: str = "<memory>"
-
     trace_id: str | None = None
-
     status: str = "unknown"
-
     summary: str = ""
-
-    suggestions: list[
-        dict[str, Any]
-    ] = field(
-        default_factory=list
-    )
-
+    suggestions: list[dict[str, Any]] = field(default_factory=list)
     candidate_sql: str | None = None
-
     rewrite_reason: str | None = None
-
-    assumptions: list[str] = field(
-        default_factory=list
-    )
-
+    assumptions: list[str] = field(default_factory=list)
     confidence: float = 0.0
-
     error_message: str | None = None
-
     raw_output: Any | None = None
 
     @classmethod
@@ -318,15 +355,10 @@ class SQLOptimizeResponse:
         file_path: str,
         trace_id: str | None,
     ) -> "SQLOptimizeResponse":
-
         if result.candidate_sql:
-            status = (
-                "candidate_generated"
-            )
-
+            status = "candidate_generated"
         elif result.suggestions:
             status = "suggestions"
-
         else:
             status = "no_optimization"
 
@@ -340,32 +372,19 @@ class SQLOptimizeResponse:
                 {
                     "category": item.category,
                     "priority": item.priority,
-                    "description": (
-                        item.description
-                    ),
+                    "description": item.description,
                     "reason": item.reason,
-                    "expected_benefit": (
-                        item
-                        .expected_benefit
-                    ),
+                    "expected_benefit": item.expected_benefit,
                     "risk": item.risk,
                     "requires_execution_validation": (
-                        item
-                        .requires_execution_validation
+                        item.requires_execution_validation
                     ),
                 }
-                for item
-                in result.suggestions
+                for item in result.suggestions
             ],
-            candidate_sql=(
-                result.candidate_sql
-            ),
-            rewrite_reason=(
-                result.rewrite_reason
-            ),
-            assumptions=list(
-                result.assumptions
-            ),
+            candidate_sql=result.candidate_sql,
+            rewrite_reason=result.rewrite_reason,
+            assumptions=list(result.assumptions),
             confidence=result.confidence,
             raw_output=result.raw_output,
         )
@@ -378,20 +397,17 @@ class SQLOptimizeResponse:
         error_message: str,
         trace_id: str | None = None,
     ) -> "SQLOptimizeResponse":
-
         return cls(
             success=False,
             file_path=file_path,
             trace_id=trace_id,
             status="optimize_failed",
-            error_message=(
-                error_message
-            ),
+            error_message=error_message,
         )
+
 
 @dataclass
 class SQLCriticResponse:
-
     success: bool
     passed: bool
     trace_id: str | None = None
@@ -402,7 +418,6 @@ class SQLCriticResponse:
     checked_items: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     error_message: str | None = None
-
     retry_instructions: list[str] = field(default_factory=list)
     raw_output: Any | None = None
 
@@ -421,7 +436,6 @@ class SQLCriticResponse:
             "retry_instructions": self.retry_instructions,
             "raw_output": self.raw_output,
         }
-    
 
     @classmethod
     def from_llm_payload(
@@ -430,7 +444,6 @@ class SQLCriticResponse:
         trace_id: str | None = None,
         raw_output: Any | None = None,
     ) -> "SQLCriticResponse":
-        
         passed = bool(payload.get("passed", False))
         need_retry = bool(payload.get("need_retry", False))
         need_human_confirm = bool(
@@ -445,7 +458,7 @@ class SQLCriticResponse:
                 "status",
                 "passed" if passed else "failed",
             ),
-            reason=payload.get("reason",""),
+            reason=payload.get("reason", ""),
             need_retry=need_retry,
             need_human_confirm=need_human_confirm,
             checked_items=payload.get("checked_items", []),
@@ -453,5 +466,3 @@ class SQLCriticResponse:
             retry_instructions=payload.get("retry_instructions", []),
             raw_output=raw_output,
         )
-
-
