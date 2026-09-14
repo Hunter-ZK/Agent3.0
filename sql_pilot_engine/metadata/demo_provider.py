@@ -7,7 +7,9 @@ from sql_pilot_engine.metadata.models import (
     ColumnMetadata,
     ColumnSemanticMetadata,
     ColumnTechnicalMetadata,
+    MetadataLookupStatus,
     TableBusinessMetadata,
+    TableLookupResult,
     TableManagementMetadata,
     TableMetadata,
     TableOperationalMetadata,
@@ -49,10 +51,43 @@ _GREEN_LOAN_COLUMNS: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def build_loan_demo_metadata_provider() -> MockMetadataProvider:
+class DemoMetadataProvider(MockMetadataProvider):
+    """Synthetic provider that also resolves a unique bare table identifier.
+
+    Production repositories keep exact ``get_table`` semantics. Public demo assets,
+    however, intentionally preserve fully-qualified canonical identities while the
+    approved semantic model still refers to bare physical table names. This adapter
+    bridges only that demo fixture boundary and fails closed on ambiguity.
+    """
+
+    def get_table(self, full_name: str) -> TableLookupResult:
+        exact = super().get_table(full_name)
+        if exact.status is not MetadataLookupStatus.NOT_FOUND:
+            return exact
+
+        normalized = full_name.strip().lower()
+        if "." in normalized:
+            return exact
+
+        matches = [
+            table
+            for canonical_name, table in self._tables.items()
+            if canonical_name.rsplit(".", 1)[-1] == normalized
+        ]
+
+        if not matches:
+            return TableLookupResult.not_found()
+        if len(matches) > 1:
+            return TableLookupResult.failed(
+                f"Ambiguous demo table identifier: {full_name!r}"
+            )
+        return TableLookupResult.found(matches[0])
+
+
+def build_loan_demo_metadata_provider() -> DemoMetadataProvider:
     """Return deterministic synthetic metadata for public Text-to-SQL demos/tests."""
 
-    return MockMetadataProvider(
+    return DemoMetadataProvider(
         tables=(
             _table(
                 full_name="odps_prd_dwd.ods_hd_100_cldkxx",
@@ -137,7 +172,14 @@ def _column(
             description=description,
         ),
         semantic=ColumnSemanticMetadata(
-            is_dimension=(name in {"fin_org_branch_area_code", "fin_org_type_code", "dt"}),
+            is_dimension=(
+                name
+                in {
+                    "fin_org_branch_area_code",
+                    "fin_org_type_code",
+                    "dt",
+                }
+            ),
         ),
         management=ColumnManagementMetadata(
             remark="Synthetic demo column.",
