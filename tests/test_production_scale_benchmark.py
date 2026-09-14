@@ -84,8 +84,22 @@ def _large_existing_program() -> str:
         )
         previous = name
 
+    # The large comment stays inside the first business statement. Keeping the
+    # padding inside a statement avoids creating a comment-only parse artifact
+    # while still exercising the >16K production rewrite threshold.
+    padding = (
+        "/*\n"
+        + "\n".join(
+            f"synthetic production padding {index:03d} " + ("x" * 96)
+            for index in range(180)
+        )
+        + "\n*/\n"
+    )
+
     statement_one = (
-        "SET odps.sql.type.system.odps2 = true;\n\nWITH\n"
+        "SET odps.sql.type.system.odps2 = true;\n\n"
+        + padding
+        + "WITH\n"
         + ",\n".join(ctes)
         + f"""
 INSERT OVERWRITE TABLE project_dwd.scale_result
@@ -103,11 +117,8 @@ INSERT OVERWRITE TABLE project_dwd.scale_audit
 PARTITION(dt='202609')
 SELECT row_count FROM secondary_agg;
 """
-    padding = "\n".join(
-        f"-- synthetic production padding {index:03d} " + ("x" * 96)
-        for index in range(180)
-    )
-    sql = statement_one + statement_two + padding
+
+    sql = statement_one + statement_two
     assert len(sql) > 16000
     return sql
 
@@ -131,8 +142,9 @@ def test_production_scale_program_context_and_explain_are_stable() -> None:
     context = ProgramEvidenceContextBuilder().build(sql)
     payload = context.to_prompt_payload()
 
-    # Program statements include the system-owned SET plus two INSERT statements.
-    assert context.statement_count == 3
+    # The leading SET is extracted into preprocessing session hints, so the
+    # stable Program contract contains the two business INSERT statements.
+    assert context.statement_count == 2
     assert context.cte_count == 37
     assert context.scope_count > context.cte_count
     assert {item.name for item in context.hints} == {"MAPJOIN"}
@@ -332,6 +344,6 @@ def test_complex_generate_handles_35_stage_two_target_program() -> None:
 
     context = ProgramEvidenceContextBuilder().build(result.candidate_sql)
     payload = context.to_prompt_payload()
-    assert context.statement_count == 3
+    assert context.statement_count == 2
     assert context.cte_count == 36
     assert len(payload["program"]["write_targets"]) == 2
