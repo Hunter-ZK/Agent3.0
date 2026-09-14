@@ -210,7 +210,9 @@ def test_production_scale_program_context_and_explain_are_stable() -> None:
     context = ProgramEvidenceContextBuilder().build(sql)
     payload = context.to_prompt_payload()
 
-    assert context.statement_count == 2
+    # SQLProgram counts the leading SET as a real program statement:
+    # 1 SET + 2 INSERT statements.
+    assert context.statement_count == 3
     assert context.cte_count == 37
     assert context.scope_count > context.cte_count
     assert {item.name for item in context.hints} == {"MAPJOIN"}
@@ -461,5 +463,6 @@ def test_complex_generate_handles_35_stage_two_target_program() -> None:
     )
 
     context = ProgramEvidenceContextBuilder().build(result.candidate_sql)
-    assert context.statement_count == 2
+    assert context.statement_count == 3
+    assert len(context.write_targets) == 2
     assert context.cte_count == 36
