@@ -294,16 +294,26 @@ def main() -> None:
         _write_json(output_dir / "explain.json", explain.to_dict())
         if not explain.success:
             raise RuntimeError(explain.error_message or "Explain failed")
+        llm_enriched = bool(explain.explain_quality.get("llm_enriched"))
+        if not llm_enriched:
+            raise RuntimeError(
+                "Formal acceptance requires successful LLM Explain enrichment; "
+                "the capability fell back to deterministic-only output."
+            )
         report["coverage"]["explain"] = True
         print("Summary:", explain.sql_summary)
         print("Business purpose:", explain.business_purpose)
         print("CTE steps:", len(explain.cte_steps))
         print("Uncertainties:", len(explain.uncertainties))
+        print("LLM enriched:", llm_enriched)
         explain_approval = _decision(
             stage="explain",
             summary="Confirm that the production explanation matches the SQL semantics.",
             trace_id=explain.trace_id,
-            metadata={"uncertainty_count": len(explain.uncertainties)},
+            metadata={
+                "uncertainty_count": len(explain.uncertainties),
+                "llm_enriched": llm_enriched,
+            },
         )
         report["human_decisions"].append(explain_approval.to_dict())
         _require_stage_approval(explain_approval)
