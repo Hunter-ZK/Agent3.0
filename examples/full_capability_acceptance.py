@@ -3,13 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from sql_pilot_engine.app.sql_core_factory import build_sql_pilot_engine
 from sql_pilot_engine.config.llm import load_deepseek_settings
+from sql_pilot_engine.evidence.program_context import ProgramEvidenceContextBuilder
 from sql_pilot_engine.generation.production_service import ProductionGenerateService
 from sql_pilot_engine.llm.clients import DeepSeekLLMClient
 from sql_pilot_engine.llm.transport import OpenAICompatibleTransport
@@ -32,6 +32,10 @@ from sql_pilot_engine.spec.models import (
     FixedReportSpec,
     FixedReportWriteTarget,
 )
+
+
+class AcceptanceStopped(RuntimeError):
+    pass
 
 
 def _env_bool(name: str, *, default: bool = False) -> bool:
@@ -116,6 +120,7 @@ def _decision(
     candidate_sql: str | None = None,
     trace_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    machine_gate_passed: bool = True,
 ) -> HumanApprovalRecord:
     request = HumanApprovalRequest(
         stage=stage,
@@ -123,9 +128,12 @@ def _decision(
         candidate_sql=candidate_sql,
         trace_id=trace_id,
         metadata=metadata or {},
+        machine_gate_passed=machine_gate_passed,
     )
 
     print("\nHuman-in-the-Loop decision required.")
+    if not machine_gate_passed:
+        print("Machine gate did NOT pass. Human approval cannot override this block.")
     print("Type exactly APPROVE to approve, REJECT to reject.")
     print("Any other non-empty text is recorded as feedback and stops this run.")
     value = input("Human decision > ")
@@ -140,10 +148,6 @@ def _require_stage_approval(record: HumanApprovalRecord) -> None:
     raise AcceptanceStopped(
         f"Acceptance stopped at {record.stage}: {record.status.value}"
     )
-
-
-class AcceptanceStopped(RuntimeError):
-    pass
 
 
 def _spec_from_json(path: Path) -> FixedReportSpec:
@@ -202,6 +206,10 @@ def _write_json(path: Path, payload: Any) -> None:
     )
 
 
+def _has_blocking_issue(issues: list[dict[str, Any]]) -> bool:
+    return any(bool(item.get("blocking")) for item in issues)
+
+
 def main() -> None:
     args = parse_args()
     if not args.use_real_llm:
@@ -219,6 +227,7 @@ def main() -> None:
 
     output_dir = _make_output_dir(args.output_dir)
     metadata_factory = _metadata_factory(args.metadata_db)
+    metadata_provider = metadata_factory() if metadata_factory is not None else None
     llm_client, llm_provider, llm_model = _build_real_llm()
     engine = build_sql_pilot_engine(
         llm_client=llm_client,
@@ -238,6 +247,14 @@ def main() -> None:
         "human_approval_required": True,
         "stages": {},
         "human_decisions": [],
+        "coverage": {
+            "program_evidence": False,
+            "explain": False,
+            "review": False,
+            "fix": False,
+            "optimize": False,
+            "production_generate": False,
+        },
         "final_status": "running",
         "human_approved_sql": None,
     }
@@ -245,6 +262,23 @@ def main() -> None:
     current_sql = original_sql
 
     try:
+        _section("0. Program / Evidence")
+        evidence = ProgramEvidenceContextBuilder().build(
+            current_sql,
+            dialect=args.dialect,
+            metadata_provider=metadata_provider,
+        )
+        evidence_payload = evidence.to_prompt_payload(max_lineage_columns=1000)
+        report["stages"]["program_evidence"] = evidence_payload
+        report["coverage"]["program_evidence"] = True
+        _write_json(output_dir / "program_evidence.json", evidence_payload)
+        program = evidence_payload["program"]
+        print("Statements:", program["statement_count"])
+        print("CTEs:", program["cte_count"])
+        print("Read tables:", program["read_tables"])
+        print("Write targets:", program["write_targets"])
+        print("Lineage available:", evidence_payload["lineage"]["available"])
+
         _section("1. Production Explain · REAL LLM")
         explain = engine.explain(
             SQLExplainRequest(
@@ -260,6 +294,7 @@ def main() -> None:
         _write_json(output_dir / "explain.json", explain.to_dict())
         if not explain.success:
             raise RuntimeError(explain.error_message or "Explain failed")
+        report["coverage"]["explain"] = True
         print("Summary:", explain.sql_summary)
         print("Business purpose:", explain.business_purpose)
         print("CTE steps:", len(explain.cte_steps))
@@ -288,6 +323,7 @@ def main() -> None:
         _write_json(output_dir / "review.json", review.to_dict())
         if not review.success:
             raise RuntimeError(review.error_message or "Review failed")
+        report["coverage"]["review"] = True
         print("Risk level:", review.risk_level)
         print("Issue count:", review.issue_count)
         for issue in review.issues:
@@ -350,8 +386,15 @@ def main() -> None:
                 )
                 report["stages"]["fix_re_review"] = re_review.to_dict()
                 report["stages"]["fix_critic"] = critic.to_dict()
+                machine_fix_gate = (
+                    re_review.success
+                    and critic.success
+                    and critic.passed
+                    and not _has_blocking_issue(re_review.issues)
+                )
                 print("Re-review issues:", re_review.issue_count)
                 print("Critic passed:", critic.passed)
+                print("Fix machine gate:", machine_fix_gate)
                 fix_approval = _decision(
                     stage="fix_candidate",
                     summary="Approve or reject the LLM-produced Fix candidate.",
@@ -362,12 +405,15 @@ def main() -> None:
                         "re_review_issue_count": re_review.issue_count,
                         "critic_passed": critic.passed,
                     },
+                    machine_gate_passed=machine_fix_gate,
                 )
                 report["human_decisions"].append(fix_approval.to_dict())
                 if fix_approval.approved:
                     current_sql = fix_approval.human_approved_sql or current_sql
+                    report["coverage"]["fix"] = True
                 elif fix_approval.status is HumanApprovalStatus.REJECTED:
                     print("Fix candidate rejected; continuing with the previous SQL.")
+                    report["coverage"]["fix"] = True
                 else:
                     _require_stage_approval(fix_approval)
             else:
@@ -402,6 +448,7 @@ def main() -> None:
         _write_json(output_dir / "optimize.json", report["stages"]["optimize"])
         if not optimize.success:
             raise RuntimeError(optimize.error_message or "Optimize failed")
+        report["coverage"]["optimize"] = True
         print("Status:", optimize.status)
         print("Summary:", optimize.summary)
         for item in optimize.suggestions:
@@ -410,12 +457,16 @@ def main() -> None:
             (output_dir / "optimize_candidate.sql").write_text(
                 optimize.candidate_sql, encoding="utf-8"
             )
+            optimize_machine_gate = (
+                optimize.success and optimize.status == "candidate_generated"
+            )
             optimize_approval = _decision(
                 stage="optimize_candidate",
                 summary="Approve or reject the LLM-produced optimization candidate.",
                 candidate_sql=optimize.candidate_sql,
                 trace_id=optimize.trace_id,
                 metadata={"confidence": optimize.confidence},
+                machine_gate_passed=optimize_machine_gate,
             )
             report["human_decisions"].append(optimize_approval.to_dict())
             if optimize_approval.approved:
@@ -436,7 +487,6 @@ def main() -> None:
             print("Production Generate not exercised: --spec-json was not supplied.")
         else:
             spec = _spec_from_json(args.spec_json.resolve())
-            metadata_provider = metadata_factory() if metadata_factory is not None else None
             generated = ProductionGenerateService(model=llm_client).generate(
                 spec=spec,
                 dialect=args.dialect,
@@ -463,15 +513,38 @@ def main() -> None:
                     summary="Approve or reject the LLM-generated production SQL candidate.",
                     candidate_sql=generated.candidate_sql,
                     metadata={"trusted_candidate": generated.trusted_candidate},
+                    machine_gate_passed=generated.trusted_candidate,
                 )
                 report["human_decisions"].append(generate_approval.to_dict())
-                if not generate_approval.approved:
+                if generate_approval.approved:
+                    report["coverage"]["production_generate"] = True
+                else:
                     _require_stage_approval(generate_approval)
             else:
-                print("No generation candidate was produced.")
+                raise RuntimeError("Production Generate did not produce a candidate SQL.")
 
-        _section("6. FINAL HUMAN APPROVAL")
-        print("Candidate that will become final only after explicit human approval:")
+        _section("6. Final Machine Review · REAL LLM")
+        final_review = engine.review(
+            SQLReviewRequest(
+                sql=current_sql,
+                file_path=str(sql_path),
+                dialect=args.dialect,
+                enable_metadata=metadata_factory is not None,
+                enable_llm=True,
+                llm_provider=llm_provider,
+            )
+        )
+        report["stages"]["final_review"] = final_review.to_dict()
+        _write_json(output_dir / "final_review.json", final_review.to_dict())
+        final_machine_gate = (
+            final_review.success
+            and not _has_blocking_issue(final_review.issues)
+        )
+        print("Final review success:", final_review.success)
+        print("Final blocking issue:", _has_blocking_issue(final_review.issues))
+
+        _section("7. FINAL HUMAN APPROVAL")
+        print("Candidate that will become final only after machine gate + human approval:")
         print(current_sql)
         final_approval = _decision(
             stage="final_sql",
@@ -481,7 +554,9 @@ def main() -> None:
                 "real_llm": True,
                 "provider": llm_provider,
                 "model": llm_model,
+                "final_review_issue_count": final_review.issue_count,
             },
+            machine_gate_passed=final_machine_gate,
         )
         report["human_decisions"].append(final_approval.to_dict())
         _require_stage_approval(final_approval)
@@ -495,9 +570,9 @@ def main() -> None:
         print("\nFINAL STATUS: HUMAN_APPROVED")
 
     except AcceptanceStopped as exc:
-        report["final_status"] = "stopped_by_human"
+        report["final_status"] = "stopped_by_human_or_machine_gate"
         report["error_message"] = str(exc)
-        print("\nFINAL STATUS: STOPPED_BY_HUMAN")
+        print("\nFINAL STATUS: STOPPED")
         print(exc)
     except Exception as exc:
         report["final_status"] = "failed"
