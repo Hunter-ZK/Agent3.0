@@ -43,6 +43,10 @@ class ProgramCTEPlan:
             raise ValueError(
                 f"CTE {name!r} dependencies must be unique."
             )
+        if len(set(source_tables)) != len(source_tables):
+            raise ValueError(
+                f"CTE {name!r} source_tables must be unique."
+            )
 
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "purpose", purpose)
@@ -58,6 +62,7 @@ class ProgramStatementPlan:
     ctes: tuple[ProgramCTEPlan, ...]
     final_select_purpose: str
     final_dependencies: tuple[str, ...] = ()
+    final_source_tables: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.target_index < 0:
@@ -94,6 +99,16 @@ class ProgramStatementPlan:
                 f"{sorted(unknown_final)!r}."
             )
 
+        final_source_tables = tuple(
+            item.strip().lower()
+            for item in self.final_source_tables
+            if item.strip()
+        )
+        if len(set(final_source_tables)) != len(final_source_tables):
+            raise ValueError(
+                "ProgramStatementPlan.final_source_tables must be unique."
+            )
+
         object.__setattr__(self, "purpose", self.purpose.strip())
         object.__setattr__(
             self,
@@ -101,6 +116,7 @@ class ProgramStatementPlan:
             self.final_select_purpose.strip(),
         )
         object.__setattr__(self, "final_dependencies", final_dependencies)
+        object.__setattr__(self, "final_source_tables", final_source_tables)
 
         # Validate DAG eagerly.
         self.topological_ctes()
