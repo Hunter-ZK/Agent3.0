@@ -11,6 +11,11 @@ from sql_pilot_engine.llm.fixer import LLMFixer
 from sql_pilot_engine.services.fix_service import FixService
 
 
+def _required_fields(json_schema: dict) -> set[str]:
+    schema = json_schema.get("schema", json_schema)
+    return set(schema.get("required", []))
+
+
 class _PatchModel:
     def __init__(self, payload: dict) -> None:
         self.payload = payload
@@ -49,7 +54,7 @@ class _DiagnosisThenFixModel:
     ) -> dict:
         _ = system_prompt
         _ = user_prompt
-        required = set(json_schema.get("required", []))
+        required = _required_fields(json_schema)
         self.calls.append(",".join(sorted(required)))
 
         if "diagnoses" in required:
@@ -263,7 +268,7 @@ def test_formal_fix_service_applies_candidate_only_after_safe_diagnosis():
     assert fixed.diagnoses[0]["auto_fix_safe"] is True
     assert fixed.validation["diagnosis_gate"] == "passed"
     assert fixed.validation["program_structure"] == "passed"
-    assert len(model.calls) == 2  # diagnosis + candidate
+    assert len(model.calls) == 2
 
 
 def test_formal_fix_service_holds_when_diagnosis_requires_context():
@@ -301,5 +306,5 @@ def test_formal_fix_service_holds_when_diagnosis_requires_context():
     assert fixed.source == "llm_diagnosis_hold"
     assert fixed.validation["diagnosis_gate"] == "hold"
     assert fixed.validation["program_structure"] == "no_change"
-    assert len(model.calls) == 1  # diagnosis only; no candidate generation
+    assert len(model.calls) == 1
     assert "human review" in fixed.manual_notes[0].lower()
