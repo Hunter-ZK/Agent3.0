@@ -98,8 +98,19 @@ def build_scale_sql() -> str:
         )
         previous = name
 
+    padding = (
+        "/*\n"
+        + "\n".join(
+            f"synthetic production padding {index:03d} " + ("x" * 96)
+            for index in range(180)
+        )
+        + "\n*/\n"
+    )
+
     sql = (
-        "SET odps.sql.type.system.odps2 = true;\n\nWITH\n"
+        "SET odps.sql.type.system.odps2 = true;\n\n"
+        + padding
+        + "WITH\n"
         + ",\n".join(ctes)
         + f"""
 INSERT OVERWRITE TABLE project_dwd.scale_result
@@ -116,11 +127,8 @@ PARTITION(dt='202609')
 SELECT row_count FROM secondary_agg;
 """
     )
-    padding = "\n".join(
-        f"-- synthetic production padding {index:03d} " + ("x" * 96)
-        for index in range(180)
-    )
-    return sql + padding
+    assert len(sql) > 16000
+    return sql
 
 
 def scale_spec() -> FixedReportSpec:
@@ -231,7 +239,7 @@ def run_synthetic_acceptance() -> tuple[list[AcceptanceCheck], dict]:
     write_targets = payload["program"]["write_targets"]
     context_ok = (
         len(sql) > 16000
-        and context.statement_count == 3
+        and context.statement_count == 2
         and context.cte_count == 37
         and len(write_targets) == 2
         and {item.name for item in context.hints} == {"MAPJOIN"}
@@ -331,7 +339,7 @@ def run_synthetic_acceptance() -> tuple[list[AcceptanceCheck], dict]:
         and generated.candidate_sql is not None
         and generation_model.calls == 39
         and generated_context is not None
-        and generated_context.statement_count == 3
+        and generated_context.statement_count == 2
         and generated_context.cte_count == 36
     )
     checks.append(
