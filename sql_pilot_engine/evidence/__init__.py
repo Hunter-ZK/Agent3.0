@@ -19,6 +19,13 @@ from sql_pilot_engine.evidence.lineage_resolver import (
     LineageEvidenceResolver,
 )
 
+from sql_pilot_engine.evidence.program_context import (
+    ProgramEvidenceContext,
+    ProgramEvidenceContextBuilder,
+    ProgramEvidenceContextError,
+    ProgramEvidenceDiagnostic,
+)
+
 from sql_pilot_engine.evidence.program_metadata import (
     ColumnMetadataResolution,
     ColumnResolutionStatus,
@@ -43,6 +50,10 @@ __all__ = [
     "MetadataObjectRole",
     "OptimizerHintEvidence",
     "OptimizerHintEvidenceExtractor",
+    "ProgramEvidenceContext",
+    "ProgramEvidenceContextBuilder",
+    "ProgramEvidenceContextError",
+    "ProgramEvidenceDiagnostic",
     "ProgramLineageEvidence",
     "ProgramMetadataEvidence",
     "ProgramMetadataResolver",
