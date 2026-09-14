@@ -34,9 +34,10 @@ PLAN = {
             ],
             "final_select_purpose": "输出目标字段",
             "final_dependencies": ["agg"],
+            "final_source_tables": [],
         }
     ],
-    "assumptions": [],
+    "assumptions": ["planner assumption"],
 }
 
 
@@ -84,7 +85,7 @@ def _spec() -> FixedReportSpec:
     )
 
 
-def test_staged_program_generate_keeps_target_and_partition_system_owned():
+def test_staged_program_generate_keeps_target_partition_and_assumptions_system_owned():
     model = _SequenceModel(
         [
             PLAN,
@@ -93,7 +94,7 @@ def test_staged_program_generate_keeps_target_and_partition_system_owned():
                     "SELECT id, amount "
                     "FROM project_src.loan_detail"
                 ),
-                "assumptions": [],
+                "assumptions": ["base assumption"],
             },
             {
                 "select_sql": (
@@ -104,7 +105,7 @@ def test_staged_program_generate_keeps_target_and_partition_system_owned():
             },
             {
                 "select_sql": "SELECT id, total_amount FROM agg",
-                "assumptions": [],
+                "assumptions": ["final assumption"],
             },
         ]
     )
@@ -120,6 +121,11 @@ def test_staged_program_generate_keeps_target_and_partition_system_owned():
     assert "WITH\nbase AS" in result.candidate_sql
     assert "agg AS" in result.candidate_sql
     assert "SET odps.sql.type.system.odps2=true;" in result.candidate_sql
+    assert result.diagnostics == (
+        "planner assumption",
+        "base assumption",
+        "final assumption",
+    )
     assert len(model.calls) == 4
 
 
@@ -147,6 +153,7 @@ def test_program_plan_cycle_is_rejected_before_stage_generation():
                 ],
                 "final_select_purpose": "output",
                 "final_dependencies": ["a"],
+                "final_source_tables": [],
             }
         ],
         "assumptions": [],
@@ -213,8 +220,8 @@ def test_planner_cannot_introduce_undeclared_physical_source():
     assert "undeclared physical sources" in result.diagnostics[0]
 
 
-def test_generated_program_gate_rejects_unplanned_physical_read():
-    simple_plan = {
+def test_final_stage_must_declare_direct_physical_source():
+    direct_plan = {
         "statements": [
             {
                 "target_index": 0,
@@ -222,17 +229,18 @@ def test_generated_program_gate_rejects_unplanned_physical_read():
                 "ctes": [],
                 "final_select_purpose": "output",
                 "final_dependencies": [],
+                "final_source_tables": [],
             }
         ],
         "assumptions": [],
     }
     model = _SequenceModel(
         [
-            simple_plan,
+            direct_plan,
             {
                 "select_sql": (
                     "SELECT id, SUM(amount) AS total_amount "
-                    "FROM project_secret.unknown_table GROUP BY id"
+                    "FROM project_src.loan_detail GROUP BY id"
                 ),
                 "assumptions": [],
             },
@@ -244,5 +252,74 @@ def test_generated_program_gate_rejects_unplanned_physical_read():
     )
 
     assert result.success is False
+    assert result.candidate_sql is None
+    assert "outside its declared boundary" in result.diagnostics[0]
+
+
+def test_direct_final_stage_can_use_explicitly_declared_physical_source():
+    direct_plan = {
+        "statements": [
+            {
+                "target_index": 0,
+                "purpose": "direct output",
+                "ctes": [],
+                "final_select_purpose": "output",
+                "final_dependencies": [],
+                "final_source_tables": ["project_src.loan_detail"],
+            }
+        ],
+        "assumptions": [],
+    }
+    model = _SequenceModel(
+        [
+            direct_plan,
+            {
+                "select_sql": (
+                    "SELECT id, SUM(amount) AS total_amount "
+                    "FROM project_src.loan_detail GROUP BY id"
+                ),
+                "assumptions": [],
+            },
+        ]
+    )
+
+    result = ProductionProgramGenerator(model=model).generate(
+        spec=_spec()
+    )
+
+    assert result.success is True
     assert result.candidate_sql is not None
-    assert "undeclared physical source tables" in result.diagnostics[0]
+
+
+def test_final_projection_count_must_match_target_contract():
+    model = _SequenceModel(
+        [
+            PLAN,
+            {
+                "select_sql": (
+                    "SELECT id, amount "
+                    "FROM project_src.loan_detail"
+                ),
+                "assumptions": [],
+            },
+            {
+                "select_sql": (
+                    "SELECT id, SUM(amount) AS total_amount "
+                    "FROM base GROUP BY id"
+                ),
+                "assumptions": [],
+            },
+            {
+                "select_sql": "SELECT id FROM agg",
+                "assumptions": [],
+            },
+        ]
+    )
+
+    result = ProductionProgramGenerator(model=model).generate(
+        spec=_spec()
+    )
+
+    assert result.success is False
+    assert result.candidate_sql is None
+    assert "projection count" in result.diagnostics[0]
