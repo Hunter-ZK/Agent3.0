@@ -1,0 +1,97 @@
+name: V1 Release Gate
+
+on:
+  push:
+    branches:
+      - main
+      - v1-release-hardening-20260913
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Core / Python 3.14
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install core dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest
+
+      - name: Compile Python sources
+        run: python -m compileall -q sql_pilot_engine tests examples
+
+      - name: Evidence import gate
+        run: |
+          python -c "from sql_pilot_engine.evidence import LineageEvidenceResolver, SQLGlotDerivedLineageAdapter, OptimizerHintEvidenceExtractor; print('evidence import ok')"
+
+      - name: Core release tests
+        run: |
+          python -m pytest \
+            tests/test_metadata_models.py \
+            tests/test_sqlite_metadata_repository.py \
+            tests/test_metadata_ingestion_excel.py \
+            tests/test_metadata_rebuild.py \
+            tests/test_program_metadata_evidence.py \
+            tests/test_hint_evidence.py \
+            tests/test_lineage_evidence.py \
+            tests/test_lineage_resolver.py \
+            tests/test_generation.py \
+            tests/test_metric_compiler.py \
+            tests/test_schema_linker.py \
+            tests/test_sql_generator_linked_schema.py \
+            tests/test_text_to_sql_semantic_rules.py \
+            -q
+
+      - name: Trusted SQL CLI smoke test
+        run: python -m sql_pilot_engine.cli examples/metadata_check.sql --format text
+
+      - name: Text-to-SQL offline smoke test
+        run: python examples/text_to_sql_demo.py --no-use-real-llm
+
+  simulator:
+    name: Simulator / PySpark 4.2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install simulator dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[simulation]" pytest
+
+      - name: Simulator release tests
+        run: |
+          python -m pytest \
+            tests/test_maxcompute_local.py \
+            tests/test_maxcompute_local_compatibility.py \
+            tests/test_maxcompute_production_shape.py \
+            -q --capture=sys
