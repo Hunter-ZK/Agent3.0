@@ -39,29 +39,88 @@ jobs:
         run: |
           python -c "from sql_pilot_engine.evidence import LineageEvidenceResolver, SQLGlotDerivedLineageAdapter, OptimizerHintEvidenceExtractor; print('evidence import ok')"
 
-      - name: Core release tests
+      - name: Metadata tests
+        id: metadata
+        continue-on-error: true
         run: |
           python -m pytest \
             tests/test_metadata_models.py \
             tests/test_sqlite_metadata_repository.py \
             tests/test_metadata_ingestion_excel.py \
             tests/test_metadata_rebuild.py \
+            -q
+
+      - name: Program metadata and hint evidence tests
+        id: evidence
+        continue-on-error: true
+        run: |
+          python -m pytest \
             tests/test_program_metadata_evidence.py \
             tests/test_hint_evidence.py \
             tests/test_lineage_evidence.py \
-            tests/test_lineage_resolver.py \
+            -q
+
+      - name: Lineage resolver integration tests
+        id: lineage_resolver
+        continue-on-error: true
+        run: python -m pytest tests/test_lineage_resolver.py -q
+
+      - name: Generation and schema linking tests
+        id: generation
+        continue-on-error: true
+        run: |
+          python -m pytest \
             tests/test_generation.py \
             tests/test_metric_compiler.py \
             tests/test_schema_linker.py \
             tests/test_sql_generator_linked_schema.py \
-            tests/test_text_to_sql_semantic_rules.py \
             -q
 
+      - name: Text-to-SQL semantic rule tests
+        id: text_semantic
+        continue-on-error: true
+        run: python -m pytest tests/test_text_to_sql_semantic_rules.py -q
+
       - name: Trusted SQL CLI smoke test
+        id: cli_smoke
+        continue-on-error: true
         run: python -m sql_pilot_engine.cli examples/metadata_check.sql --format text
 
       - name: Text-to-SQL offline smoke test
+        id: text_demo
+        continue-on-error: true
         run: python examples/text_to_sql_demo.py --no-use-real-llm
+
+      - name: Enforce core release gate
+        if: always()
+        env:
+          METADATA: ${{ steps.metadata.outcome }}
+          EVIDENCE: ${{ steps.evidence.outcome }}
+          LINEAGE_RESOLVER: ${{ steps.lineage_resolver.outcome }}
+          GENERATION: ${{ steps.generation.outcome }}
+          TEXT_SEMANTIC: ${{ steps.text_semantic.outcome }}
+          CLI_SMOKE: ${{ steps.cli_smoke.outcome }}
+          TEXT_DEMO: ${{ steps.text_demo.outcome }}
+        run: |
+          printf 'metadata=%s\n' "$METADATA"
+          printf 'evidence=%s\n' "$EVIDENCE"
+          printf 'lineage_resolver=%s\n' "$LINEAGE_RESOLVER"
+          printf 'generation=%s\n' "$GENERATION"
+          printf 'text_semantic=%s\n' "$TEXT_SEMANTIC"
+          printf 'cli_smoke=%s\n' "$CLI_SMOKE"
+          printf 'text_demo=%s\n' "$TEXT_DEMO"
+          for outcome in \
+            "$METADATA" \
+            "$EVIDENCE" \
+            "$LINEAGE_RESOLVER" \
+            "$GENERATION" \
+            "$TEXT_SEMANTIC" \
+            "$CLI_SMOKE" \
+            "$TEXT_DEMO"; do
+            if [ "$outcome" != "success" ]; then
+              exit 1
+            fi
+          done
 
   simulator:
     name: Simulator / PySpark 4.2
