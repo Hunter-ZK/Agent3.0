@@ -250,7 +250,7 @@ def test_production_scale_fix_and_optimize_use_scoped_patch_by_default() -> None
     )
     assert optimized.candidate_sql is not None
     assert "f.amount >= 1" in optimized.candidate_sql
-    assert "scoped patch planner" in optimize_model.system_prompt
+    assert "scoped patch rewriter" in optimize_model.system_prompt
 
 
 def _scale_spec() -> FixedReportSpec:
