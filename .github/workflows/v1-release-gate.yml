@@ -96,6 +96,7 @@ jobs:
             tests/test_production_fix.py \
             tests/test_production_optimize.py \
             tests/test_production_program_generate.py \
+            tests/test_production_scale_benchmark.py \
             -q
 
   narrow_warehouse:
