@@ -37,12 +37,14 @@ temp.md
 *.building
 
 # Local/private data assets
-# Keep production metadata, raw source spreadsheets, and private SQL fixtures
-# outside the public release branch. Public tests and demos must use synthetic
-# fixtures committed under tests/fixtures or examples/fixtures instead.
+# Keep production metadata, raw source spreadsheets, private SQL fixtures,
+# and human acceptance artifacts outside the public release branch.
+# Public tests and demos must use synthetic fixtures committed under
+# tests/fixtures or examples/fixtures instead.
 data/metadata/*.db
 data/metadata/raw/
 benchmarks/private/
+validation_runs/
 
 .history/
 tests_legacy/
