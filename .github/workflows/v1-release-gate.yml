@@ -47,13 +47,14 @@ jobs:
           python -m pip install -e . pytest
       - run: python -m compileall -q sql_pilot_engine tests examples
       - run: |
-          python -c "from sql_pilot_engine.evidence import LineageEvidenceResolver, SQLGlotDerivedLineageAdapter, OptimizerHintEvidenceExtractor; print('evidence import ok')"
+          python -c "from sql_pilot_engine.evidence import LineageEvidenceResolver, SQLGlotDerivedLineageAdapter, OptimizerHintEvidenceExtractor, ProgramEvidenceContextBuilder; print('evidence import ok')"
       - run: |
           python -m pytest \
             tests/test_program_metadata_evidence.py \
             tests/test_hint_evidence.py \
             tests/test_lineage_evidence.py \
             tests/test_lineage_resolver.py \
+            tests/test_program_evidence_context.py \
             -q
 
   generation:
@@ -74,6 +75,27 @@ jobs:
             tests/test_metric_compiler.py \
             tests/test_schema_linker.py \
             tests/test_sql_generator_linked_schema.py \
+            -q
+
+  production_program:
+    name: Production Program Capabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest
+      - run: |
+          python -m pytest \
+            tests/test_program_evidence_context.py \
+            tests/test_production_explain.py \
+            tests/test_production_fix.py \
+            tests/test_production_optimize.py \
+            tests/test_production_program_generate.py \
             -q
 
   narrow_warehouse:
