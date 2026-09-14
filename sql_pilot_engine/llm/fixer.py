@@ -26,8 +26,9 @@ class LLMFixer:
     """
     Production LLM Fixer。
 
-    普通 SQL 可生成完整 Candidate；超长生产 SQL 强制 scoped patch。
-    diagnoses 是前置 Diagnosis Stage 的结构化结论，Patch 只允许消费已确认且足够安全的诊断。
+    `diagnoses=None` 表示兼容性的直接调用，允许按既有 Review Context 生成 Candidate；
+    正式 FixService 会显式传入 diagnoses（包括空数组），此时强制执行 Diagnosis Gate：
+    只有 confirmed + auto_fix_safe + required_context 为空的诊断才允许模型继续修改。
     """
 
     def __init__(
@@ -50,8 +51,38 @@ class LLMFixer:
         query_context: QueryContext | None = None,
         diagnoses: list[dict[str, Any]] | None = None,
     ) -> FixedSqlResult:
-        diagnoses = list(diagnoses or [])
-        diagnosis_text = render_fix_diagnoses(diagnoses)
+        diagnosis_enforced = diagnoses is not None
+        diagnoses_list = list(diagnoses or [])
+
+        if diagnosis_enforced:
+            safe_diagnoses = [
+                item
+                for item in diagnoses_list
+                if item.get("diagnosis_status") == "confirmed"
+                and item.get("auto_fix_safe") is True
+                and not item.get("required_context")
+            ]
+            if not safe_diagnoses:
+                return FixedSqlResult(
+                    fixed_sql=original_sql,
+                    applied_fixes=[],
+                    manual_notes=[
+                        "No confirmed auto-fix-safe diagnosis is available. "
+                        "Production Fix is held for human review instead of guessing."
+                    ],
+                    source="llm_diagnosis_hold",
+                    diagnoses=diagnoses_list,
+                    validation={
+                        "diagnosis_gate": "hold",
+                        "safe_diagnosis_count": 0,
+                    },
+                )
+        else:
+            safe_diagnoses = diagnoses_list
+
+        diagnosis_text = render_fix_diagnoses(
+            safe_diagnoses if diagnosis_enforced else diagnoses_list
+        )
 
         if len(original_sql) > self.max_full_rewrite_chars:
             result = self._fix_with_scoped_patches(
@@ -64,7 +95,12 @@ class LLMFixer:
                 program_evidence_context_text=program_evidence_context_text,
                 query_context=query_context,
             )
-            result.diagnoses = diagnoses
+            result.diagnoses = diagnoses_list
+            result.validation = {
+                **result.validation,
+                "diagnosis_gate": "passed" if diagnosis_enforced else "legacy_direct",
+                "safe_diagnosis_count": len(safe_diagnoses),
+            }
             return result
 
         user_prompt = build_fix_user_prompt(
@@ -77,7 +113,6 @@ class LLMFixer:
             program_evidence_context_text=program_evidence_context_text,
             query_context=query_context,
         )
-
         raw_result = self.client.generate_json(
             system_prompt=FIX_SYSTEM_PROMPT,
             user_prompt=user_prompt,
@@ -87,18 +122,22 @@ class LLMFixer:
         try:
             result = self._parse_result(raw_result)
         except LLMResponseValidationError as first_error:
-            repair_prompt = build_fix_repair_prompt(
-                raw_result=raw_result,
-                error_message=str(first_error),
-            )
             repaired_result = self.client.generate_json(
                 system_prompt=FIX_REPAIR_SYSTEM_PROMPT,
-                user_prompt=repair_prompt,
+                user_prompt=build_fix_repair_prompt(
+                    raw_result=raw_result,
+                    error_message=str(first_error),
+                ),
                 json_schema=FIX_JSON_SCHEMA,
             )
             result = self._parse_result(repaired_result)
 
-        result.diagnoses = diagnoses
+        result.diagnoses = diagnoses_list
+        result.validation = {
+            **result.validation,
+            "diagnosis_gate": "passed" if diagnosis_enforced else "legacy_direct",
+            "safe_diagnosis_count": len(safe_diagnoses),
+        }
         return result
 
     def _fix_with_scoped_patches(
@@ -146,7 +185,6 @@ class LLMFixer:
 
         validated: list[tuple[int, int, str, str]] = []
         occupied: list[tuple[int, int]] = []
-
         for index, patch in enumerate(patches):
             if not isinstance(patch, dict):
                 raise LLMResponseValidationError(
@@ -184,7 +222,6 @@ class LLMFixer:
                 for other_start, other_end in occupied
             ):
                 raise LLMResponseValidationError("scoped patches 之间不得重叠。")
-
             occupied.append((start, end))
             validated.append((start, end, new_sql, reason.strip()))
 
@@ -211,7 +248,6 @@ class LLMFixer:
             raise LLMResponseValidationError(
                 "LLM Fix 返回结果必须是 JSON object。"
             )
-
         required_fields = {"fixed_sql", "applied_fixes", "manual_notes"}
         missing_fields = required_fields - set(raw_result.keys())
         if missing_fields:
