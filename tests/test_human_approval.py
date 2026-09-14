@@ -5,12 +5,13 @@ from sql_pilot_engine.runtime.human_approval import (
 )
 
 
-def _request() -> HumanApprovalRequest:
+def _request(*, machine_gate_passed: bool = True) -> HumanApprovalRequest:
     return HumanApprovalRequest(
         stage="final_sql",
         summary="candidate",
         candidate_sql="SELECT 1",
         trace_id="trace-1",
+        machine_gate_passed=machine_gate_passed,
     )
 
 
@@ -43,4 +44,15 @@ def test_non_control_text_is_feedback_not_approval() -> None:
     )
 
     assert record.status is HumanApprovalStatus.FEEDBACK
+    assert record.human_approved_sql is None
+
+
+def test_human_cannot_override_failed_machine_gate() -> None:
+    record = HumanApprovalGate.decide(
+        _request(machine_gate_passed=False),
+        "APPROVE",
+    )
+
+    assert record.status is HumanApprovalStatus.BLOCKED_BY_MACHINE_GATE
+    assert record.approved is False
     assert record.human_approved_sql is None
