@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
-from sql_pilot_engine.llm.errors import (
-    LLMResponseValidationError,
-)
+from sql_pilot_engine.llm.errors import LLMResponseValidationError
+from sql_pilot_engine.llm.optimization_advisor import render_optimization_opportunities
 from sql_pilot_engine.llm.optimize_prompts import (
     OPTIMIZE_JSON_SCHEMA,
     OPTIMIZE_SYSTEM_PROMPT,
@@ -13,9 +13,7 @@ from sql_pilot_engine.llm.optimize_prompts import (
     build_optimize_user_prompt,
     build_patch_optimize_user_prompt,
 )
-from sql_pilot_engine.llm.protocols import (
-    StructuredGenerationModel,
-)
+from sql_pilot_engine.llm.protocols import StructuredGenerationModel
 from sql_pilot_engine.optimization.models import (
     OptimizationResult,
     OptimizationSuggestion,
@@ -27,10 +25,10 @@ MAX_FULL_OPTIMIZE_REWRITE_CHARS = 16000
 
 class LLMOptimizer:
     """
-    LLM SQL Optimization 执行器。
+    Production LLM Optimization Rewriter。
 
-    普通 SQL 可以返回完整 candidate_sql；
-    超长 production program 自动切换 scoped patch，避免 one-shot 重写。
+    `opportunities=None` 保留直接/兼容调用；正式 OptimizeService 会显式传入 Advisor 已筛选机会，
+    此时模型只能在这些 rewrite-safe opportunity 范围内生成 Candidate/Patch。
     """
 
     def __init__(
@@ -52,39 +50,50 @@ class LLMOptimizer:
         metadata_context_text: str,
         explain_context_text: str,
         program_evidence_context_text: str = "",
+        opportunities: list[dict[str, Any]] | None = None,
     ) -> OptimizationResult:
-        if len(sql) > self.max_full_rewrite_chars:
-            return self._optimize_with_scoped_patches(
-                sql=sql,
-                dialect=dialect,
-                optimization_goals=optimization_goals,
-                analysis_context_text=analysis_context_text,
-                metadata_context_text=metadata_context_text,
-                explain_context_text=explain_context_text,
-                program_evidence_context_text=(
-                    program_evidence_context_text
-                ),
-            )
-
-        raw_result = self.client.generate_json(
-            system_prompt=OPTIMIZE_SYSTEM_PROMPT,
-            user_prompt=build_optimize_user_prompt(
-                sql=sql,
-                dialect=dialect,
-                optimization_goals=optimization_goals,
-                analysis_context_text=analysis_context_text,
-                metadata_context_text=metadata_context_text,
-                explain_context_text=explain_context_text,
-                program_evidence_context_text=(
-                    program_evidence_context_text
-                ),
-            ),
-            json_schema=OPTIMIZE_JSON_SCHEMA,
+        opportunity_text = render_optimization_opportunities(
+            list(opportunities or [])
         )
 
-        return self._parse_result(
-            sql=sql,
-            raw_result=raw_result,
+        if len(sql) > self.max_full_rewrite_chars:
+            result = self._optimize_with_scoped_patches(
+                sql=sql,
+                dialect=dialect,
+                optimization_goals=optimization_goals,
+                analysis_context_text=analysis_context_text,
+                metadata_context_text=metadata_context_text,
+                explain_context_text=explain_context_text,
+                program_evidence_context_text=program_evidence_context_text,
+                opportunities_text=opportunity_text,
+            )
+        else:
+            raw_result = self.client.generate_json(
+                system_prompt=OPTIMIZE_SYSTEM_PROMPT,
+                user_prompt=build_optimize_user_prompt(
+                    sql=sql,
+                    dialect=dialect,
+                    optimization_goals=optimization_goals,
+                    analysis_context_text=analysis_context_text,
+                    metadata_context_text=metadata_context_text,
+                    explain_context_text=explain_context_text,
+                    program_evidence_context_text=program_evidence_context_text,
+                    opportunities_text=opportunity_text,
+                ),
+                json_schema=OPTIMIZE_JSON_SCHEMA,
+            )
+            result = self._parse_result(sql=sql, raw_result=raw_result)
+
+        if opportunities is None:
+            return result
+        return replace(
+            result,
+            opportunities=tuple(opportunities),
+            validation={
+                **result.validation,
+                "advisor_gate": "passed",
+                "rewrite_safe_opportunity_count": len(opportunities),
+            },
         )
 
     def _optimize_with_scoped_patches(
@@ -97,6 +106,7 @@ class LLMOptimizer:
         metadata_context_text: str,
         explain_context_text: str,
         program_evidence_context_text: str,
+        opportunities_text: str,
     ) -> OptimizationResult:
         raw_result = self.client.generate_json(
             system_prompt=PATCH_OPTIMIZE_SYSTEM_PROMPT,
@@ -107,9 +117,8 @@ class LLMOptimizer:
                 analysis_context_text=analysis_context_text,
                 metadata_context_text=metadata_context_text,
                 explain_context_text=explain_context_text,
-                program_evidence_context_text=(
-                    program_evidence_context_text
-                ),
+                program_evidence_context_text=program_evidence_context_text,
+                opportunities_text=opportunities_text,
             ),
             json_schema=PATCH_OPTIMIZE_JSON_SCHEMA,
         )
@@ -118,7 +127,6 @@ class LLMOptimizer:
             raise LLMResponseValidationError(
                 "LLM Optimize Patch 返回结果必须是 JSON object。"
             )
-
         required_fields = {
             "summary",
             "suggestions",
@@ -135,20 +143,14 @@ class LLMOptimizer:
 
         suggestions_value = raw_result["suggestions"]
         if not isinstance(suggestions_value, list):
-            raise LLMResponseValidationError(
-                "suggestions 必须是数组。"
-            )
+            raise LLMResponseValidationError("suggestions 必须是数组。")
         suggestions = tuple(
-            self._parse_suggestion(item)
-            for item in suggestions_value
+            self._parse_suggestion(item) for item in suggestions_value
         )
 
         patches = raw_result["patches"]
         if not isinstance(patches, list):
-            raise LLMResponseValidationError(
-                "patches 必须是数组。"
-            )
-
+            raise LLMResponseValidationError("patches 必须是数组。")
         candidate_sql, patch_reasons = self._apply_patches(
             sql=sql,
             patches=patches,
@@ -156,45 +158,28 @@ class LLMOptimizer:
 
         assumptions = raw_result["assumptions"]
         if not isinstance(assumptions, list):
-            raise LLMResponseValidationError(
-                "assumptions 必须是数组。"
-            )
-
-        confidence = self._parse_confidence(
-            raw_result["confidence"]
-        )
+            raise LLMResponseValidationError("assumptions 必须是数组。")
+        confidence = self._parse_confidence(raw_result["confidence"])
 
         rewrite_reason = raw_result["rewrite_reason"]
-        if rewrite_reason is not None and not isinstance(
-            rewrite_reason,
-            str,
-        ):
+        if rewrite_reason is not None and not isinstance(rewrite_reason, str):
             raise LLMResponseValidationError(
                 "rewrite_reason 必须是字符串或 null。"
             )
-
         combined_reason = rewrite_reason
         if patch_reasons:
             patch_text = "; ".join(patch_reasons)
             combined_reason = (
-                f"{rewrite_reason}; {patch_text}"
-                if rewrite_reason
-                else patch_text
+                f"{rewrite_reason}; {patch_text}" if rewrite_reason else patch_text
             )
 
         return OptimizationResult(
             original_sql=sql,
             summary=str(raw_result["summary"]),
             suggestions=suggestions,
-            candidate_sql=(
-                candidate_sql
-                if candidate_sql != sql
-                else None
-            ),
+            candidate_sql=candidate_sql if candidate_sql != sql else None,
             rewrite_reason=combined_reason,
-            assumptions=tuple(
-                str(item) for item in assumptions
-            ),
+            assumptions=tuple(str(item) for item in assumptions),
             confidence=confidence,
             raw_output=raw_result,
         )
@@ -207,7 +192,6 @@ class LLMOptimizer:
     ) -> tuple[str, list[str]]:
         validated: list[tuple[int, int, str, str]] = []
         occupied: list[tuple[int, int]] = []
-
         for index, patch in enumerate(patches):
             if not isinstance(patch, dict):
                 raise LLMResponseValidationError(
@@ -221,7 +205,6 @@ class LLMOptimizer:
             old_sql = patch["old_sql"]
             new_sql = patch["new_sql"]
             reason = patch["reason"]
-
             if not isinstance(old_sql, str) or not old_sql:
                 raise LLMResponseValidationError(
                     f"patches[{index}].old_sql 必须是非空字符串。"
@@ -234,7 +217,6 @@ class LLMOptimizer:
                 raise LLMResponseValidationError(
                     f"patches[{index}].reason 必须是非空字符串。"
                 )
-
             if sql.count(old_sql) != 1:
                 raise LLMResponseValidationError(
                     f"patches[{index}].old_sql 必须在原 SQL 中唯一出现。"
@@ -249,7 +231,6 @@ class LLMOptimizer:
                 raise LLMResponseValidationError(
                     "optimization patches 之间不得重叠。"
                 )
-
             occupied.append((start, end))
             validated.append((start, end, new_sql, reason.strip()))
 
@@ -263,7 +244,6 @@ class LLMOptimizer:
             candidate = candidate[:start] + new_sql + candidate[end:]
             reasons.append(reason)
         reasons.reverse()
-
         return candidate, reasons
 
     def _parse_result(
@@ -276,7 +256,6 @@ class LLMOptimizer:
             raise LLMResponseValidationError(
                 "LLM Optimize 返回结果必须是 JSON object。"
             )
-
         required_fields = {
             "summary",
             "suggestions",
@@ -285,7 +264,6 @@ class LLMOptimizer:
             "assumptions",
             "confidence",
         }
-
         missing_fields = required_fields - set(raw_result.keys())
         if missing_fields:
             raise LLMResponseValidationError(
@@ -295,13 +273,9 @@ class LLMOptimizer:
 
         suggestions_value = raw_result["suggestions"]
         if not isinstance(suggestions_value, list):
-            raise LLMResponseValidationError(
-                "suggestions 必须是数组。"
-            )
-
+            raise LLMResponseValidationError("suggestions 必须是数组。")
         suggestions = tuple(
-            self._parse_suggestion(item)
-            for item in suggestions_value
+            self._parse_suggestion(item) for item in suggestions_value
         )
 
         candidate_sql = raw_result["candidate_sql"]
@@ -314,19 +288,11 @@ class LLMOptimizer:
 
         assumptions = raw_result["assumptions"]
         if not isinstance(assumptions, list):
-            raise LLMResponseValidationError(
-                "assumptions 必须是数组。"
-            )
-
-        confidence = self._parse_confidence(
-            raw_result["confidence"]
-        )
+            raise LLMResponseValidationError("assumptions 必须是数组。")
+        confidence = self._parse_confidence(raw_result["confidence"])
 
         rewrite_reason = raw_result["rewrite_reason"]
-        if rewrite_reason is not None and not isinstance(
-            rewrite_reason,
-            str,
-        ):
+        if rewrite_reason is not None and not isinstance(rewrite_reason, str):
             raise LLMResponseValidationError(
                 "rewrite_reason 必须是字符串或 null。"
             )
@@ -337,9 +303,7 @@ class LLMOptimizer:
             suggestions=suggestions,
             candidate_sql=candidate_sql,
             rewrite_reason=rewrite_reason,
-            assumptions=tuple(
-                str(item) for item in assumptions
-            ),
+            assumptions=tuple(str(item) for item in assumptions),
             confidence=confidence,
             raw_output=raw_result,
         )
@@ -352,7 +316,6 @@ class LLMOptimizer:
             raise LLMResponseValidationError(
                 "confidence 必须是数字。"
             ) from error
-
         if not 0 <= confidence <= 1:
             raise LLMResponseValidationError(
                 "confidence 必须在 0 到 1 之间。"
@@ -360,14 +323,11 @@ class LLMOptimizer:
         return confidence
 
     @staticmethod
-    def _parse_suggestion(
-        item: Any,
-    ) -> OptimizationSuggestion:
+    def _parse_suggestion(item: Any) -> OptimizationSuggestion:
         if not isinstance(item, dict):
             raise LLMResponseValidationError(
                 "Optimization suggestion 必须是 object。"
             )
-
         required = {
             "category",
             "priority",
@@ -389,7 +349,6 @@ class LLMOptimizer:
             raise LLMResponseValidationError(
                 "priority 必须是 low、medium 或 high。"
             )
-
         return OptimizationSuggestion(
             category=str(item["category"]),
             priority=priority,
