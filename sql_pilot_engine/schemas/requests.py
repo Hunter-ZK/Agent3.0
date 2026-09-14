@@ -1,23 +1,13 @@
-# sql_review_agent/schemas/requests.py
-
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import Any
 
-from sql_pilot_engine.context.builder import (
-        QueryContext,
-    )
+from sql_pilot_engine.context.builder import QueryContext
+from sql_pilot_engine.core.trust_evidence import SQLTrustEvidence
 
-from sql_pilot_engine.core.trust_evidence import (
-    SQLTrustEvidence,
-)
 
 @dataclass
 class SQLReviewRequest:
-    """外部调用 SQL Review Engine 的审查请求 DTO。
-
-    设计目标：把 CLI / Web / Agent Workflow 的输入统一收口，避免外部调用方
-    直接依赖 ReviewService.review_sql(...) 的长参数列表。
-    """
+    """External request contract for SQL Review / Trusted SQL capabilities."""
 
     sql: str
     file_path: str = "<memory>"
@@ -31,30 +21,30 @@ class SQLReviewRequest:
     trace_id: str | None = None
     query_context: QueryContext | None = None
     trust_evidence: SQLTrustEvidence | None = None
+    rule_packs: tuple[str, ...] = ()
 
-    rule_packs: tuple[
-        str,
-        ...
-    ] = ()
 
 @dataclass
 class SQLFixRequest(SQLReviewRequest):
-    """外部调用 SQL Review Engine 的修复请求 DTO。
+    """
+    SQL Fix request.
 
-    Fix 不是绕开 Review，而是先 Review 再基于 issues 生成完整修复 SQL。
+    Fix always starts from Review evidence. LLM output remains a candidate and must
+    re-enter Review / Critic / HITL before it can become Trusted SQL.
     """
 
     fix_provider: str = "auto"
-
     critic_feedback: list[str] = field(default_factory=list)
     retry_count: int = 0
 
 
 @dataclass
 class SQLExplainRequest(SQLReviewRequest):
-    """SQL Explain 请求占位。
+    """
+    Production SQL Explain request.
 
-    C 阶段会把 Explain 纳入 LLM-first 单 Agent 闭环；B 阶段只保留契约位置。
+    Explain is evidence-first: deterministic Program / Metadata / Lineage / Hint facts
+    are primary. LLM is optional semantic narration and cannot override structural facts.
     """
 
     pass
@@ -62,9 +52,12 @@ class SQLExplainRequest(SQLReviewRequest):
 
 @dataclass
 class SQLOptimizeRequest(SQLReviewRequest):
-    """SQL Optimize 请求占位。
+    """
+    Production SQL Optimize request.
 
-    C/D 阶段结合 LLM 与 RAG 后再实现真正优化建议。
+    Optimization suggestions may be returned without a rewrite. Any candidate SQL is
+    structurally gated and re-reviewed; runtime performance gains are not claimed without
+    execution/statistics evidence.
     """
 
     optimization_goals: list[str] = field(default_factory=list)
