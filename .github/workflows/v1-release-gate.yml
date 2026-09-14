@@ -91,6 +91,7 @@ jobs:
           python -m pip install -e . pytest
       - run: |
           python -m pytest \
+            tests/test_human_approval.py \
             tests/test_program_evidence_context.py \
             tests/test_production_explain.py \
             tests/test_production_fix.py \
