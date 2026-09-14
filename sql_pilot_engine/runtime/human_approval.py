@@ -13,6 +13,7 @@ class HumanApprovalStatus(str, Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
     FEEDBACK = "feedback"
+    BLOCKED_BY_MACHINE_GATE = "blocked_by_machine_gate"
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +25,7 @@ class HumanApprovalRequest:
     candidate_sql: str | None = None
     trace_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    machine_gate_passed: bool = True
     approval_id: str = field(default_factory=lambda: str(uuid4()))
 
     @property
@@ -40,14 +42,18 @@ class HumanApprovalRecord:
     candidate_sql: str | None = None
     trace_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    machine_gate_passed: bool = True
 
     @property
     def approved(self) -> bool:
-        return self.status is HumanApprovalStatus.APPROVED
+        return (
+            self.status is HumanApprovalStatus.APPROVED
+            and self.machine_gate_passed
+        )
 
     @property
     def human_approved_sql(self) -> str | None:
-        """Only an explicit APPROVE decision may materialize final approved SQL."""
+        """Only machine-pass + exact human APPROVE can materialize approved SQL."""
 
         if not self.approved:
             return None
@@ -62,6 +68,7 @@ class HumanApprovalRecord:
             "candidate_sql": self.candidate_sql,
             "trace_id": self.trace_id,
             "metadata": dict(self.metadata),
+            "machine_gate_passed": self.machine_gate_passed,
             "human_approved_sql": self.human_approved_sql,
         }
 
@@ -69,8 +76,12 @@ class HumanApprovalRecord:
 class HumanApprovalGate:
     """Fail-closed approval contract shared by local acceptance and future runtimes.
 
-    The gate deliberately does not treat yes/y/ok/empty input as approval. Production SQL
-    is human-approved only when the operator types the exact token ``APPROVE``.
+    Two conditions are mandatory for a final approved SQL:
+    1. deterministic / machine safety gates have passed;
+    2. the operator types the exact token ``APPROVE``.
+
+    Human approval is therefore a final authorization step, not a bypass around failed
+    Program / Review / Critic / Metadata / Lineage gates.
     """
 
     APPROVE_TOKEN = "APPROVE"
@@ -84,7 +95,9 @@ class HumanApprovalGate:
     ) -> HumanApprovalRecord:
         raw = human_input.strip()
 
-        if raw == cls.APPROVE_TOKEN:
+        if not request.machine_gate_passed:
+            status = HumanApprovalStatus.BLOCKED_BY_MACHINE_GATE
+        elif raw == cls.APPROVE_TOKEN:
             status = HumanApprovalStatus.APPROVED
         elif raw == cls.REJECT_TOKEN:
             status = HumanApprovalStatus.REJECTED
@@ -101,4 +114,5 @@ class HumanApprovalGate:
             candidate_sql=request.candidate_sql,
             trace_id=request.trace_id,
             metadata=dict(request.metadata),
+            machine_gate_passed=request.machine_gate_passed,
         )
