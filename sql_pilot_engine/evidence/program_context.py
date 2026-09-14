@@ -197,7 +197,7 @@ class ProgramEvidenceContext:
                 "cte_count": self.cte_count,
                 "scope_count": self.scope_count,
                 "parameter_names": sorted(
-                    {item.name for item in self.program.parameter_bindings}
+                    {item.name for item in self.program.parameters}
                 ),
                 "session_hints": [
                     {
