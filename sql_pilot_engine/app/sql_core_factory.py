@@ -44,7 +44,8 @@ def build_sql_pilot_engine(
 
     optimize_service = (
         OptimizeService(
-            llm_client=llm_client
+            llm_client=llm_client,
+            review_service=review_service,
         )
         if llm_client is not None
         else None
