@@ -11,8 +11,8 @@ from sql_pilot_engine.llm.explain_prompts import (
     build_explain_user_prompt,
 )
 
-class LLMExplainer:
 
+class LLMExplainer:
     def __init__(
         self,
         client: StructuredGenerationModel,
@@ -23,18 +23,13 @@ class LLMExplainer:
         self,
         *,
         sql: str,
+        evidence_context: str,
     ) -> dict[str, Any]:
-
         return self.client.generate_json(
-            system_prompt=(
-                EXPLAIN_SYSTEM_PROMPT
+            system_prompt=EXPLAIN_SYSTEM_PROMPT,
+            user_prompt=build_explain_user_prompt(
+                sql,
+                evidence_context=evidence_context,
             ),
-            user_prompt=(
-                build_explain_user_prompt(
-                    sql
-                )
-            ),
-            json_schema=(
-                EXPLAIN_JSON_SCHEMA
-            ),
+            json_schema=EXPLAIN_JSON_SCHEMA,
         )
