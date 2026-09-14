@@ -99,6 +99,7 @@ jobs:
             tests/test_production_scale_benchmark.py \
             -q
       - run: python examples/production_capability_acceptance.py --json
+      - run: python examples/production_explain_demo.py --sql examples/sample_refactor.sql --no-use-real-llm --json
 
   narrow_warehouse:
     name: Narrow Warehouse V1
