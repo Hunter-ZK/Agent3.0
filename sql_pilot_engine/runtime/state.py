@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing_extensions import NotRequired, TypedDict
 
 from sql_pilot_engine.context.builder import QueryContext
-from sql_pilot_engine.generation.models import CompilationEvidence, QueryPlan
+from sql_pilot_engine.generation.models import QueryPlan
 
 
 class QueryAgentState(TypedDict):
@@ -34,7 +34,7 @@ class QueryAgentState(TypedDict):
     clarification_round: NotRequired[int]
     max_clarification_rounds: NotRequired[int]
 
-    # Schema linking checkpoint projection
+    # Schema-linking checkpoint projection
     linking_resolved: NotRequired[bool]
     linking_failures: NotRequired[tuple[dict[str, str], ...]]
     linking_error_message: NotRequired[str | None]
@@ -42,7 +42,7 @@ class QueryAgentState(TypedDict):
     # Generation / compiler
     compilation_status: NotRequired[str | None]
     compilation_fallback_reason: NotRequired[str | None]
-    compilation_evidence: NotRequired[CompilationEvidence | None]
+    compilation_evidence: NotRequired[dict[str, object] | None]
     generation_source: NotRequired[str | None]
     generated_sql: NotRequired[str | None]
     revision_feedback: NotRequired[tuple[str, ...]]
