@@ -1,0 +1,44 @@
+{
+  "report_name": "loan_customer_summary",
+  "business_requirement": "按客户和数据期汇总贷款余额与贷款笔数，生成目标汇总表。",
+  "source_tables": [
+    "odps_prd_dwd.ods_hd_100_cldkxx"
+  ],
+  "write_targets": [
+    {
+      "table_name": "odps_prd_ads.ads_loan_customer_summary",
+      "fields": [
+        {
+          "name": "ent_code",
+          "business_definition": "借款企业统一社会信用代码",
+          "expression_hint": "来源于明细表 ent_code"
+        },
+        {
+          "name": "loan_balance",
+          "business_definition": "客户贷款余额",
+          "expression_hint": "SUM(loan_bal_rmb)"
+        },
+        {
+          "name": "loan_count",
+          "business_definition": "客户贷款笔数",
+          "expression_hint": "COUNT(DISTINCT loan_iou_no)"
+        }
+      ],
+      "partitions": [
+        {
+          "name": "dt",
+          "value": null
+        }
+      ]
+    }
+  ],
+  "parameters": [
+    "p_month_yyyymm"
+  ],
+  "session_settings": [],
+  "constraints": [
+    "只允许使用声明的来源表",
+    "目标 SQL 方言为 MaxCompute",
+    "动态分区字段 dt 必须位于 SELECT 输出末尾"
+  ]
+}
