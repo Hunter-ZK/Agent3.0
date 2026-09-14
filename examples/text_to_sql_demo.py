@@ -26,20 +26,56 @@ from sql_pilot_engine.schemas.text_to_sql import (
 
 
 class FakePlannerModel:
-    """Deterministic planner fixture used to verify the software call chain."""
+    """Deterministic planner fixture for public runtime/release demos.
+
+    It supports both a straight-through technology-loan case and one explicit
+    clarification case so the offline demo can exercise LangGraph checkpoint/resume
+    without any model credentials.
+    """
 
     def generate(self, prompt: str) -> str:
-        _ = prompt
+        normalized = prompt.lower()
+
+        if (
+            "统计贷款余额" in prompt
+            and "user clarification:" not in normalized
+        ):
+            return """
+            {
+              "status": "need_clarification",
+              "clarification_question": "请确认需要统计科技贷款还是绿色贷款？",
+              "missing_context": ["贷款业务类型"],
+              "reason": "贷款余额存在多个业务口径。"
+            }
+            """
+
+        if "user clarification: 绿色贷款" in normalized:
+            return """
+            {
+              "status": "ready",
+              "plan": {
+                "tables": ["odps_prd_dwd.ods_hd_200_cldkxx"],
+                "dimensions": ["dt"],
+                "metrics": ["green_loan_balance"],
+                "filters": ["dt = '${p_month_yyyymm}'"],
+                "group_by": ["dt"]
+              }
+            }
+            """
+
         return """
         {
-          "tables": ["odps_prd_dwd.ods_hd_100_cldkxx"],
-          "dimensions": ["dt"],
-          "metrics": ["tech_loan_balance"],
-          "filters": [
-            "is_high_tech_mfg_loan_code = '1'",
-            "dt = '${p_month_yyyymm}'"
-          ],
-          "group_by": ["dt"]
+          "status": "ready",
+          "plan": {
+            "tables": ["odps_prd_dwd.ods_hd_100_cldkxx"],
+            "dimensions": ["dt"],
+            "metrics": ["tech_loan_balance"],
+            "filters": [
+              "is_high_tech_mfg_loan_code = '1'",
+              "dt = '${p_month_yyyymm}'"
+            ],
+            "group_by": ["dt"]
+          }
         }
         """
 
@@ -48,7 +84,16 @@ class FakeSQLModel:
     """Deterministic SQL-generator fallback fixture for offline demos."""
 
     def generate(self, prompt: str) -> str:
-        _ = prompt
+        if "ods_hd_200_cldkxx" in prompt:
+            return """
+            SELECT
+                dt,
+                SUM(loan_bal_rmb) AS green_loan_balance
+            FROM odps_prd_dwd.ods_hd_200_cldkxx
+            WHERE dt = '${p_month_yyyymm}'
+            GROUP BY dt
+            """
+
         return """
         SELECT
             dt,
@@ -61,13 +106,7 @@ class FakeSQLModel:
 
 
 def build_demo_service(*, use_real_llm: bool) -> TextToSQLCapability:
-    """
-    Build the public Text-to-SQL demo with synthetic metadata only.
-
-    The repository intentionally does not require a committed production metadata DB.
-    Real LLM mode changes only model providers; physical metadata remains the same
-    deterministic synthetic fixture so the demo is reproducible and safe to publish.
-    """
+    """Build the public Text-to-SQL demo with synthetic metadata only."""
 
     project_root = Path(__file__).resolve().parents[1]
     semantic_model_path = (
@@ -81,7 +120,6 @@ def build_demo_service(*, use_real_llm: bool) -> TextToSQLCapability:
     if use_real_llm:
         llm_settings = load_deepseek_settings()
         transport = OpenAICompatibleTransport(llm_settings.provider)
-
         planner_model = DeepSeekTextGenerationModel(
             transport=transport,
             request_config=llm_settings.text_request,
@@ -183,10 +221,7 @@ def main() -> None:
     args = parse_args()
     configure_logging(args.log_level)
 
-    service = build_demo_service(
-        use_real_llm=args.use_real_llm
-    )
-
+    service = build_demo_service(use_real_llm=args.use_real_llm)
     response = service.generate(
         TextToSQLRequest(
             question=args.question,
@@ -204,7 +239,6 @@ def main() -> None:
         if not answer:
             print("No clarification supplied. Task stopped.")
             return
-
         if not response.thread_id:
             raise RuntimeError(
                 "Clarification response has no thread_id."
@@ -220,37 +254,30 @@ def main() -> None:
     print("=" * 70)
     print("Agent3.0 · Text-to-SQL Demo")
     print("=" * 70)
-
     print("\n[1] User Question")
     print(result.question)
-
     print("\n[2] Query Plan")
     print("tables:", result.query_plan.tables)
     print("dimensions:", result.query_plan.dimensions)
     print("metrics:", result.query_plan.metrics)
     print("filters:", result.query_plan.filters)
     print("group_by:", result.query_plan.group_by)
-
     print("\n[3] Generation")
     print("source:", result.generation_source)
     print("compilation_status:", result.compilation_status)
     print(result.generated_sql)
-
     print("\n[4] SQL Validation")
     print("status:", result.validation_status)
     print("success:", result.success)
-
     print("\n[5] Semantic Validation")
     print("status:", result.semantic_validation_status)
     print("missing requirements:", result.semantic_missing_requirements)
     print("issues:", result.semantic_issues)
-
     print("\n[6] Trusted SQL")
     if result.trusted_sql is None:
         print("SQL 未通过可信审查，当前没有 Trusted SQL。")
     else:
         print(result.trusted_sql)
-
     print("\n" + "=" * 70)
 
 
